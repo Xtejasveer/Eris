@@ -123,7 +123,8 @@ def run_checkpoint(agent, thread_id, context_text, max_doubts, log_path, section
 # What a doubt answer may do on the class screen: notes, code, slides, and pointing back at what is
 # already there. No sections or doubt checks.
 ANSWER_MARKERS = {"NOTE", "NOTE_TITLE", "NOTE_HIGHLIGHT", "WRITE", "WRITE_CODE", "HIGHLIGHT",
-                  "RUN", "READ_OUTPUT", "SLIDE", "SLIDE_HIGHLIGHT", "LOOK_BACK", "OPEN_FILE", "NEW_PAGE"}
+                  "RUN", "READ_OUTPUT", "SLIDE", "SLIDE_HIGHLIGHT", "LOOK_BACK", "OPEN_FILE", "NEW_PAGE",
+                  "VISUAL", "VISUAL_SET", "OPEN_VISUAL"}
 
 
 INLINE_BLOCK_RE = re.compile(r"\[([A-Z_]{3,})\b[^\]]*\].*?\[/\1\]")  # [RUN]cmd=...[/RUN]
@@ -141,9 +142,13 @@ def answer_segments(text, slide_count=None, board=None):
     are dropped (never shown), and the code is run here to record the real output."""
     from script_parser import parse_script
     from script_writer import fill_expected_outputs
+    from script_fixes import add_sync_flags, announce_writing
 
     if not text.strip():
         return []
+    text = _repair_runs(text, (board or {}).get("latest_file"))
+    text, _ = announce_writing(text)  # the class hears what is being written while it appears
+    text, _ = add_sync_flags(text)  # notes and code are written while the next sentence is spoken
     segments, errors = parse_script(text, slide_count, require_doubt_check=False, board=board)
     for e in errors:
         print(f"[doubts] skipped in answer: {e.splitlines()[0]}")
@@ -152,9 +157,97 @@ def answer_segments(text, slide_count=None, board=None):
         if s["kind"] == "say":  # markers written inside a sentence are never spoken
             s["text"] = _strip_inline_markers(s["text"])
     segments = [s for s in segments if s["kind"] != "say" or s["text"]]
+    if segments and segments[0]["kind"] == "say":  # talk to the student, not about them
+        segments[0]["text"] = THIRD_PERSON_RE.sub("", segments[0]["text"]).strip() or segments[0]["text"]
+    segments = _run_written_code(segments)
     if any(s.get("name") == "RUN" for s in segments):
         fill_expected_outputs(segments, (board or {}).get("files"))
+        segments = _unspeak_output(segments)
     return segments
+
+
+RUN_LINE_RE = re.compile(r"^\s*\[RUN(?P<rest>[^\]]*)\]\s*$", re.M)
+
+
+def _repair_runs(text, latest_file):
+    """Models write [RUN], [RUN countdown.py] or [RUN file="x.py"]: make each one [RUN cmd="python <file>"],
+    using the named file, else the program written or opened last in this answer, else the latest on the board."""
+    last = latest_file
+    out = []
+    for line in text.splitlines():
+        m = re.match(r'^\s*\[(?:WRITE_CODE|OPEN_FILE)\s+file="([^"]+)"', line)
+        if m:
+            last = m.group(1)
+        run = RUN_LINE_RE.match(line)
+        if run and 'cmd="python ' not in line:
+            named = re.search(r"([\w-]+\.py)", run.group("rest"))
+            target = named.group(1) if named else last
+            if target:
+                line = f'[RUN cmd="python {target}"]'
+        out.append(line)
+    return "\n".join(out)
+
+
+# "The student asks for another example..." / "A student is asking about..." at the start of an answer.
+THIRD_PERSON_RE = re.compile(r"^(?:the|a|this|our)\s+student\s+(?:is\s+)?(?:ask(?:s|ing)?|want(?:s|ing)?|wonder(?:s|ing)?|would like)\b[^.!?]*[.!?]\s*", re.I)
+
+
+def _run_written_code(segments):
+    """Every program an answer writes or opens is run before its output is read, even if the model forgot:
+      - a READ_OUTPUT before that program's RUN later in the answer is dropped (it would read an old output);
+      - a READ_OUTPUT after an OPEN_FILE/WRITE_CODE with no RUN at all gets that RUN in front of it;
+      - a program written but never run is run (and read) after the sentence that follows it."""
+    def runs_later(i, file):
+        return any(s.get("name") == "RUN" and s["args"]["cmd"].endswith(file) for s in segments[i + 1:])
+
+    out, pending, written = [], None, set()
+    for i, seg in enumerate(segments):
+        name = seg.get("name")
+        if name in ("WRITE_CODE", "OPEN_FILE"):
+            pending = seg["args"]["file"]
+            if name == "WRITE_CODE":
+                written.add(pending)
+        elif name == "RUN":
+            if pending and seg["args"]["cmd"].endswith(pending):
+                pending = None
+        elif name == "READ_OUTPUT" and pending:
+            if runs_later(i, pending):
+                continue  # read too early: the program runs a bit later in this answer
+            print(f"[doubts] {pending} was read without being run: running it first")
+            out.append({"kind": "action", "name": "RUN", "args": {"cmd": f"python {pending}"}})
+            pending = None
+        out.append(seg)
+        if seg["kind"] == "say" and pending in written and not runs_later(i, pending):
+            print(f"[doubts] {pending} was written but not run: running it")
+            out += [{"kind": "action", "name": "RUN", "args": {"cmd": f"python {pending}"}},
+                    {"kind": "action", "name": "READ_OUTPUT", "args": {}}]
+            pending = None
+    if pending in written:
+        print(f"[doubts] {pending} was written but not run: running it")
+        out += [{"kind": "action", "name": "RUN", "args": {"cmd": f"python {pending}"}},
+                {"kind": "action", "name": "READ_OUTPUT", "args": {}}]
+    # Every RUN is followed by READ_OUTPUT: the class looks at the terminal while the teacher explains it.
+    final = []
+    for i, seg in enumerate(out):
+        final.append(seg)
+        if seg.get("name") == "RUN" and (i + 1 >= len(out) or out[i + 1].get("name") != "READ_OUTPUT"):
+            final.append({"kind": "action", "name": "READ_OUTPUT", "args": {}})
+    return final
+
+
+def _unspeak_output(segments):
+    """The terminal shows the output; the teacher shouldn't read its lines aloud one by one."""
+    lines = set()
+    for seg in segments:
+        if seg.get("name") == "RUN":
+            lines |= {ln.strip() for ln in seg.get("expected_output", "").splitlines() if len(ln.strip()) > 3}
+        elif seg["kind"] == "say" and lines:
+            hits = [ln for ln in lines if ln in seg["text"]]
+            if len(hits) >= 2:  # a run of output lines, not one quoted value
+                for ln in sorted(hits, key=len, reverse=True):
+                    seg["text"] = seg["text"].replace(ln, " ")
+                seg["text"] = re.sub(r"\s{2,}", " ", seg["text"]).strip()
+    return [s for s in segments if s["kind"] != "say" or s["text"]]
 
 
 def plain_text(segments):
@@ -175,6 +268,47 @@ def turn_start(agent, thread_id, context_text):
     cfg = {"configurable": {"thread_id": thread_id}, "recursion_limit": 60}
     result = agent.invoke({"messages": [{"role": "user", "content": context_text}]}, cfg, version="v2")
     return _turn(result)
+
+
+def turn_question(agent, thread_id, context_text, question, log_path, section):
+    """Begin a checkpoint with a student's question already asked (kept for the CLI and older callers)."""
+    return turn_ask(agent, thread_id, question, log_path, section, context_text)
+
+
+def _waiting_for_class(agent, cfg):
+    """True if the agent is paused inside ask_class_for_doubts (an unanswered tool call)."""
+    snap = agent.get_state(cfg)
+    return bool(snap.next) and any(getattr(t, "interrupts", ()) for t in snap.tasks)
+
+
+def turn_ask(agent, thread_id, question, log_path, section, context_text=""):
+    """One student question on the class's ONE conversation, so the agent remembers everything it said and
+    showed before ("run this code" means the code it just wrote).
+    context_text: the class snapshot and notes, sent when something changed (a new break, program output).
+    If the agent is waiting in ask_class_for_doubts, the question is that tool's answer; otherwise it is a
+    new message. Returns the turn like turn_reply, with 'passed'."""
+    cfg = {"configurable": {"thread_id": thread_id}, "recursion_limit": 60}
+    snap = agent.get_state(cfg)
+    before = len((snap.values or {}).get("messages", []))
+    student = f'Student: "{question}"'
+    if before and _waiting_for_class(agent, cfg):
+        reply_to_tool = f"{context_text}\n\n{student}" if context_text else student
+        decision = {"decisions": [{"type": "respond", "message": reply_to_tool}]}
+        result = agent.invoke(Command(resume=decision), cfg, version="v2")
+    else:
+        message = (f"{context_text}\n\n" if context_text else "") + (
+            f"The class was asked for doubts. {student}\n"
+            "Answer the student directly, talking to them as \"you\" (never describe their question in the third "
+            "person), following your rules, then call ask_class_for_doubts.")
+        result = agent.invoke({"messages": [{"role": "user", "content": message}]}, cfg, version="v2")
+    reply = _newest_ai_text(result.value["messages"], before)
+    if not reply and result.interrupts:
+        reply = _interrupt_prompt(result)  # Some models put the answer in the question.
+    passed = _log(log_path, section, question, reply)
+    # When the agent ends without asking for more doubts, its last message IS the answer: keep it as the reply.
+    out = _turn(result, reply) if result.interrupts else {"prompt": None, "reply": reply, "done": True, "final": ""}
+    out["passed"] = passed
+    return out
 
 
 def turn_reply(agent, thread_id, answer, log_path, section):

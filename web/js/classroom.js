@@ -43,9 +43,12 @@ export async function mountClassroom(lectureId, ctx) {
   // ---------- left panel ----------
   const stateLabel = h("span", { class: "t-state" }, "Ready");
   const bars = h("div", { class: "vbars" }, Array.from({ length: 5 }, () => h("i")));
+  const avatarToggle = h("button", { class: "icon-btn sm avatar-toggle", title: "Show or hide the 3D teacher", onclick: () => toggleAvatar() }, icon("user"));
   const teacherCard = h("div", { class: "teacher-card" },
     h("div", { class: "orb" }, h("span", { class: "orb-ring r1" }), h("span", { class: "orb-ring r2" }), h("span", { class: "orb-core" }, initials(info.teacher.replace(/^(prof|dr|mr|mrs|ms)\.?\s+/i, "")))),
-    h("div", { class: "t-meta" }, h("strong", {}, info.teacher), h("small", {}, "AI substitute teacher"), h("div", { class: "t-live" }, bars, stateLabel)));
+    h("div", { class: "t-meta" }, h("strong", {}, info.teacher), h("small", {}, "AI substitute teacher"), h("div", { class: "t-live" }, bars, stateLabel)),
+    info.avatar?.enabled ? avatarToggle : null);
+  const avatarView = h("div", { class: "avatar-view hidden" });
   const caption = h("p", { class: "caption-text" }, "Press Start class when the students are ready.");
   const sectionLabel = h("span", { class: "caption-section" }, info.topic);
   const progressFill = h("i");
@@ -65,10 +68,15 @@ export async function mountClassroom(lectureId, ctx) {
   const micBtn = h("button", { class: "icon-btn", title: "Dictate", disabled: true }, icon("mic"));
   const noDoubtBtn = h("button", { class: "btn sm", disabled: true }, "No questions, continue");
   const limitLabel = h("small", { class: "muted" });
-  const composer = h("div", { class: "composer" }, h("div", { class: "composer-box" }, composerInput, micBtn, sendBtn),
+  const waitBar = h("i");
+  const waitText = h("span");
+  const waitTimer = h("div", { class: "wait-timer hidden", role: "timer", "aria-live": "polite" },
+    h("div", { class: "wait-bar" }, waitBar), waitText);
+  const composer = h("div", { class: "composer" }, waitTimer, h("div", { class: "composer-box" }, composerInput, micBtn, sendBtn),
     h("div", { class: "composer-foot" }, limitLabel, noDoubtBtn));
 
   const side = h("aside", { class: "class-side" },
+    avatarView,
     teacherCard,
     h("div", { class: "caption-card" }, sectionLabel, caption),
     h("div", { class: "controls" }, playBtn, stopBtn,
@@ -131,7 +139,7 @@ export async function mountClassroom(lectureId, ctx) {
       progressText.textContent = `${Math.min(i + 1, n)} / ${n}`;
       store.set(lectureId, i >= n ? 0 : i);
     },
-    cancelAsk() { if (pendingAsk) { const r = pendingAsk; pendingAsk = null; r(""); } },
+    cancelAsk() { if (pendingAsk) { const r = pendingAsk; pendingAsk = null; r(""); } stopWait(); },
     openCheckpoint(section, final) {
       setPanel("questions");
       chat.querySelector(".chat-empty")?.remove();
@@ -147,7 +155,7 @@ export async function mountClassroom(lectureId, ctx) {
       stateLabel.textContent = "Question break";
       const add = (cls, text, extra) => { thread.append(h("div", { class: `msg ${cls}` }, h("div", { class: "bubble" }, text), extra)); scroll(); };
       return {
-        thinking(on) { typing.classList.toggle("hidden", !on); stateLabel.textContent = on ? "Thinking…" : "Question break"; scroll(); },
+        thinking(on) { typing.classList.toggle("hidden", !on); stateLabel.textContent = on ? "Thinking…" : "Question break"; avatar?.setMood(on ? "thinking" : "happy"); scroll(); },
         setLimit(max) { limitLabel.textContent = `Up to ${max} question(s) in this break`; },
         setCount(asked, max) { limitLabel.textContent = `${asked} of ${max} question(s) asked`; },
         teacher(text, opts = {}) {
@@ -155,15 +163,52 @@ export async function mountClassroom(lectureId, ctx) {
         },
         student(text) { add("student", text); questionCount += 1; qCount.textContent = questionCount; qCount.classList.remove("hidden"); },
         note(text) { add("system", text); },
-        ask() {
+        // Waits for a student's question. After `seconds` with nobody typing, it resolves "" (no doubts).
+        ask(seconds) {
+          avatar?.setMood("happy");  // friendly while waiting for a question
           setComposer(true);
           stateLabel.textContent = "Listening for questions";
-          return new Promise(resolve => { pendingAsk = (v) => { setComposer(false); stateLabel.textContent = "Question break"; resolve(v); }; });
+          startWait(seconds);
+          return new Promise(resolve => {
+            pendingAsk = (v) => { stopWait(); setComposer(false); stateLabel.textContent = "Question break"; resolve(v); };
+          });
         },
-        close() { status.textContent = "Done"; status.className = "ck-status done"; setComposer(false); limitLabel.textContent = ""; typing.classList.add("hidden"); },
+        close() { avatar?.setMood("neutral"); status.textContent = "Done"; status.className = "ck-status done"; setComposer(false); limitLabel.textContent = ""; typing.classList.add("hidden"); },
       };
     },
   };
+
+  // ---------- question countdown ----------
+  // Counts down only while the class is playing; any typing or dictation stops it for good (no rush).
+  let waitTimerId = 0, waitLeft = 0, waitTotal = 0;
+  function startWait(seconds) {
+    stopWait();
+    if (!seconds) return;
+    waitLeft = waitTotal = seconds;
+    waitTimer.classList.remove("hidden", "holding");
+    renderWait();
+    waitTimerId = setInterval(() => {
+      if (player?.paused) return;
+      waitLeft -= 0.1;
+      renderWait();
+      if (waitLeft <= 0) { stopWait(); submit(""); }
+    }, 100);
+  }
+  function renderWait() {
+    waitBar.style.width = `${Math.max(0, (100 * waitLeft) / waitTotal)}%`;
+    waitText.textContent = player?.paused ? "Paused" : `Moving on in ${Math.ceil(Math.max(0, waitLeft))}s · start typing to ask`;
+  }
+  function holdWait() {  // a student started asking: wait as long as they need
+    if (!waitTimerId) return;
+    clearInterval(waitTimerId); waitTimerId = 0;
+    waitTimer.classList.add("holding");
+    waitBar.style.width = "100%";
+    waitText.textContent = "Take your time. Press Enter to ask.";
+  }
+  function stopWait() {
+    clearInterval(waitTimerId); waitTimerId = 0;
+    waitTimer.classList.add("hidden");
+  }
 
   function setComposer(on) {
     for (const el of [composerInput, sendBtn, micBtn, noDoubtBtn]) el.disabled = !on;
@@ -178,7 +223,7 @@ export async function mountClassroom(lectureId, ctx) {
     r(text.trim());
   }
   const autosize = () => { composerInput.style.height = "auto"; composerInput.style.height = `${Math.min(composerInput.scrollHeight, 120)}px`; };
-  composerInput.addEventListener("input", autosize);
+  composerInput.addEventListener("input", () => { autosize(); if (composerInput.value.trim()) holdWait(); });
   composerInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (composerInput.value.trim()) submit(composerInput.value); }
   });
@@ -191,7 +236,7 @@ export async function mountClassroom(lectureId, ctx) {
   micBtn.addEventListener("click", () => {
     if (!dictation) return;
     if (listening) { dictation.stop(); return; }
-    listening = true; micBtn.classList.add("rec"); dictation.start();
+    listening = true; micBtn.classList.add("rec"); holdWait(); dictation.start();
   });
 
   // ---------- controls ----------
@@ -290,7 +335,56 @@ export async function mountClassroom(lectureId, ctx) {
   };
   document.addEventListener("keydown", onKey);
 
+  // ---------- talking avatar (optional) ----------
+  // The 3D teacher plays and lip-syncs the same voice. Off: the class runs exactly as before (audio only).
+  let avatar = null, avatarLoading = false;
+  const AVATAR_PREF = "eris-avatar";
+  const avatarWanted = () => { try { return localStorage.getItem(AVATAR_PREF) !== "0"; } catch { return true; } };
+  const webgl = () => { try { return !!document.createElement("canvas").getContext("webgl2"); } catch { return false; } };
+
+  async function enableAvatar() {
+    if (avatar || avatarLoading || !info.avatar?.enabled || !webgl()) return;
+    avatarLoading = true;
+    avatarView.replaceChildren(h("div", { class: "avatar-loading" }, h("span", { class: "spinner" }), "Loading the teacher…"));
+    avatarView.classList.remove("hidden");
+    teacherCard.classList.add("with-avatar");
+    try {
+      const { createAvatar } = await import("./avatar/avatar.js");  // three.js loads only when the avatar is used
+      const created = await createAvatar({ container: avatarView, modelUrl: info.avatar.model_url || undefined });
+      if (!avatarLoading) { created.dispose(); return; }  // turned off (or left the page) while loading
+      avatar = created;
+      window.erisAvatar = avatar;  // handy in the browser console (debug overlay values: erisAvatar.debug)
+      avatarView.querySelector(".avatar-loading")?.remove();
+      voice.setAvatar(avatar);
+    } catch (e) {
+      console.warn("[avatar] could not load, audio only:", e);
+      toast("The 3D teacher could not load. The class continues with audio only.", "error", 5000);
+      disableAvatar();
+    } finally { avatarLoading = false; }
+  }
+
+  function disableAvatar() {
+    avatarLoading = false;
+    voice.setAvatar(null);
+    avatar?.dispose();
+    avatar = null;
+    window.erisAvatar = undefined;
+    avatarView.replaceChildren();
+    avatarView.classList.add("hidden");
+    teacherCard.classList.remove("with-avatar");
+  }
+
+  function toggleAvatar() {
+    const on = !(avatar || avatarLoading);
+    try { localStorage.setItem(AVATAR_PREF, on ? "1" : "0"); } catch {}
+    on ? enableAvatar() : disableAvatar();
+    avatarToggle.classList.toggle("off", !on);
+  }
+  avatarToggle.classList.toggle("off", !avatarWanted());
+  if (avatarWanted()) enableAvatar();
+
   return () => {
+    disableAvatar();
     cancelAnimationFrame(raf);
     document.removeEventListener("keydown", onKey);
     if (player) player.stop();

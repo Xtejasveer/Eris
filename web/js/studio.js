@@ -75,7 +75,7 @@ export async function mountStudio(lectureId, ctx) {
   }
 
   const persona = structuredClone(data.persona || template.values);
-  const topicInput = h("input", { class: "input", value: data.manifest?.topic || template.topic || "", placeholder: "e.g. Python while loops" });
+  const topicInput = h("input", { class: "input", value: data.manifest?.topic || template.topic || "", placeholder: "e.g. Introduction to recursion" });
   const durationInput = h("input", { class: "input", type: "number", min: 5, max: 120, step: 5, value: data.manifest?.duration_min || template.duration_min || 30 });
 
   const personaBody = h("div", { class: "persona" });
@@ -185,6 +185,41 @@ export async function mountStudio(lectureId, ctx) {
     } else if (status() === "approved") {
       notices.append(h("div", { class: "callout ok" }, icon("checkCircle"), h("div", {}, "Approved. The class is ready to start.")));
     }
+    const jc = judgeCard();
+    if (jc) notices.append(jc);
+  }
+
+  // Jev's quality check from generation (judge.json): which checks passed and what failed.
+  function judgeCard() {
+    const j = data.judge;
+    if (!j || state.dirty) return null;
+    const rounds = j.rounds || [], autoFixes = j.auto_fixes || [];
+    const history = rounds.length
+      ? `${rounds.length} feedback round(s) with the writer: ${rounds.filter(r => r.kind === "rules").length} for rules, ${rounds.filter(r => r.kind === "quality").length} for quality${rounds.some(r => r.kind === "rewrite") ? ", 1 fresh rewrite" : ""}`
+      : "The writer's first draft passed every rule check.";
+    const extras = [
+      h("p", { class: "judge-pair" }, icon("chat"), history),
+      ...autoFixes.map(f => h("p", { class: "judge-pair warn" }, icon("alert"), `Code fixed this after the writer didn't: ${f}`)),
+      ...(j.advice || []).map(a => h("p", { class: "judge-pair" }, icon("info"), `Advice the writer didn't fully follow: ${a}`)),
+      ...(j.pairs || []).filter(p => p.unflag).map(p => h("p", { class: "judge-pair" }, icon("info"),
+        `Written before speaking instead (the sentence isn't about it): “${p.said.slice(0, 70)}…” in ${p.section}`)),
+    ];
+    if (j.error) return h("div", { class: "judge-card" },
+      h("div", { class: "judge-head" }, icon("info"), h("span", {}, "Quality check did not run: " + j.error)), ...extras);
+    const failed = j.findings.filter(f => !f.passed);
+    const check = (f) => f.check.replaceAll("_", " ").replace(/^./, c => c.toUpperCase());
+    const label = (f) => `${check(f)}${f.section ? ` · ${f.section}` : ""}`;
+    return h("details", { class: `judge-card ${j.blockers ? "bad" : "ok"}`, open: failed.length > 0 || autoFixes.length > 0 || (j.advice || []).length > 0 },
+      h("summary", {}, icon(j.blockers ? "alert" : "checkCircle"),
+        h("strong", {}, "Quality check"),
+        h("span", { class: "judge-meta" }, `score ${Math.round(j.score * 100)}% · ${j.findings.length - failed.length}/${j.findings.length} checks passed`
+          + (j.pairs?.length ? ` · ${j.pairs.length - (j.unflagged || 0)}/${j.pairs.length} while-speaking pairs kept` : "")),
+        h("span", { class: "judge-by" }, j.model)),
+      failed.length ? h("ul", { class: "judge-list" }, failed.map(f => h("li", {},
+        h("span", { class: `badge ${f.severity === "blocker" ? "failed" : "draft"}` }, f.severity),
+        h("div", {}, h("strong", {}, label(f)), h("small", {}, `${f.fix} (yes: ${Math.round(f.value * 100)}%)`)))))
+        : h("p", { class: "judge-ok" }, "Every check passed."),
+      ...extras);
   }
 
   function renderStats() {
@@ -204,7 +239,7 @@ export async function mountStudio(lectureId, ctx) {
         h("p", {}, data.script_md ? "Open Edit to fix it." : "Upload the study material, check the persona, then click Generate script. The script appears here as a readable document.")));
       return;
     }
-    previewPane.replaceChildren(renderScriptDoc(state.segments, data.persona?.Teacher?.Name));
+    previewPane.replaceChildren(renderScriptDoc(state.segments, data.persona?.Teacher?.Name, { lectureId }));
   }
 
   function renderActions() {

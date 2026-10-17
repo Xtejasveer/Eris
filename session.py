@@ -161,10 +161,17 @@ def run_session(lecture_id, force=False, use_voice=False, use_mic=False, resume=
     print(f"{LINE}\nTeacher: {name} (AI substitute) | Topic: {manifest['topic']}")
     print(f"Estimated: {manifest.get('estimated_min', '?')} min | Mode: {mode} | Board: {board['dir']}\n{LINE}")
 
-    for index in range(state["cursor"], len(segments)):
+    index = state["cursor"]
+    while index < len(segments):
         seg = segments[index]
+        # while_speaking pairs: the terminal can't overlap them (no threads), so it says the sentence
+        # first and then runs the action, keeping the order the script means.
+        pair = seg.get("args", {}).get("while_speaking") and index + 1 < len(segments)
         mark(state, index, seg, "running")
         try:
+            if pair:
+                play_segment(index + 1, segments[index + 1], segments, state, board, ctx)
+                mark(state, index + 1, segments[index + 1], "done")
             play_segment(index, seg, segments, state, board, ctx)
             mark(state, index, seg, "done")
         except KeyboardInterrupt:
@@ -178,7 +185,8 @@ def run_session(lecture_id, force=False, use_voice=False, use_mic=False, resume=
             ctx["failures"] += 1  # A failed checkpoint may leave a half-finished thread; use a fresh one.
             mark(state, index, seg, "failed", str(e))
             print(f"[session] segment {index + 1} failed: {e} (continuing)")
-        state["cursor"] = index + 1
+        index += 2 if pair else 1
+        state["cursor"] = index
         save_state(lecture_id, state)
 
     manifest["status"] = "completed"

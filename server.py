@@ -5,6 +5,7 @@ keep narration and actions in order). The backend only does work the browser can
 generate, approve, TTS, running code, recovery lines and doubt-agent turns.
 """
 
+import json
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile
@@ -79,7 +80,14 @@ def get_lecture(lecture_id: str):
             persona = parse_persona(folder / "persona.md")
         except ValueError:
             persona = None
-    return {"id": lecture_id, "manifest": _manifest_or_none(lecture_id), "files": files,
+    judge_json = config.lecture_dir(lecture_id) / "judge.json"
+    judge = None
+    if judge_json.exists() and not failed:
+        try:
+            judge = json.loads(judge_json.read_text(encoding="utf-8"))
+        except ValueError:
+            judge = None
+    return {"id": lecture_id, "manifest": _manifest_or_none(lecture_id), "files": files, "judge": judge,
             "persona": persona, "script_md": text, "segments": segments, "errors": errors, "failed_draft": failed,
             "job": jobs.get_job(lecture_id)}
 

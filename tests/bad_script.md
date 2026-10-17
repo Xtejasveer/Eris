@@ -25,6 +25,10 @@ print(x)
 [/NOTE]
 [NOTE_HIGHLIGHT text="banana"]
 [/NOTE]
+[RUN cmd="python demo.py" while_speaking=true]
+[SLIDE n=1 while_speaking=maybe]
+[WRITE text="nothing is said while this is written" while_speaking=true]
+[PAUSE s=1]
 Some narration at the end, and no doubt check.
 [WRITE_CODE file="open.py"]
 print("never closed")

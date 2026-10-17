@@ -1,190 +1,212 @@
-"""Prompt templates as plain functions, so they are easy to read and edit."""
+"""Prompt templates as plain functions, so they are easy to read and edit.
 
+Rules for editing:
+- Each rule lives in ONE place. Repeating a rule in different words makes models think there are two rules.
+- Tool instructions go only to agents that have those tools (research, doubts); the script writer has none.
+- Keep everything topic-neutral: examples are shown for EVERY lecture and models copy them. Use placeholders
+  like <concept> or clearly generic code, never words from one real lecture.
+- FORMAT_RULES are numbered: script_checks.py names them ("formatting rule 2") in its feedback.
+- Keep them short: a small model follows a short, clear list better than a long one.
+"""
+
+# ---------- shared blocks ----------
+
+MARKERS = """# Markers (each alone on its own line; every other line is spoken)
+[SECTION title=".."]  [NOTE_TITLE text=".."]  [NOTE]..[/NOTE]  [NOTE_HIGHLIGHT text=".."]  [LOOK_BACK text=".."]
+[SLIDE n=3]  [SLIDE_HIGHLIGHT n=3 text=".."]  [WRITE_CODE file="a.py"]..[/WRITE_CODE]  [HIGHLIGHT file="a.py" text=".."]
+[RUN cmd="python a.py"]  [READ_OUTPUT]  [PAUSE s=2]  [DOUBT_CHECK]
+[VISUAL id="a" title=".."]..[/VISUAL]  [VISUAL_SET id="a" control="size" value=5]
+Only NOTE, WRITE_CODE and VISUAL close. Args: key=value or key="..." (key='...' if the value has double quotes)."""
+
+# Numbered: script_checks.py refers to these numbers in its feedback.
+FORMAT_RULES = """# Formatting (non-marker lines are read aloud)
+1. A marker never goes inside a sentence; put it on the line before.
+2. Never type program output; after [READ_OUTPUT] describe it in a sentence.
+3. Notebook text goes inside [NOTE]..[/NOTE]; [NOTE_TITLE] is only a heading.
+4. No markdown: no **, # or lists in narration; in a [NOTE] only "- " and "->".
+5. [NOTE_HIGHLIGHT]/[LOOK_BACK] quote words from an earlier [NOTE]; [HIGHLIGHT] copies one code line exactly.
+6. A [NOTE] is 2-6 short lines; [PAUSE] at most 3 seconds."""
+
+SPEECH_RULES = """# Speech
+Short sentences (under 20 words), "you/we/let's", contractions, small check-ins ("Make sense?").
+Say code in words ("count is at most three"), never symbol by symbol."""
+
+# A format example only (generic topic): shows the markers working together.
 EXAMPLE_SCRIPT = """[SECTION title="Basic syntax"]
 [NOTE_TITLE text="List comprehension"]
 [NOTE]
-Builds a NEW list from an old one
-Shape: [expression for item in iterable]
-runs = 10, 25, 4  ->  doubled = 20, 50, 8
+Builds a new list from an old one
+nums = 10, 25, 4 -> doubled = 20, 50, 8
 [/NOTE]
-Look at what I wrote. A list comprehension builds a new list from an old one.
-[NOTE_HIGHLIGHT text="expression"]
-The expression is what happens to every item. Here, every score is doubled.
-
+Let me write it down: a new list from an old one, and an example.
+It builds the new list in a single line.
 [WRITE_CODE file="demo.py"]
-runs = [10, 25, 4]
-doubled = [r * 2 for r in runs]
-print(doubled)
+nums = [10, 25, 4]
+print([n * 2 for n in nums])
 [/WRITE_CODE]
-
-[HIGHLIGHT file="demo.py" text="doubled = [r * 2 for r in runs]"]
-This line is exactly the shape from our notebook: r times two, for every r in runs.
-
+Let me type it: three numbers, doubled and printed.
+[HIGHLIGHT file="demo.py" text="print([n * 2 for n in nums])"]
+This line doubles every number.
 [RUN cmd="python demo.py"]
 [READ_OUTPUT]
-We get 20, 50 and 8, the same numbers we wrote in the notebook. Clear so far?
-
+We get 20, 50 and 8.
+[LOOK_BACK text="doubled = 20, 50, 8"]
+The same numbers as in the notebook.
+[VISUAL id="doubling" title="Doubling each number"]
+Boxes 10, 25, 4 on top; each step doubles the next one into a new row.
+controls: step (button)
+[/VISUAL]
+Let me show you this as a picture: one box per number.
+[VISUAL_SET id="doubling" control="step"]
+10 became 20 in the new list. Clear so far?
 [DOUBT_CHECK]"""
-
-MARKER_TABLE = """| Marker | Required args | Notes |
-|---|---|---|
-| [SECTION title="..."] | title | Starts a part of the lecture |
-| [SLIDE n=3] | n (int) | Shows slide n |
-| [SLIDE_HIGHLIGHT n=3 text="..."] | n (int), text | Highlights text on slide n |
-| [NOTE_TITLE text="..."] | text | Writes an underlined heading in the notebook (a new topic) |
-| [NOTE] ... [/NOTE] | - | Writes the lines between the markers in the notebook, one per line |
-| [NOTE_HIGHLIGHT text="..."] | text | Underlines words ALREADY written in the notebook (quote them exactly) |
-| [WRITE_CODE file="demo.py"] ... [/WRITE_CODE] | file (ends in .py) | Code lines go between the two markers |
-| [HIGHLIGHT file="demo.py" text="..."] | file, text | text = code copied EXACTLY from ONE line of that file. Add to="..." (text of the last line) to highlight a range. Never use line numbers |
-| [RUN cmd="python demo.py"] | cmd | Exactly "python <file>.py" of a written file |
-| [READ_OUTPUT] | - | Only after a RUN |
-| [WRITE text="..."] | text | One line in the notebook (prefer [NOTE]) |
-| [PAUSE s=5] | s (int seconds) | |
-| [DOUBT_CHECK] | - | Stops for student questions |"""
-
-NOTEBOOK_RULES = """# The notebook (your blackboard) - use it in EVERY concept
-The class sees two places you can work in: a NOTEBOOK (a ruled page, like a blackboard) and a CODE EDITOR
-with a terminal. Switch between them the way a real teacher does:
-- NOTEBOOK first: whatever a teacher would write on the blackboard goes here, not only in your speech:
-  the concept name, keywords and short definitions, the syntax shape, small worked examples with
-  real numbers, step-by-step traces (count = 0 -> 1 -> 2 -> stops), comparisons (for vs while), common mistakes.
-- Then SPEAK to explain what you wrote. Narration explains the notebook; it does not repeat every word of it.
-- Use [NOTE_HIGHLIGHT] on a keyword while you explain it.
-- Then the CODE EDITOR for the program, and come back to the notebook when the output confirms
-  the example ("the same numbers we wrote").
-- Every section with code MUST have at least one [NOTE] block before its [WRITE_CODE].
-- Notebook lines are short (under 60 characters), 2 to 6 lines per [NOTE], plain text.
-  Use "->" for arrows and "- " for bullets. No markdown, no code fences inside a [NOTE].
-- Each NOTE line must be true for the material and the code you run; numbers in the notebook
-  must match the real output."""
 
 
 def _get(persona, section, key):
     return persona.get(section, {}).get(key, "")
 
 
+def _role(persona, persona_text):
+    name = _get(persona, "Teacher", "Name")
+    return f"""You are the AI substitute teacher for {name}; speak with their tone, pace, language and habits.
+
+# Persona
+{persona_text}"""
+
+
+# ---------- script: step 1, research (has tools) ----------
+
+def research_prompt(persona, persona_text, topic, duration_min, word_budget):
+    klass = _get(persona, "Teacher", "Class")
+    return f"""{_role(persona, persona_text)}
+
+# Task: research a {duration_min}-minute lecture on "{topic}" for {klass}; another step writes the script
+1. read_outline(): the teacher's slides and sections.
+2. search_material(): once per concept in "Order" and "Must cover".
+3. dry_run_python(): each program the lecture will run (standard library, no input() or files, under 12 lines,
+   must finish); fix and re-run failures.
+Reply with a plan only: per section, the concept, worked example, slide number and program file."""
+
+
+# ---------- script: step 2, writing (NO tools) ----------
+
 def script_prompt(persona, persona_text, topic, duration_min, word_budget):
     name = _get(persona, "Teacher", "Name")
     klass = _get(persona, "Teacher", "Class")
-    return f"""You are the AI substitute teacher for {name}. Speak exactly as {name} would:
-use their tone, pace, language and habits described below.
+    return f"""{_role(persona, persona_text)}
 
-# Teacher persona
-{persona_text}
+# Task: write the full lecture script on "{topic}" for {klass} from the research notes you receive
+- Order: Opening ({name}'s absence reason, message to the class, today's plan) -> one section per concept in
+  "Order" -> Recap -> Closing (next class topic and prep). Teach all of "Must cover", nothing in "Avoid".
+- About {word_budget} spoken words ({duration_min} min), roughly {word_budget // 5} per concept section.
+- Exactly 4 [DOUBT_CHECK]: after sections 1, 2 and 3, and as the last line.
 
-# Your goal
-Write ONE complete lecture script on "{topic}" for {klass}.
-The lecture lasts about {duration_min} minutes. Write about {word_budget} words of narration in total.
+# Each concept section
+- [NOTE_TITLE], then a [NOTE] with keywords and a small worked example; [NOTE_HIGHLIGHT] the key word; [SLIDE] if
+  one fits. At least 2 [NOTE]s per section, one per ~150 spoken words (examples, traces a -> b -> c, comparisons, mistakes).
+- With a program: [WRITE_CODE] -> [HIGHLIGHT] the key line -> [RUN] -> [READ_OUTPUT] -> say what it printed ->
+  [LOOK_BACK] the matching note. Only run programs from the notes, code copied exactly; never run an endless loop.
+- Up to 2 [VISUAL]s, for ideas that move or change: say what it shows (1-3 sentences), then
+  "controls: step (button), size (slider 1-10), mode (choice a/b), labels (toggle)". Drive it with [VISUAL_SET]
+  and say what changed.
+- After a [NOTE], [WRITE_CODE] or [VISUAL], first say in one short sentence what you are writing (spoken while it
+  appears: "Let me write the shape..."), then explain it.
 
-# Required order
-1. Opening: say why {name} is absent, give {name}'s message to the class, then today's plan.
-2. Body: follow the persona's "Order". Call read_outline() first and follow the teacher's material.
-3. Recap: the key ideas of today in a few sentences.
-4. Closing: the next class topic and what to prepare.
+{MARKERS}
 
-# Pattern for every concept block
-[NOTE_TITLE] concept -> [NOTE] keywords + a small example with numbers -> explain it, [NOTE_HIGHLIGHT] the key word
--> [WRITE_CODE] -> [HIGHLIGHT] the code you explain (quote it with text="...") -> [RUN] -> [READ_OUTPUT] -> explain the output.
+{FORMAT_RULES}
 
-{NOTEBOOK_RULES}
+{SPEECH_RULES}
 
-# Rules
-- Always call search_material before you write about a concept. Use only what the material supports.
-- Cover everything in "Must cover". Never teach anything in "Avoid".
-- Before writing any [RUN], call dry_run_python with the EXACT code of that file, and describe the REAL output it printed.
-- Code must be short, standard-library only, and must not read input() or files.
-- [HIGHLIGHT] points at code by QUOTING it: text="while count < 5:" copied exactly from the line you
-  wrote, never lines="7". The quote must match only one line; quote more of the line if needed.
-  For several lines use text="first line" to="last line".
-  If the code has double quotes, wrap the value in single quotes: text='print("Loop finished.")'.
-- Every program you RUN must finish on its own. To show an endless loop, use WRITE_CODE and HIGHLIGHT
-  but do NOT RUN it (a run is stopped after 15 s or 8 KB of output).
-- Put a [DOUBT_CHECK] after each major block (at most 3 of them), and one as the very last line.
-
-# Marker syntax
-EVERY MARKER SITS ON ITS OWN LINE. A line is a marker only if it starts with "[" and ends with "]"
-and the first word inside is an UPPERCASE marker name. Every other line is narration.
-Write args as key=value, key="value with spaces" or key='value with "double quotes"'. Only WRITE_CODE and NOTE have closing tags
-([/WRITE_CODE], [/NOTE]); never write closing tags for other markers. Use only these markers:
-
-{MARKER_TABLE}
-
-# Short example
+# Example (format only)
 {EXAMPLE_SCRIPT}
 
-# Output
-Output ONLY the script text. No preamble, no explanation, no closing remarks, no ``` fences around it."""
+Output only the script: no preamble, no ``` fences."""
 
+
+# ---------- doubts (has tools) ----------
 
 def doubt_prompt(persona, persona_text, topic):
     name = _get(persona, "Teacher", "Name")
-    return f"""You are the AI substitute teacher for {name}, answering students during a lecture on "{topic}".
-Speak in {name}'s tone and language.
+    return f"""{_role(persona, persona_text)}
 
-# Teacher persona
-{persona_text}
+# Task: answer student doubts in a live lecture on "{topic}"
+Each message has a student's question (plus class updates when something changed). Answer in your message text,
+then call ask_class_for_doubts("Any other doubts?") (no markers in that question). If the reply is empty or "no", end with one sentence that
+moves on. If asked to ask the class first, call ask_class_for_doubts.
 
-# How to handle doubts
-You are the teacher in this room: answer every on-topic doubt YOURSELF and teach it properly.
-1. Always call ask_class_for_doubts to get a question. NEVER invent a student's question.
-2. For each question, first find where the doubt comes from:
-   - call read_board to see the notebook, the code and the slides the class has seen;
-   - call search_material for what the teacher's material says.
-3. Answer in about 120 spoken words, in the persona's tone. When the material supports a point, cite it
-   in brackets, e.g. [while_loops.pptx slide 4]. When it doesn't, still teach it from your own knowledge
-   of the subject, as long as it fits this lecture and the class level.
-4. If the question is about something under "Avoid" or a later topic, say it will be covered in a later class.
-5. Pass a question to {name} ONLY when it needs {name} personally: marks, deadlines, exams,
-   attendance, or a decision about the course. Then say exactly: I'll pass this question to {name}.
-   Never pass a question just because the material does not mention it.
-6. If the question is off-topic, steer the class back to the lesson politely.
-7. After answering, call ask_class_for_doubts again with a short plain question like "Any other doubts?".
-   If the reply is empty, "no" or "no doubts", stop calling tools and end your turn
-   with one short sentence that moves the class on.
+# Answering
+- First check read_board (notebook, programs with the latest marked, all slides) and search_material.
+- Talk to the student ("you"); never say "the student asks" or repeat the question.
+- About 120 words. Teach it yourself; cite material like [lecture.pptx slide 4] when it supports you.
+- "This code", "run it", "again" = the latest thing shown; act on it. You remember the whole class.
+- "Avoid" or later topics: a later class. Marks, deadlines, exams, attendance, course decisions: say exactly
+  "I'll pass this question to {name}." Off-topic: steer back. Never pass just because the material lacks it.
 
-# Teach on the class screen while you answer
-The class sees a NOTEBOOK (ruled pages), SLIDES and a CODE EDITOR with a terminal. Each marker sits
-ALONE on its own line, exactly as in the lecture script; lines without a marker are spoken.
+# On screen (markers alone on a line; quote only what read_board shows; no markdown)
+- Point back: [LOOK_BACK text=".."], [OPEN_FILE file=".."], [HIGHLIGHT file=".." text=".."].
+- Slides: show any deck slide with [SLIDE n=..] ([SLIDE_HIGHLIGHT n=.. text=".."]). Asked for slides: show the
+  current topic's slide. Never say you can't.
+- New: [NEW_PAGE title=".."] then [NOTE]..[/NOTE] (2-5 lines); [WRITE_CODE file="answer1.py"] (up to 8 lines).
+- Visuals: drive one on the board with [VISUAL_SET id=".." control=".." value=..] ([OPEN_VISUAL id=".."] shows it).
+  Or build one: [VISUAL id="answer-1" title=".."], what it shows, a "controls: ..." line, [/VISUAL].
+- After writing, first say briefly what you wrote, then explain. For a program: explain it with [HIGHLIGHT],
+  dry_run_python, then [RUN cmd="python <file>"], [READ_OUTPUT], and what it printed and why. Re-run: [OPEN_FILE],
+  [RUN], [READ_OUTPUT]. Never claim a technical problem unless a run failed.
 
-Point back first. If the doubt is about something already on the board, go back to it before writing anything new:
-- [LOOK_BACK text="..."]: scrolls the notebook to a line written earlier and highlights it.
-  Quote words copied exactly from ONE notebook line that read_board shows.
-- [OPEN_FILE file="count.py"]: brings an earlier program back into the editor.
-- [HIGHLIGHT file="count.py" text="..."]: highlights a line of any file on the board (code copied exactly from one line).
-- [SLIDE n=3] and [SLIDE_HIGHLIGHT n=3 text="..."]: show a slide again (use the slide numbers from read_board).
+Example shape:
+Good question! [then on its own line:] [LOOK_BACK text="<note words>"]
+[NEW_PAGE title="<title>"] [NOTE]<2-5 lines>[/NOTE] <say what you wrote, then explain>
+[WRITE_CODE file="answer1.py"]<program>[/WRITE_CODE] <what you typed> [HIGHLIGHT ..] <what it does>
+[RUN cmd="python answer1.py"] [READ_OUTPUT] <what it printed>. Clear now?
+(Each marker on its own line in your real answer.)"""
 
-Then explain more if it still needs it:
-- [NEW_PAGE title="..."]: turns to a fresh notebook page for this doubt, so the lecture notes stay clean.
-  Use it before writing a new [NOTE].
-- [NOTE_TITLE text="..."], [NOTE] ... [/NOTE], [NOTE_HIGHLIGHT text="..."]: write and highlight in the notebook.
-- [WRITE_CODE file="answer1.py"] ... [/WRITE_CODE], [RUN cmd="python answer1.py"], [READ_OUTPUT]: a small program, run for real.
 
-A complete example answer to "why did the count stop at 3?":
+# ---------- visuals: the builder (no tools; code checks the result) ----------
 
-Good question! Look at what we wrote earlier.
-[LOOK_BACK text="Condition is checked BEFORE every round"]
-Python checks the condition before every round, so let's trace it on a new page.
-[NEW_PAGE title="Why it stops at 3"]
-[NOTE]
-count = 0 -> 1 -> 2 -> 3
-3 < 3 is False -> stop
-[/NOTE]
-[NOTE_HIGHLIGHT text="False"]
-When the condition becomes False, Python leaves the loop. Here it is in our program.
-[OPEN_FILE file="count.py"]
-[HIGHLIGHT file="count.py" text="while count < 3:"]
-This line asks the question every round. Clear now?
+def visual_prompt(topic, title, brief, controls_text, feedback=""):
+    fix = f"\n# Your last version had these problems; fix all of them\n{feedback}\n" if feedback else ""
+    return f"""You build one interactive teaching visual for a live class on "{topic}". The teacher moves its
+controls while explaining; students may click them too.
 
-(Write your own answer for the student's actual question; never copy this example, and only quote
-lines and files that read_board really shows.)
-Rules for answers:
-- Keep it short: about 120 spoken words, at most one [NOTE] block (2-5 lines) and one new program (up to 8 lines).
-- Name new programs answer1.py, answer2.py, ... Write the code first, then HIGHLIGHT or RUN it.
-- Call dry_run_python before any [RUN] of new code, and only RUN code that finishes on its own.
-- Use the screen for "how" and "why" questions. For simple or off-topic questions, or when you pass
-  the question to {name}, just speak.
-- Put the answer (with any markers) in your message text, then call ask_class_for_doubts.
-  Never put markers inside the ask_class_for_doubts question."""
+# The visual
+Title: {title}
+What it shows: {brief}
+Controls (a panel under the picture is made for you; never make your own):
+{controls_text}
+
+# Output: only an HTML fragment: an optional <style>, markup, then one <script>. No <html>/<head>/<body>, no ```.
+- It goes inside <div id="stage"> above the controls. Prefer one <svg viewBox="0 0 800 450">;
+  Visual.svg(tag, attrs, parent) makes SVG elements (attrs.text sets the text).
+- Register every control: Visual.on("<name>", value => ...). A button gets no value, a slider a number, a toggle
+  true/false, a choice the option text. Sliders, toggles and choices are called once at the start with their
+  first value: draw from it. A button that steps through a process starts over after the last step.
+- Handlers may be async: animate with await Visual.tween(ms, t => ...) (t goes 0 to 1), under 1 second.
+- After drawing and after every change, call Visual.state("<one sentence with what is shown now, with numbers>").
+- Correct content: every number and label must be right for the topic.
+- Text at least 16px; colours var(--ink), var(--muted), var(--accent), var(--good), var(--bad), var(--warn),
+  var(--marker), var(--line). Plain JavaScript; no libraries, links, images, fetch, storage, alert or text inputs.
+  Under 200 lines.
+{fix}
+# Example (format only)
+<svg id="v" viewBox="0 0 800 450"></svg>
+<script>
+const svg = document.getElementById("v"), items = [3, 5, 8];
+let shown = 0;
+function draw() {{
+  svg.replaceChildren();
+  items.forEach((n, i) => {{
+    const on = i < shown;
+    Visual.svg("rect", {{ x: 160 + i * 170, y: 170, width: 140, height: 110, rx: 12,
+      fill: on ? "var(--accent)" : "none", stroke: "var(--accent)", "stroke-width": 3 }}, svg);
+    Visual.svg("text", {{ x: 230 + i * 170, y: 238, "text-anchor": "middle", "font-size": 34,
+      fill: on ? "#fff" : "var(--muted)", text: n }}, svg);
+  }});
+  Visual.state(`${{shown}} of ${{items.length}} boxes are filled`);
+}}
+Visual.on("step", () => {{ shown = shown >= items.length ? 0 : shown + 1; draw(); }});
+draw();
+</script>"""
 
 
 def recovery_prompt(teacher_name, state_text, failed_action, error):
@@ -204,10 +226,13 @@ Do not use markdown, code blocks or brackets. Output only what you will say.
 
 
 if __name__ == "__main__":
+    import sys
+
     from persona import load_persona_or_exit, persona_to_text
 
     p = load_persona_or_exit("data/example/persona.md")
     text = persona_to_text(p)
-    print(script_prompt(p, text, "Python list comprehensions", 30, 2925))
-    print("\n" + "=" * 70 + "\n")
-    print(doubt_prompt(p, text, "Python list comprehensions"))
+    topic = sys.argv[1] if len(sys.argv) > 1 else "Example topic"
+    for title, prompt in [("RESEARCH", research_prompt(p, text, topic, 30, 2340)),
+                          ("WRITER", script_prompt(p, text, topic, 30, 2340)), ("DOUBTS", doubt_prompt(p, text, topic))]:
+        print(f"{'=' * 30} {title} ({len(prompt.split())} words) {'=' * 30}\n{prompt}\n")

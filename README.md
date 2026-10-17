@@ -181,6 +181,25 @@ count = 1 -> 2 -> 3 -> stop
 [NOTE_HIGHLIGHT text="AS LONG AS"]      highlighter over words already in the notebook (quoted, not counted)
 ```
 
+**Writing while speaking.** Add `while_speaking=true` to a notebook, code, highlight or slide marker
+to run it during the narration right after it, instead of in silence before it:
+
+```
+[WRITE_CODE file="count.py" while_speaking=true]
+count = 1
+...
+[/WRITE_CODE]
+Let me write a loop that counts to three.     <- spoken while the code is typed
+```
+
+The narration must come right after the marker (or after `[/NOTE]` / `[/WRITE_CODE]`). Only its **first
+sentence** is spoken while the writing appears (it should say what is being written: "Let me write the shape…");
+the rest is spoken after, as the explanation. If a generated script doesn't announce its writing, code adds a
+short lead ("Let me write this down: …") as a last resort. The writing is paced to fill most of the sentence,
+and the class moves on when both are done. It is not allowed on
+`RUN`, `READ_OUTPUT`, `PAUSE`, `SECTION` or `DOUBT_CHECK`. The website overlaps the two; the terminal
+`session` speaks the sentence first, then runs the action.
+
 Three markers point back at what is already on the screen. Doubt answers use them most
 (see "Doubt answers" below), but they work in a lecture script too:
 
@@ -222,7 +241,155 @@ The answer is a short script, checked against that board before it plays. A `LOO
 and new code is run first to record its real output. After the break, the stage returns to the
 page and view the class was on.
 
-## 7. Troubleshooting
+### Interactive visuals
+
+For an idea that moves or changes (a process step by step, a value that changes a result), the script can
+describe an **interactive picture**. A model builds it, and it appears in the **Visual** workspace next to
+the notebook, slides and code:
+
+```
+[VISUAL id="squares" title="Squaring a list"]
+Bars for the numbers 1 to n; pressing step squares the next bar.
+controls: n (slider 2-6), step (button), labels (toggle)
+[/VISUAL]
+Let me show you this as a picture.
+[VISUAL_SET id="squares" control="n" value=5]     move a control (a button needs no value)
+[VISUAL_SET id="squares" control="step"]
+[OPEN_VISUAL id="squares"]                         show it again later
+```
+
+Controls: `name (button)`, `name (slider 1-10)` (optional `step 0.5`), `name (toggle)` (value=on/off),
+`name (choice a/b/c)`. The parser checks every `VISUAL_SET` against these controls and their ranges.
+
+- **Building** (`visual_builder.py`, prompt `visual_prompt` in `prompts.py`): during `generate` (and on
+  approve, when a description was edited), `VISUAL_MODEL` writes each visual as a small HTML fragment.
+  Code then checks it: a `Visual.on` handler for every control, a `Visual.state` call, no network or
+  storage, the JavaScript syntax (with node, if it is installed), and the size. Problems go back to the
+  builder once. A visual that still fails is removed, with its `VISUAL_SET`s, and listed under auto-fixes
+  in Studio. Built visuals are saved in `workspace/lectures/<id>/visuals/` and reused until the
+  description changes. At most `MAX_VISUALS` (2) per lecture.
+- **In class**: each visual runs in a sandboxed frame (scripts only, no same-origin access, no network)
+  with a standard control panel from `web/js/visual/runtime.js`. `VISUAL_SET` lights up the control and
+  moves it visibly; students can use the controls too.
+- **In doubts**: `read_board` lists every visual with its controls and current values, and each question
+  carries what every visual shows right now (its `Visual.state` line, including student changes). An
+  answer can move the controls of any visual on the board, or build one new visual (`MAX_ANSWER_VISUALS`).
+  The student waits while it is built.
+- Settings (`.env`): `VISUALS_ENABLED=true`, and `VISUAL_MODEL` (defaults to `LLM_MODEL`; a stronger
+  coding model draws better visuals).
+
+## 7. Talking avatar
+
+The classroom shows a 3D teacher whose lips move with the voice, who blinks, looks at the class, and moves
+naturally. It is free and open source, runs entirely in the browser (no GPU server, no API keys), and does not
+change how the TTS makes audio. The investigation and design are in `docs/avatar-plan.md`.
+
+**Try it:** `python main.py serve`, then open **http://127.0.0.1:8000/avatar-demo.html** (debug overlay: FPS, current
+viseme, RMS, lip-sync mode, audio delay slider; buttons for Play, chunked streaming, word timings, Stop, Mood and a
+leak check). In a class, the avatar sits above the teacher card; the person button on the card turns it on or off.
+
+**Turn it off** for everyone with `AVATAR_ENABLED=false` in `.env` (three.js is then never downloaded and the class
+runs exactly as before, audio only). Each viewer can also hide it with the button; that choice is remembered.
+
+### How it works
+
+```
+Gnani clip (WAV, 48 kHz PCM16) → <audio> → Voice output node ─┐
+pushAudioChunk() → gapless AudioBufferSource queue ───────────┴→ avatar input → AnalyserNode → delay → speakers
+                                                                                    │
+                     every frame: RMS + spectrum → viseme → attack/release smoothing → blend shapes
+```
+
+- **One AudioContext** for the page (`web/js/avatar/audio-engine.js`), resumed on the first tap/click (iOS unlock).
+- **The avatar plays the audio** (or taps the existing playback node), and the analyser is on the real output path, so
+  the lips follow exactly what is heard and nothing is played twice.
+- **Lip sync, chosen automatically:**
+  - *Audio mode* (Gnani clips, streamed chunks): RMS with a noise gate opens the jaw; pre-emphasized spectral
+    centroid, band energies and zero-crossing rate pick closed / open / spread / rounded / fricative, mapped onto
+    the 15 Oculus visemes (or ARKit shapes for ARKit-only models).
+  - *Timestamp mode* (browser fallback voice, or `setTimestamps`): words → visemes with TalkingHead's `lipsync-en`
+    rules, scheduled on the clock. Used for the browser voice because its audio can't be routed into Web Audio;
+    its word-boundary events give the timings.
+  - Both: fast open (~50 ms), slower close (~100 ms), blended visemes, clamped weights, delay compensation ±150 ms.
+- **Alive:** blinks every 2–6 s (~150 ms, sometimes double, more at phrase ends), small eye saccades mostly at the
+  camera, slow noise-driven head sway and breathing, small nods and brow raises on loud syllables, moods
+  (neutral / happy while waiting for questions / thinking while the agent answers).
+- **Stop/pause** in the class calls `avatar.stop()`: queued audio fades out in 30 ms and the mouth is at rest in ~150 ms.
+
+### Module API (`web/js/avatar/avatar.js`)
+
+```js
+const avatar = await createAvatar({ container, modelUrl, options });  // options: background, delayMs, mood, tuning, …
+avatar.attachAudioStream(source);          // HTMLAudioElement, MediaStream or AudioNode (same AudioContext)
+avatar.pushAudioChunk(chunk, { type: "pcm16", sampleRate: 48000, channels: 1 });  // or "float32", "wav", "mp3", …
+avatar.setTimestamps({ words, times, durations });          // optional, ms; or { visemes, vtimes, vdurations }
+avatar.stop(); avatar.setMood("happy"); avatar.setDelay(40); avatar.dispose();
+avatar.addEventListener("speechstart" | "speechend" | "ready" | "error", …);
+```
+
+### Swap the avatar model
+
+Put a GLB in `web/assets/avatars/` and set `AVATAR_MODEL_URL=/assets/avatars/your-model.glb` in `.env` (or pass
+`modelUrl` to `createAvatar`). The camera frames head and shoulders from the model's own measurements.
+
+**Required blend shapes** (morph targets, exact names):
+- *Either* the Oculus visemes `viseme_PP, viseme_FF, viseme_TH, viseme_DD, viseme_kk, viseme_CH, viseme_SS,
+  viseme_nn, viseme_RR, viseme_aa, viseme_E, viseme_I, viseme_O, viseme_U` (at least 10 of them; `viseme_sil` is
+  optional, rest = all zero),
+- *or* ARKit mouth shapes (`jawOpen`, `mouthClose`, `mouthFunnel`, `mouthPucker`, `mouthStretchLeft/Right`,
+  `mouthSmileLeft/Right`, `mouthRollLower`, `mouthPressLeft/Right` …) — the module converts visemes to these.
+- *Recommended (ARKit):* `eyeBlinkLeft/Right`, `eyeLookIn/Out/Up/DownLeft/Right`, `browInnerUp`,
+  `browOuterUpLeft/Right`, `browDownLeft`, `cheekSquintLeft/Right`, `eyeSquintLeft/Right`.
+- *Bones (optional):* `Head`, `Neck`, `Spine2` for sway and nods; `LeftArm`/`RightArm` are lowered out of the shot.
+
+**Making a free avatar:**
+- **Blender + MPFB** (MakeHuman Plugin For Blender, free; its assets are CC0): create a character, add the ARKit
+  face rig and visemes, export as GLB. This is how the bundled avatar was made.
+- **MetaPerson Creator / Avaturn** (free tiers): export GLB with ARKit blend shapes. Check each service's terms for
+  your use; their free tiers are not always licensed for commercial use.
+- **VRoid Studio** makes VRM models whose mouth shapes are VRM expressions (`aa`, `ih`, `ou`, `ee`, `oh`), not
+  Oculus/ARKit names; it is not supported directly — rename the shape keys in Blender (VRM add-on) before export.
+- Make the file small: `npx @gltf-transform/cli resize in.glb a.glb --width 1024 --height 1024`, then `webp`, then
+  `meshopt` (the bundled avatar went from 36.8 MB to 3.15 MB).
+
+### Tuning (`options.tuning` / `DEFAULT_TUNING` in `web/js/avatar/lipsync.js`)
+
+| Setting | Default | Effect |
+|---|---|---|
+| `floorDb` | −52 | noise gate: below this the mouth is closed |
+| `fullDb`, `headroomDb`, `rangeDb`, `curve` | −26, 3, 20, 1.6 | how loudness opens the mouth (adapts to the voice's peak) |
+| `attackMs` / `releaseMs` | 50 / 100 | open fast, close slower |
+| `maxWeight`, `caps`, `maxTotal` | 0.85, `{viseme_aa: 0.75}`, 1.1 | keep the mouth from opening too wide |
+| `jawFromOpen` | 0.25 | extra ARKit `jawOpen` with loudness |
+| `options.delayMs` | 0 | −150…150: + delays the sound, − delays the lips |
+| `options.meshVisemeScale` | `{tongue: 0.3}` | damp visemes on matching meshes (tongue poking out) |
+| `options.lifeIntensity` | 1 | 0 = still, >1 = livelier idle motion |
+| `options.maxPixelRatio` | 2 | lower it on weak phones |
+
+**Tests:** `node --test "tests/avatar/*.test.mjs"` (viseme mapping, smoothing, chunk scheduling, WAV/PCM, noise, life).
+
+### Licenses (everything the avatar ships)
+
+| Item | Where | License |
+|---|---|---|
+| three.js 0.170.0 (core, GLTFLoader, BufferGeometryUtils) | `web/vendor/three/` | MIT (`web/vendor/three/LICENSE`) |
+| meshoptimizer decoder (part of three.js) | `web/vendor/three/addons/libs/` | MIT |
+| TalkingHead `lipsync-en.mjs` (Mika Suominen) | `web/vendor/talkinghead/` | MIT (`web/vendor/talkinghead/LICENSE`) |
+| Avatar `mpfb.glb` (TalkingHead repo, made with MPFB) | `web/assets/avatars/` | CC0 (`web/assets/avatars/LICENSE.md`) |
+| Demo voice `sample.wav` | `web/assets/avatar-demo/` | generated by this project's own TTS |
+| gltf-transform, sharp (only used once to shrink the GLB, not shipped) | — | MIT, Apache-2.0 |
+
+Not used, on purpose: TalkingHead's other sample avatars (non-commercial licenses) and HeadAudio's trained model
+(no stated license). No paid service or API key is involved in the avatar.
+
+### Known limits
+
+- Audio-only lip sync is a heuristic (no phoneme recognition): vowels and fricatives are distinguished, but
+  `DD`/`kk`/`RR` only appear in timestamp mode. The browser fallback voice gets exact word timings.
+- Measured in Chrome: lips trail the heard sound by ~20 ms, Stop reaches rest in ~130 ms, ~1 ms CPU per frame.
+  Firefox and Safari (including iOS) use the same standard APIs but were not tested here.
+
+## 8. Troubleshooting
 
 - **The model does not use tools / errors about tools.** `LLM_MODEL` must support tool
   calling. Check the model page on OpenRouter for "tools", or try `openai/gpt-4o-mini`.

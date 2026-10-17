@@ -108,8 +108,8 @@ Use `while_loops` (or your Test B id), open **Classroom**, and click **Start cla
 ## Test D: command line (optional, no website)
 
 ```bash
-python script_parser.py tests/sample_script.md        # OK, 18 segments
-python script_parser.py tests/bad_script.md           # 22 errors
+python script_parser.py tests/sample_script.md        # OK, 23 segments
+python script_parser.py tests/bad_script.md           # 25 errors
 python script_parser.py tests/notebook_script.md      # OK: hand-written script that uses the notebook
 python main.py status  --lecture while_loops           # status + estimated_min
 python main.py session --lecture while_loops --force   # text-mode class in the terminal

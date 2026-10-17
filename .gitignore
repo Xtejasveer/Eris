@@ -12,3 +12,14 @@ data/*
 !data/example/
 data/example/*
 !data/example/persona.md
+
+# Frontend (web/ is plain HTML/CSS/JS with no build step; these cover tooling added later)
+node_modules/
+web/dist/
+npm-debug.log*
+
+# Editors, logs and local tool settings
+.vscode/
+.idea/
+*.log
+.claude/settings.local.json

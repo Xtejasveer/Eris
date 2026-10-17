@@ -7,7 +7,8 @@ The doubt agent reads it (read_board tool) and its answers are checked against i
 
 def new_board():
     return {"section": "Introduction", "files": {}, "notebook": [], "pages": [["Lecture", []]],
-            "slides_shown": [], "current_slide": None, "has_run": False, "last_output": ""}
+            "slides_shown": [], "current_slide": None, "has_run": False, "last_output": "", "latest_file": None,
+            "visuals": {}, "latest_visual": None}
 
 
 def _page_lines(board, section):
@@ -27,8 +28,12 @@ def add_segments(board, segments):
             board["section"] = args["title"]
         elif name == "WRITE_CODE":
             board["files"][args["file"]] = args["code"]
+            board["latest_file"] = args["file"]
+        elif name == "OPEN_FILE":
+            board["latest_file"] = args["file"]
         elif name == "RUN":
             board["has_run"] = True
+            board["latest_file"] = args["cmd"].split(" ", 1)[-1]
             board["last_output"] = seg.get("expected_output", "")
         elif name == "SLIDE":
             board["current_slide"] = args["n"]
@@ -37,6 +42,17 @@ def add_segments(board, segments):
             board["pages"].append([args["title"], []])
             board["notebook"].append(args["title"])
             _page_lines(board, board["section"]).append("## " + args["title"])
+        elif name == "VISUAL":
+            board["visuals"][args["id"]] = {"title": args["title"], "brief": args.get("brief", ""),
+                                            "controls": args.get("controls", []), "values": {}, "presses": {}}
+            board["latest_visual"] = args["id"]
+        elif name in ("VISUAL_SET", "OPEN_VISUAL") and args["id"] in board.get("visuals", {}):
+            board["latest_visual"] = args["id"]
+            visual = board["visuals"][args["id"]]
+            if name == "VISUAL_SET" and "value" in args:
+                visual["values"][args["control"]] = args["value"]
+            elif name == "VISUAL_SET":
+                visual["presses"][args["control"]] = visual["presses"].get(args["control"], 0) + 1
         elif name in ("NOTE", "WRITE", "NOTE_TITLE"):
             lines = args["text"].splitlines()
             board["notebook"].extend(lines)
@@ -61,16 +77,37 @@ def describe(board, slides=None):
             parts.extend(f"  {ln}" for ln in lines if ln.strip())
     parts.append("\n# CODE ON THE BOARD (use [OPEN_FILE file=\"...\"] then [HIGHLIGHT ...] to show it again)")
     for name, code in board["files"].items():
-        parts.append(f"\n## {name}")
+        latest = "  <- the most recent program: \"this code\" / \"run it\" means this one" if name == board.get("latest_file") else ""
+        parts.append(f"\n## {name}{latest}")
         parts.extend(f"  {n:>3} | {ln}" for n, ln in enumerate(code.splitlines(), start=1))
     if not board["files"]:
         parts.append("  nothing yet")
-    parts.append("\n# SLIDES SHOWN (use [SLIDE n=...] to show one again)")
-    for section, n in board["slides_shown"]:
-        text = " / ".join(str(slides.get(n, "")).splitlines()[:4])
-        parts.append(f"  slide {n} (in '{section}'): {text}")
-    if not board["slides_shown"]:
+    parts.append("\n# INTERACTIVE VISUALS (move a control with [VISUAL_SET id=\"...\" control=\"...\" value=...], "
+                 "show one again with [OPEN_VISUAL id=\"...\"])")
+    from visual_controls import describe_control
+    for vid, v in board.get("visuals", {}).items():
+        latest = "  <- the most recent visual" if vid == board.get("latest_visual") else ""
+        parts.append(f"\n## {vid}: {v['title']}{latest}\n  shows: {v['brief'][:300]}")
+        for c in v["controls"]:
+            now = v["values"].get(c["name"])
+            pressed = v["presses"].get(c["name"])
+            extra = f" (now {now})" if now is not None else f" (pressed {pressed}x)" if pressed else ""
+            parts.append(f"  control {describe_control(c)}{extra}")
+    if not board.get("visuals"):
         parts.append("  none yet")
+    shown = {}
+    for section, n in board["slides_shown"]:
+        shown.setdefault(n, section)
+    parts.append("\n# THE TEACHER'S SLIDES (show ANY of them with [SLIDE n=...], e.g. when a student asks to see the slides)")
+    for n in sorted(slides, key=lambda k: int(k)):
+        lines = [ln.strip() for ln in str(slides[n]).splitlines() if ln.strip()]
+        title = lines[0] if lines else ""
+        rest = " / ".join(lines[1:4])
+        seen = f"  (shown in '{shown[n]}')" if n in shown else ""
+        current = "  <- on screen now" if n == board.get("current_slide") else ""
+        parts.append(f"  slide {n}: {title}{' - ' + rest if rest else ''}{seen}{current}")
+    if not slides:
+        parts.append("  this lecture has no slides")
     parts.append(f"\nCurrent section: {board['section']} | Last program output: "
                  f"{board['last_output'].strip()[:200] or 'none'}")
     return "\n".join(parts)

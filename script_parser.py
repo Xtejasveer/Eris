@@ -10,6 +10,7 @@ import sys
 import textwrap
 
 import config
+from visual_controls import VISUAL_ID_RE, coerce_value, parse_controls
 
 # Marker name -> required args.
 MARKERS = {
@@ -30,10 +31,19 @@ MARKERS = {
     "OPEN_FILE": ["file"],   # bring an earlier program back into the editor
     "NEW_PAGE": ["title"],   # start a fresh notebook page with this heading
     "DOUBT_CHECK": [],
+    # Interactive visuals (built by a model from the description; see visual_builder.py):
+    "VISUAL": ["id", "title"],          # body: what to show, then a "controls: ..." line
+    "VISUAL_SET": ["id", "control"],    # move a control (value=...; a button needs none)
+    "OPEN_VISUAL": ["id"],              # bring an earlier visual back on screen
 }
 INT_ARGS = ("n", "s")
+# Level 2 sync: these actions may run while the narration right after them is spoken
+# (while_speaking=true). RUN, READ_OUTPUT, PAUSE, DOUBT_CHECK and SECTION must happen in order.
+WHILE_SPEAKING_OK = {"WRITE_CODE", "NOTE", "NOTE_TITLE", "WRITE", "NOTE_HIGHLIGHT", "HIGHLIGHT",
+                     "SLIDE", "SLIDE_HIGHLIGHT", "NEW_PAGE", "OPEN_FILE", "LOOK_BACK",
+                     "VISUAL", "VISUAL_SET", "OPEN_VISUAL"}
 # Markers with a body that runs until [/NAME]. The body is stored in this arg.
-BLOCK_MARKERS = {"WRITE_CODE": "code", "NOTE": "text"}
+BLOCK_MARKERS = {"WRITE_CODE": "code", "NOTE": "text", "VISUAL": "brief"}
 
 NAME_RE = re.compile(r"^/?[A-Z][A-Z_]*$")
 # key=value, key="value with spaces", or key='value with "double quotes"' (code often has them)
@@ -42,6 +52,19 @@ ARG_RE = re.compile(r"""(\w+)=("((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|\S+)""")
 UNESCAPE_RE = re.compile(r"\\(.)")
 LINES_RE = re.compile(r"^(\d+)(?:-(\d+))?$")
 RUN_RE = re.compile(r"^python (\S+\.py)$")
+# Markdown that models put in narration; it would be read out or shown as symbols.
+BULLET_RE = re.compile(r"^(?:[-*•]|#{1,6})\s+")
+EMPHASIS_RE = re.compile(r"\*\*(.+?)\*\*|(?<![\w*])\*(?!\s)([^*]+?)(?<!\s)\*(?![\w*])")
+CODE_SPAN_RE = re.compile(r"(`[^`]*`)")
+
+
+def clean_narration(line):
+    """One narration line without markdown: no bullets or headings, no **bold** or *italic* marks.
+    Backticks stay (the class screen shows them as code; TTS drops them)."""
+    line = BULLET_RE.sub("", line.strip())
+    parts = CODE_SPAN_RE.split(line)  # never touch code inside backticks, e.g. `**kwargs`
+    return "".join(p if p.startswith("`") else EMPHASIS_RE.sub(lambda m: m.group(1) or m.group(2), p)
+                   for p in parts)
 
 
 def parse_line_marker(line):
@@ -72,6 +95,19 @@ def _check_marker(name, args, line_no, state, errors):
     """Validate one marker against the current state. Appends to `errors`."""
     def err(msg):
         errors.append(f"line {line_no}: [{name}] {msg}")
+
+    if "while_speaking" in args:
+        value = str(args["while_speaking"]).lower()
+        if name not in WHILE_SPEAKING_OK:
+            err("while_speaking is not allowed here; it must happen in silence and in order")
+            return False
+        if value not in ("true", "false"):
+            err(f"while_speaking must be true or false, got '{args['while_speaking']}'")
+            return False
+        if value == "true":
+            args["while_speaking"] = True
+        else:
+            del args["while_speaking"]
 
     for key in MARKERS[name]:
         if not str(args.get(key, "")).strip():
@@ -119,6 +155,36 @@ def _check_marker(name, args, line_no, state, errors):
         if not any(args["text"].lower() in line.lower() for line in state["notebook"]):
             err(f"text '{args['text']}' is not written in the notebook yet; quote words from an earlier [NOTE]")
             return False
+
+    if name == "VISUAL":
+        if not VISUAL_ID_RE.match(args["id"]):
+            err(f"id must be short lowercase letters, digits or dashes (like id=\"list-growth\"), got '{args['id']}'")
+            return False
+        if args["id"] in state["visuals"]:
+            err(f"a visual with id '{args['id']}' is already on the board; use a new id, or drive it with [VISUAL_SET]")
+            return False
+
+    if name in ("VISUAL_SET", "OPEN_VISUAL"):
+        controls = state["visuals"].get(args["id"])
+        if controls is None:
+            known = ", ".join(state["visuals"]) or "none yet"
+            err(f"visual '{args['id']}' is not on the board (visuals: {known}); create it with a [VISUAL] block first")
+            return False
+        if name == "VISUAL_SET":
+            control = next((c for c in controls if c["name"] == str(args["control"]).lower()), None)
+            if control is None:
+                err(f"visual '{args['id']}' has no control '{args['control']}'; its controls are "
+                    f"{', '.join(c['name'] for c in controls) or 'none'}")
+                return False
+            value, problem = coerce_value(control, args.get("value"))
+            if problem:
+                err(problem)
+                return False
+            args["control"] = control["name"]
+            if control["type"] == "button":
+                args.pop("value", None)
+            else:
+                args["value"] = value
 
     if name == "OPEN_FILE" and args["file"] not in state["files"]:
         err(f"file '{args['file']}' is not on the board")
@@ -193,6 +259,13 @@ def _close_block(block, line_no, state, segments, errors):
         code = "\n".join(block["lines"]).strip("\n")
         args["code"] = code
         state["files"][args["file"]] = code.splitlines()
+    elif block["name"] == "VISUAL":
+        brief, controls, problems = parse_controls(textwrap.dedent("\n".join(block["lines"])))
+        if problems:
+            errors.extend(f"line {block['start']}: [VISUAL] {p}" for p in problems)
+            return
+        args["brief"], args["controls"] = brief, controls
+        state["visuals"][args["id"]] = controls
     else:
         # Keep relative indentation (a syntax shape needs it); drop the block's common indent.
         lines = [ln.rstrip() for ln in textwrap.dedent("\n".join(block["lines"])).splitlines()]
@@ -211,14 +284,16 @@ def parse_script(text, slide_count=None, require_doubt_check=True, board=None):
     slide_count: number of slides in the deck; if given, SLIDE n is range-checked.
     require_doubt_check: lecture scripts must contain and end with [DOUBT_CHECK].
     board: what is already on the class screen (a doubt answer mid-lecture), as
-      {"files": {name: code}, "notebook": [line, ...], "has_run": bool}. Quotes are checked against it.
+      {"files": {name: code}, "notebook": [line, ...], "has_run": bool, "visuals": {id: {"controls": [...]}}}.
+      Quotes, files and visual controls are checked against it.
     """
     segments, errors = [], []
     board = board or {}
     # files: name -> its code lines; notebook: every line written in the notebook so far
     state = {"files": {n: c.splitlines() for n, c in board.get("files", {}).items()},
              "has_run": bool(board.get("has_run")), "slide_count": slide_count,
-             "notebook": list(board.get("notebook", []))}
+             "notebook": list(board.get("notebook", [])),
+             "visuals": {v: d["controls"] for v, d in board.get("visuals", {}).items()}}
     say_lines = []
     block = None  # dict while inside a WRITE_CODE or NOTE body
 
@@ -239,8 +314,8 @@ def parse_script(text, slide_count=None, require_doubt_check=True, board=None):
 
         marker = parse_line_marker(line)
         if marker is None:
-            if line.strip():
-                say_lines.append(line.strip())
+            if line.strip() and clean_narration(line):
+                say_lines.append(clean_narration(line))
             else:
                 end_say()
             continue
@@ -256,7 +331,7 @@ def parse_script(text, slide_count=None, require_doubt_check=True, board=None):
             errors.append(f"line {line_no}: unknown marker [{name}]")
             continue
         valid = _check_marker(name, args, line_no, state, errors)
-        segment = {"kind": "action", "name": name, "args": args}
+        segment = {"kind": "action", "name": name, "args": args, "_line": line_no}
         if name in BLOCK_MARKERS:
             # Collect the body even when invalid, so it isn't read as narration.
             block = {"name": name, "lines": [], "segment": segment, "start": line_no, "valid": valid}
@@ -266,6 +341,14 @@ def parse_script(text, slide_count=None, require_doubt_check=True, board=None):
     end_say()
     if block is not None:
         errors.append(f"line {block['start']}: [{block['name']}] never closed with [/{block['name']}]")
+
+    for i, seg in enumerate(segments):
+        line_no = seg.pop("_line", None)
+        if seg.get("args", {}).get("while_speaking"):
+            after = segments[i + 1] if i + 1 < len(segments) else None
+            if not after or after["kind"] != "say":
+                errors.append(f"line {line_no}: [{seg['name']}] while_speaking needs narration right after it")
+    segments = split_spoken_while_writing(segments)
 
     if not require_doubt_check:  # e.g. a short doubt answer, not a whole lecture
         return segments, errors
@@ -277,12 +360,36 @@ def parse_script(text, slide_count=None, require_doubt_check=True, board=None):
     return segments, errors
 
 
+SPOKEN_WHILE_WRITING_MIN_WORDS = 6  # a shorter first sentence takes the next one along
+
+
+def split_spoken_while_writing(segments):
+    """After a while_speaking note or program, only the first sentence (what is being written) is spoken
+    while it is written; the explanation after it becomes its own segment, spoken once the writing is done.
+    Without this, every narration line up to the next blank line would play over the writing."""
+    out = []
+    for i, seg in enumerate(segments):
+        prev = segments[i - 1] if i else None
+        if seg["kind"] == "say" and prev and prev.get("args", {}).get("while_speaking"):
+            sentences = re.split(r"(?<=[.!?])\s+", seg["text"].strip())
+            take = 1
+            while take < len(sentences) and len(" ".join(sentences[:take]).split()) < SPOKEN_WHILE_WRITING_MIN_WORDS:
+                take += 1
+            if take < len(sentences):
+                out.append({"kind": "say", "text": " ".join(sentences[:take])})
+                out.append({"kind": "say", "text": " ".join(sentences[take:])})
+                continue
+        out.append(seg)
+    return out
+
+
 def estimate_minutes(segments):
     words = sum(len(s["text"].split()) for s in segments if s["kind"] == "say")
     runs = sum(1 for s in segments if s.get("name") == "RUN")
     pause_s = sum(s["args"]["s"] for s in segments if s.get("name") == "PAUSE")
+    # Notes written while_speaking overlap the narration, so they add no time.
     note_chars = sum(len(s["args"]["text"]) for s in segments
-                     if s.get("name") in ("NOTE", "NOTE_TITLE", "WRITE"))
+                     if s.get("name") in ("NOTE", "NOTE_TITLE", "WRITE") and not s["args"].get("while_speaking"))
     write_min = note_chars / config.NOTE_CHARS_PER_S / 60
     return round(words / config.SPEAKING_WPM + runs * config.RUN_MIN_EACH + pause_s / 60 + write_min, 1)
 

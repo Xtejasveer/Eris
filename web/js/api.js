@@ -44,8 +44,12 @@ export const api = {
   run: (lid, file, code) => request("POST", `/api/lectures/${id(lid)}/run`, { file, code }),
   recovery: (lid, segment, error, stateText) =>
     request("POST", `/api/lectures/${id(lid)}/recovery`, { segment, error, state_text: stateText }),
-  doubtStart: (lid, context, section, final, cursor) =>
-    request("POST", `/api/lectures/${id(lid)}/doubts/start`, { context, section, final, cursor }),
+  // question: a student's question the player already collected (then the agent answers it right away).
+  doubtStart: (lid, context, section, final, cursor, question = "") =>
+    request("POST", `/api/lectures/${id(lid)}/doubts/start`, { context, section, final, cursor, question }),
+  // One student question on the class's single agent conversation (threadId from the previous answer, or null).
+  doubtAsk: (lid, { question, context, section, final, cursor, threadId, visuals = "" }) =>
+    request("POST", `/api/lectures/${id(lid)}/doubts/ask`, { question, context, section, final, cursor, thread_id: threadId, visuals }),
   doubtReply: (lid, threadId, answer) =>
     request("POST", `/api/lectures/${id(lid)}/doubts/reply`, { thread_id: threadId, answer }),
 };

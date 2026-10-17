@@ -59,7 +59,7 @@ export function setLectureStatus(id, status) {
 }
 
 export async function newLecture() {
-  const input = h("input", { class: "input mono", placeholder: "py_while_loops_oct", autocomplete: "off", spellcheck: "false" });
+  const input = h("input", { class: "input mono", placeholder: "intro_topic_week1", autocomplete: "off", spellcheck: "false" });
   const hint = h("small", {}, "3–63 characters: letters, digits, _ or -. It names the folder in data/.");
   input.addEventListener("keydown", (e) => { if (e.key === "Enter") e.target.closest(".modal").querySelector(".btn.primary").click(); });
   const id = await modal({

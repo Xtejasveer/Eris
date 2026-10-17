@@ -6,7 +6,7 @@ Today we will learn list comprehensions, a short way to build lists.
 [SLIDE n=1]
 [SECTION title="Basic syntax"]
 [NOTE_TITLE text="List comprehension"]
-[NOTE]
+[NOTE while_speaking=true]
 Shape: [expression for item in iterable]
 Example: runs = 10, 25, 4
 Doubled: 20, 50, 8

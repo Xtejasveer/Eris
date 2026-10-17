@@ -4,14 +4,42 @@
 
 import { api } from "./api.js";
 import { sleep } from "./ui.js";
+import { NOTE_MS, CODE_MS } from "./stage.js";
 
 export class Stopped extends Error {}
 
+// Level 2 sync: a while_speaking action runs during the narration right after it.
+const isPair = (seg, next) => seg.kind === "action" && !!seg.args?.while_speaking && next?.kind === "say";
+
 const NO_DOUBT_WORDS = new Set(["", "no", "none", "no doubts", "nope", "n"]);  // as in doubt_agent.py
+const BREATH_MS = 300;          // a short breath after each spoken line, before the next step
+const SECTION_BREATH_MS = 700;  // a longer one when a new part of the lesson starts
+const DOUBT_WAIT_S = 10;    // how long the class has to start asking before the lesson goes on
+const ANSWER_WAIT_S = 25;   // when the teacher asked the student something back, they get longer to reply
+const BREAK_MAX_QUESTIONS = 4;   // a mid-lecture break takes at most this many questions…
+const BREAK_BUDGET_S = 150;      // …or this much time; then the rest waits for the end of the class
+const FINAL_MAX_QUESTIONS = 8;
+const FIRST_PROMPT = "Any doubts so far? You can type or say your question.";
+const FINAL_PROMPT = "Any last questions before we finish?";
+const FINAL_DEFERRED_PROMPT = "As promised, let's take your remaining questions now. What would you like to ask?";
+const MORE_PROMPT = "Any other doubts?";
+const CLOSING_LINE = "Alright, let's move on.";
+const DEFER_LINE = "We're running short on time, so let's carry on. Keep your other questions; we'll take them all at the end of the class.";
+const LIMIT_LINE = "That's all the time we have for questions today.";
+// The answer ended by asking the student something specific (not "Clear so far?"): let them answer it.
+const CHECK_IN_RE = /\b(clear|make sense|got it|any (other )?doubts?|questions?|okay|right|ready|follow)\b[^?]*\?\s*$/i;
+const asksStudent = (text) => {
+  const last = (text || "").trim().split(/(?<=[.!?])\s+/).slice(-2);
+  return last.some(sentence => /\?\s*$/.test(sentence) && !CHECK_IN_RE.test(sentence))
+    || /\b(please (specify|tell me|share|paste|type)|let me know which|tell me which)\b/i.test(last.join(" "));
+};
+const FINAL_CLOSING_LINE = "Thank you for your questions. See you in the next class.";
 
 export class Player {
   constructor({ lectureId, segments, teacher, stage, voice, ui }) {
     Object.assign(this, { lectureId, segments, teacher, stage, voice, ui });
+    this.doubtThread = null;     // ONE doubt-agent conversation for the whole class: it remembers every answer
+    this.deferredDoubts = false; // a break ran out of time: the final break opens with "as promised…"
     this.paused = false;
     this.stopped = false;
     this.cursor = 0;
@@ -47,7 +75,8 @@ export class Player {
       `Code on the board: ${Object.keys(b.files).join(", ") || "nothing"}\n` +
       `Current slide: ${b.currentSlide || "none"}\n` +
       `Last program output: ${b.lastOutput.trim().slice(0, 300) || "none"}\n` +
-      `Notebook (latest lines):\n${b.notebook.slice(-12).join("\n") || "empty"}\n\n` +
+      `Notebook (latest lines):\n${b.notebook.slice(-12).join("\n") || "empty"}\n` +
+      `Visuals on screen:\n${this.stage.visualStates() || "none"}\n\n` +
       `What was taught in this section (narration and code):\n` + s.sectionText.join("\n").slice(0, 3000);
   }
 
@@ -67,11 +96,15 @@ export class Player {
         case "NOTE_TITLE": this.board.notebook.push("## " + a.text); await this.stage.noteTitle(a.text); break;
         case "NOTE_HIGHLIGHT": this.stage.noteHighlight(a.text); break;
         case "NEW_PAGE": this.board.notebook.push(a.title); await this.stage.newPage(a.title); break;
+        case "VISUAL": if (a.key) await this.stage.showVisual(a.id, this.visualUrl(a.key), a.title); break;
+        case "VISUAL_SET": await this.stage.setVisual(a.id, a.control, a.value, { instant: true }); break;
       }
     }
     this.cursor = upTo;
     this.ui.onSection?.(this.state.section);
   }
+
+  visualUrl(key) { return `/api/lectures/${encodeURIComponent(this.lectureId)}/visuals/${encodeURIComponent(key)}`; }
 
   async play(from = 0) {
     this.stopped = false;
@@ -81,8 +114,10 @@ export class Player {
       this.ui.onProgress?.(i, this.segments.length);
       await this.gate();
       const seg = this.segments[i];
+      const next = this.segments[i + 1];
+      const pair = isPair(seg, next);
       try {
-        await this.playSegment(seg, i);
+        await this.playSegment(seg, i, pair ? next : null);
         this.log(i, seg, "done");
       } catch (e) {
         if (e instanceof Stopped) { this.log(i, seg, "stopped"); throw e; }
@@ -90,6 +125,7 @@ export class Player {
         this.log(i, seg, "failed", e.message);
         console.warn(`[class] segment ${i + 1} failed:`, e);
       }
+      if (pair) { this.log(i + 1, next, "done"); i += 1; }  // its narration played together with it
     }
     this.cursor = this.segments.length;
     this.ui.onProgress?.(this.segments.length, this.segments.length);
@@ -108,10 +144,11 @@ export class Player {
     this.ui.onCaption?.(text);
     if (index != null) this.voice.prefetch(this.nextSay(index));
     await this.voice.speak(text);
-    await this.gate();
+    await this.tick(BREATH_MS);  // tick also honours pause and stop
   }
 
-  async playSegment(seg, index) {
+  // withSay: the narration to speak while this action runs (a while_speaking pair).
+  async playSegment(seg, index, withSay = null) {
     if (seg.kind === "say") {
       this.state.sectionText.push(seg.text);
       return this.say(seg.text, index);
@@ -120,13 +157,15 @@ export class Player {
     if (seg.name === "SECTION") {
       this.state.section = a.title; this.state.covered.push(a.title); this.state.sectionText = [];
       this.ui.onSection?.(a.title);
+      await this.tick(SECTION_BREATH_MS);
       return;
     }
     if (seg.name === "DOUBT_CHECK") return this.doubtCheck(index === this.segments.length - 1);
     if (seg.name === "WRITE_CODE") this.state.sectionText.push(`Code in ${a.file}:\n${a.code}`);
     if (["NOTE", "NOTE_TITLE", "WRITE"].includes(seg.name)) this.state.sectionText.push(`Notebook:\n${a.text}`);
-    const error = await this.action(seg);
-    if (error) {
+    if (seg.name === "VISUAL") this.state.sectionText.push(`Visual "${a.title}" (${a.id}): ${a.brief}`);
+    const error = withSay ? await this.pair(seg, withSay, index) : await this.action(seg);
+    if (error) {  // for a pair, the recovery line comes after the sentence has ended
       this.stage.classLine(error);
       let line = "Let's keep going.";
       try { line = (await api.recovery(this.lectureId, seg, error, this.snapshot())).line || line; } catch {}
@@ -135,14 +174,40 @@ export class Player {
     }
   }
 
+  // Speak the sentence and run the action at the same time; continue when both are done.
+  // The writing is paced to fill about 80% of the sentence. Returns the action's error ("" if fine).
+  async pair(seg, saySeg, index = null) {
+    this.state.sectionText.push(saySeg.text);
+    const seconds = await this.voice.duration(saySeg.text);
+    const [, error] = await Promise.all([
+      this.say(saySeg.text, index == null ? null : index + 1),
+      this.action(seg, seconds * 0.8),
+    ]);
+    return error;
+  }
+
+  pacedCtl(seg, paceS) {
+    const a = seg.args || {};
+    const text = a.code ?? a.text ?? a.title ?? "";
+    const code = seg.name === "WRITE_CODE";
+    const chars = text.replace(/\s/g, "").length || 1;  // spaces are written without a pause
+    const lineMs = code ? 20 : 0;
+    const budget = paceS * 1000 - text.split("\n").length * lineMs;
+    // Never slower than normal writing, never so fast it looks like a paste.
+    const charMs = Math.max(8, Math.min(code ? CODE_MS : NOTE_MS, budget / chars));
+    return { tick: this.ctl.tick, charMs, lineMs };
+  }
+
   // Runs one action on the stage. Returns an error string, or "" when it worked.
-  async action(seg) {
+  // paceS: seconds the writing should take (while_speaking); otherwise the normal speed.
+  async action(seg, paceS = null) {
     const a = seg.args || {}, b = this.board, st = this.stage;
+    const ctl = paceS ? this.pacedCtl(seg, paceS) : this.ctl;
     switch (seg.name) {
       case "NOTE_TITLE":
-        b.notebook.push("## " + a.text); await st.noteTitle(a.text, this.ctl); return "";
+        b.notebook.push("## " + a.text); await st.noteTitle(a.text, ctl); return "";
       case "NOTE": case "WRITE":
-        b.notebook.push(...a.text.split("\n")); await st.note(a.text, this.ctl); return "";
+        b.notebook.push(...a.text.split("\n")); await st.note(a.text, ctl); return "";
       case "NOTE_HIGHLIGHT":
         if (!b.notebook.some(l => l.toLowerCase().includes(a.text.toLowerCase()))) return `'${a.text}' is not in the notebook`;
         st.noteHighlight(a.text); await this.tick(500); return "";
@@ -150,7 +215,7 @@ export class Player {
         if (!b.notebook.some(l => l.toLowerCase().includes(a.text.toLowerCase()))) return `'${a.text}' is not in the notebook`;
         st.lookBack(a.text); await this.tick(900); return "";
       case "NEW_PAGE":
-        b.notebook.push(a.title); await st.newPage(a.title, this.ctl); return "";
+        b.notebook.push(a.title); await st.newPage(a.title, ctl); return "";
       case "OPEN_FILE":
         if (!(a.file in b.files)) return `${a.file} is not on the board`;
         st.openFile(a.file); await this.tick(500); return "";
@@ -160,7 +225,7 @@ export class Player {
       case "SLIDE_HIGHLIGHT":
         st.slideHighlight(a.text); await this.tick(400); return "";
       case "WRITE_CODE":
-        b.files[a.file] = a.code; await st.writeCode(a.file, a.code, this.ctl); return "";
+        b.files[a.file] = a.code; await st.writeCode(a.file, a.code, ctl); return "";
       case "HIGHLIGHT":
         if (!(a.file in b.files)) return `${a.file} is not on the board`;
         st.highlight(a.file, a.lines); await this.tick(500); return "";
@@ -186,6 +251,17 @@ export class Player {
         return "";
       case "PAUSE":
         await this.tick(a.s * 1000); return "";
+      case "VISUAL":
+        if (!a.key) return `visual ${a.id} was not built`;
+        return await st.showVisual(a.id, this.visualUrl(a.key), a.title);
+      case "VISUAL_SET": {
+        const err = await st.setVisual(a.id, a.control, a.value);
+        await this.tick(250);  // let the class see the change before the teacher talks about it
+        return err;
+      }
+      case "OPEN_VISUAL":
+        if (!st.openVisual(a.id)) return `visual ${a.id} is not on the board`;
+        await this.tick(400); return "";
       default:
         return `no action for [${seg.name}]`;
     }
@@ -194,72 +270,73 @@ export class Player {
   // Answers and closing lines from the doubt agent can write notes and code too. They are not approved,
   // so a failing step is shown and skipped without a recovery line.
   async playAnswer(segments) {
-    for (const seg of segments) {
+    for (let j = 0; j < segments.length; j++) {
+      const seg = segments[j];
       await this.gate();
       if (seg.kind === "say") { await this.say(seg.text); continue; }
-      const err = await this.action(seg);
+      const pair = isPair(seg, segments[j + 1]);
+      const err = pair ? await this.pair(seg, segments[j + 1]) : await this.action(seg);
       if (err) this.stage.classLine(err);
+      if (pair) j += 1;
     }
   }
 
+  // A question break. The player asks the class itself and waits DOUBT_WAIT_S seconds, so the class always
+  // gets its chance, whatever the model does. The doubt agent is only called when a student asks something,
+  // always on the class's one conversation. A mid-lecture break ends after BREAK_MAX_QUESTIONS or
+  // BREAK_BUDGET_S, but never in the middle of an exchange: if the teacher just asked the student something
+  // back ("which code?"), the student may answer first. Questions that didn't fit move to the final break.
   async doubtCheck(final) {
     const ui = this.ui;
     const chk = ui.openCheckpoint(this.state.section, final);
     const view = this.stage.view();  // answers may turn pages or open files; come back afterwards
     const close = () => { chk.close(); this.stage.restoreView(view); };
-    let turn;
-    try {
-      chk.thinking(true);
-      turn = await api.doubtStart(this.lectureId, this.snapshot(), this.state.section, final, this.cursor);
-      chk.setLimit(turn.max);
-    } catch (e) {
-      chk.note(`The doubt agent is unavailable (${e.message}). Moving on.`);
-      close();
-      return;
-    } finally { chk.thinking(false); }
-    const threadId = turn.thread_id;
-    let rounds = 0, askedHere = 0, declined = 0;  // declined: replies of "no doubts" in a row
+    const started = performance.now();
+    const maxQuestions = final ? FINAL_MAX_QUESTIONS : BREAK_MAX_QUESTIONS;
+    let asked = 0, followUp = false;  // followUp: the student is answering the teacher's question back
+    let prompt = final ? (this.deferredDoubts ? FINAL_DEFERRED_PROMPT : FINAL_PROMPT) : FIRST_PROMPT;
+    let closing = final ? FINAL_CLOSING_LINE : CLOSING_LINE;
     try {
       while (true) {
-        if (turn.reply_text || turn.reply_segments?.length) {
-          chk.teacher(turn.reply_text || turn.reply, { passed: turn.passed });
-          await this.playAnswer(turn.reply_segments || []);
-        }
-        if (turn.done || rounds > (turn.max || 3) + 3) {
-          if (turn.final_text) { chk.teacher(turn.final_text); await this.playAnswer(turn.final_segments || []); }
+        const outOfTime = !final && (performance.now() - started) / 1000 > BREAK_BUDGET_S;
+        if (!followUp && (asked >= maxQuestions || outOfTime)) {
+          if (final) closing = LIMIT_LINE;
+          else { closing = DEFER_LINE; this.deferredDoubts = true; }
           break;
         }
-        if (declined === 1) {
-          // The class said no doubts but the model asked again: tell it once more, without asking the class.
-          declined = 2;
-          chk.thinking(true);
-          try { turn = await api.doubtReply(this.lectureId, threadId, "no doubts"); }
-          finally { chk.thinking(false); }
-          continue;
-        }
-        if (declined > 1) {
-          const line = "Alright, let's move on.";
-          chk.teacher(line); await this.say(line);
-          break;
-        }
-        rounds += 1;
-        if (turn.prompt && turn.prompt !== turn.reply) { chk.teacher(turn.prompt, { prompt: true }); await this.say(turn.prompt); }
-        const answer = await chk.ask();
+        if (prompt) { chk.teacher(prompt, { prompt: true }); await this.say(prompt); }
+        const question = (await chk.ask(followUp ? ANSWER_WAIT_S : DOUBT_WAIT_S)).trim();
         await this.gate();
-        if (answer) chk.student(answer);
-        declined = NO_DOUBT_WORDS.has(answer.toLowerCase()) ? 1 : 0;
+        if (NO_DOUBT_WORDS.has(question.toLowerCase())) break;  // nobody asked in time, or "no questions"
+        chk.student(question);
         chk.thinking(true);
-        try { turn = await api.doubtReply(this.lectureId, threadId, answer); }
-        finally { chk.thinking(false); }
-        this.state.doubtsAsked += (turn.asked || 0) - askedHere;
-        askedHere = turn.asked || 0;
+        let turn;
+        try {
+          turn = await api.doubtAsk(this.lectureId, {
+            question, context: this.snapshot(), section: this.state.section, final, cursor: this.cursor,
+            threadId: this.doubtThread, visuals: this.stage.visualStates(),
+          });
+        } finally { chk.thinking(false); }
+        this.doubtThread = turn.thread_id || this.doubtThread;
+        if (!followUp) { asked += 1; this.state.doubtsAsked += 1; }  // a reply to the teacher isn't a new doubt
         if (turn.passed) this.state.passed += 1;
-        chk.setCount(turn.asked, turn.max);
+        chk.setCount(asked, maxQuestions);
+        const segments = turn.reply_segments?.length ? turn.reply_segments : turn.final_segments || [];
+        const text = turn.reply_text || turn.reply || turn.final_text;
+        if (text) chk.teacher(text, { passed: turn.passed });
+        await this.playAnswer(segments);
+        followUp = asksStudent(text);
+        prompt = followUp ? null : MORE_PROMPT;  // the teacher's own question is the prompt
       }
+      chk.teacher(closing);
+      await this.say(closing);
+      if (final) this.deferredDoubts = false;
     } catch (e) {
       if (e instanceof Stopped) { close(); throw e; }
       chk.note(`Something went wrong (${e.message}). Moving on.`);
     }
     close();
   }
+
+
 }

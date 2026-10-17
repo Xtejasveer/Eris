@@ -28,7 +28,7 @@ function codeBlock(file, code) {
     h("pre", {}, lines.map((l, i) => h("div", { class: "ln" }, h("span", { class: "no" }, i + 1), h("span", { html: l || " " })))));
 }
 
-export function renderScriptDoc(segments, teacher = "Teacher") {
+export function renderScriptDoc(segments, teacher = "Teacher", { lectureId = null } = {}) {
   const doc = h("article", { class: "script-doc" });
   let section = null;
   const target = () => section || doc;
@@ -88,6 +88,20 @@ export function renderScriptDoc(segments, teacher = "Teacher") {
       case "NEW_PAGE":
         target().append(h("div", { class: "doc-note title" }, h("span", { class: "doc-note-tag" }, icon("book"), "New page"), h("h4", {}, a.title)));
         break;
+      case "VISUAL": {
+        const url = lectureId && a.key ? `/api/lectures/${encodeURIComponent(lectureId)}/visuals/${encodeURIComponent(a.key)}` : null;
+        target().append(h("div", { class: "doc-run" },
+          h("div", { class: "doc-run-cmd" }, icon("sparkle"), h("strong", {}, `Visual: ${a.title}`),
+            url ? h("a", { href: url, target: "_blank", rel: "noopener" }, "Preview") : h("span", { class: "muted" }, "(built on approve)")),
+          h("pre", {}, `${a.brief || ""}\ncontrols: ${(a.controls || []).map(c => c.name + " (" + c.type + ")").join(", ")}`)));
+        break;
+      }
+      case "VISUAL_SET":
+        target().append(chip("sparkle", `Visual ${a.id}: ${a.value === undefined ? `press ${a.control}` : `set ${a.control} to ${a.value}`}`, "marker"));
+        break;
+      case "OPEN_VISUAL":
+        target().append(chip("sparkle", `Show visual ${a.id} again`));
+        break;
       case "PAUSE":
         target().append(chip("clock", `Pause ${a.s}s`));
         break;
@@ -96,6 +110,11 @@ export function renderScriptDoc(segments, teacher = "Teacher") {
         break;
       default:
         target().append(chip("info", seg.name));
+    }
+    if (a.while_speaking && seg.name !== "SECTION") {
+      const el = target().lastChild;
+      el.classList.add("ws");
+      el.append(h("span", { class: "ws-tag", title: "Runs while the next sentence is spoken" }, icon("volume"), "while speaking"));
     }
   }
   if (!segments.length) doc.append(h("p", { class: "muted" }, "Nothing to show."));

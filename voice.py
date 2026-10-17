@@ -41,23 +41,57 @@ def _stt_client():
     return _stt
 
 
+# How code inside narration is said, longest symbols first. Gnani reads "+" and "÷" itself, but
+# "<=", "==" or "my_var" come out as noise, so code spans (`...`) are turned into words first.
+CODE_WORDS = [("<=", " less than or equal to "), (">=", " greater than or equal to "), ("==", " equals "),
+              ("!=", " is not equal to "), ("+=", " plus equals "), ("-=", " minus equals "), ("**", " to the power of "),
+              ("//", " divided by "), ("->", " gives "), ("<", " less than "), (">", " greater than "),
+              ("=", " equals "), ("%", " mod "), ("_", " "), ("(", " "), (")", " "), ("[", " "), ("]", " "),
+              ("{", " "), ("}", " "), ('"', ""), ("'", ""), (":", " "), ("#", " ")]
+OPERATORS_IN_TEXT = [("<=", " less than or equal to "), (">=", " greater than or equal to "),
+                     ("==", " equals "), ("!=", " is not equal to ")]
+
+
+def _say_code(code):
+    code = re.sub(r"\b[fFrRbB](?=[\"'])", "", code)  # string prefixes: f"..." is said as "..."
+    for symbol, words in CODE_WORDS:
+        code = code.replace(symbol, words)
+    return code
+
+
 def speech_text(text):
-    """Clean narration for TTS: drop markdown backticks and extra spaces."""
+    """Narration as it should be SAID: code spans in words, operators in words, single spaces."""
+    text = re.sub(r"`([^`]*)`", lambda m: _say_code(m.group(1)), text)
+    for symbol, words in OPERATORS_IN_TEXT:
+        text = text.replace(symbol, words)
     return re.sub(r"\s+", " ", text.replace("`", "")).strip()
 
 
 def _chunks(text):
-    """Split into sentence groups of at most TTS_CHUNK_CHARS (a long sentence stays whole)."""
-    groups, current = [], ""
+    """One piece per sentence, so we can put real pauses between them. Very short sentences join the
+    next one; a sentence longer than TTS_CHUNK_CHARS is split at commas."""
+    pieces, carry = [], ""
     for sentence in re.split(r"(?<=[.!?])\s+", text):
-        if current and len(current) + len(sentence) + 1 > config.TTS_CHUNK_CHARS:
-            groups.append(current)
-            current = sentence
-        else:
-            current = (current + " " + sentence).strip()
-    if current:
-        groups.append(current)
-    return groups
+        sentence = (carry + " " + sentence).strip()
+        if len(sentence) < config.SHORT_SENTENCE_CHARS and sentence[-1:] not in "?!":
+            carry = sentence
+            continue
+        carry = ""
+        while len(sentence) > config.TTS_CHUNK_CHARS and "," in sentence[:config.TTS_CHUNK_CHARS]:
+            cut = sentence[:config.TTS_CHUNK_CHARS].rfind(",") + 1
+            pieces.append(sentence[:cut].strip())
+            sentence = sentence[cut:].strip()
+        pieces.append(sentence)
+    if carry:
+        pieces.append(carry)
+    return [p for p in pieces if p]
+
+
+def _pause_after(piece):
+    """Seconds of silence after a piece: longer after a question, none mid-sentence (after a comma split)."""
+    if piece.endswith(("?", "!")):
+        return config.QUESTION_PAUSE_S
+    return config.SENTENCE_PAUSE_S if piece.endswith((".", ":", ";")) else 0.12
 
 
 def clip_path(lecture_id, text):
@@ -97,12 +131,16 @@ def _pcm_frames(wav_bytes, path_hint):
 
 
 def synthesize(text, path):
-    """Synthesize `text` to a WAV file, joining sentence groups into one clip with a clean header."""
+    """Synthesize `text` sentence by sentence and join the pieces, with pauses, into one clip."""
     params, frames = None, []
-    for chunk in _chunks(speech_text(text)):
-        p, f = _pcm_frames(_synthesize_chunk(chunk), path)
+    pieces = _chunks(speech_text(text))
+    for n, piece in enumerate(pieces):
+        p, f = _pcm_frames(_synthesize_chunk(piece), path)
         params = params or p
         frames.append(f)
+        if n < len(pieces) - 1:  # a real pause between sentences, like a teacher taking a breath
+            channels, width, rate = params
+            frames.append(b"\x00" * int(rate * _pause_after(piece)) * channels * width)
     tmp = path.with_suffix(".tmp.wav")
     with wave.open(str(tmp), "wb") as out:
         out.setnchannels(params[0])

@@ -14,7 +14,7 @@ Condition is checked BEFORE every round
 Look at the notebook. A while loop keeps going as long as its condition is true.
 [NOTE_HIGHLIGHT text="BEFORE every round"]
 Python checks the condition before every round, even the very first one.
-[NOTE]
+[NOTE while_speaking=true]
 Example: count = 1, stop after 3
 count = 1 -> 2 -> 3 -> 4 (4 <= 3 is False, stop)
 Prints: 1, 2, 3

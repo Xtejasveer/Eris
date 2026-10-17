@@ -1,12 +1,17 @@
 // The class stage: three environments the script switches between.
-// Notebook (hand-written ruled page), Slides, and Code (editor tabs + terminal).
+// Notebook (hand-written ruled page), Slides, Code (editor tabs + terminal) and Visual (interactive pictures
+// built from the script's [VISUAL] blocks, each in a sandboxed frame the teacher drives with [VISUAL_SET]).
 
 import { h, icon, esc } from "./ui.js";
 import { highlightLine } from "./highlight.js";
 
-const ENVS = [["notebook", "Notebook", "book"], ["slides", "Slides", "slides"], ["code", "Code", "code"]];
-const NOTE_MS = 26;   // per character, "handwriting"
-const CODE_MS = 14;   // per character, "typing"
+const ENVS = [["notebook", "Notebook", "book"], ["slides", "Slides", "slides"], ["code", "Code", "code"],
+  ["visual", "Visual", "sparkle"]];
+const VISUAL_READY_MS = 10000;  // a visual that hasn't drawn itself by then is reported as failed
+const VISUAL_SET_MS = 8000;     // the longest a control change (with its animation) may take
+export const NOTE_MS = 26;   // per character, "handwriting"
+export const CODE_MS = 14;   // per character, "typing"
+// A ctl may carry charMs / lineMs to pace writing to a sentence (while_speaking); otherwise these are used.
 
 export class Stage {
   constructor(slides) {
@@ -22,7 +27,7 @@ export class Stage {
     // Notebook pages: "Lecture" plus one per [NEW_PAGE]. Like the environment pills, the page tabs
     // only show where the teacher is; the script turns the pages.
     this.pageBar = h("div", { class: "nb-pages", "aria-label": "Notebook pages" });
-    this.paper = h("div", { class: "nb-paper" }, h("div", { class: "nb-margin" }));
+    this.paper = h("div", { class: "nb-paper" });
     this.notebook = h("div", { class: "env env-notebook" }, this.pageBar, this.paper);
     this.pages = [];
     this._addPage("Lecture");
@@ -39,7 +44,17 @@ export class Stage {
     this.codeEl = h("div", { class: "env env-code" },
       h("div", { class: "editor-win" }, h("div", { class: "ed-chrome" }, h("i"), h("i"), h("i")), this.tabBar, this.codeBody), this.term);
 
-    this.el = h("div", { class: "stage-envs" }, this.notebook, this.slidesEl, this.codeEl);
+    this.visuals = {};        // id -> { frame, tab, title, state, ready, waiting: Map(req -> resolve) }
+    this.currentVisual = null;
+    this._req = 0;
+    this.visualTitle = h("span", { class: "vz-title" });
+    this.visualTabs = h("div", { class: "vz-tabs" });
+    this.visualBody = h("div", { class: "vz-body" }, this._visualEmpty());
+    this.visualEl = h("div", { class: "env env-visual" },
+      h("div", { class: "vz-win" }, h("div", { class: "vz-head" }, icon("sparkle"), this.visualTitle, this.visualTabs), this.visualBody));
+    window.addEventListener("message", (e) => this._onVisualMessage(e));
+
+    this.el = h("div", { class: "stage-envs" }, this.notebook, this.slidesEl, this.codeEl, this.visualEl);
     this.setEnv("notebook");
   }
 
@@ -49,7 +64,7 @@ export class Stage {
     const i = ENVS.findIndex(e => e[0] === env);
     this.indicator.style.setProperty("--i", i);
     this.indicator.querySelectorAll(".env-pill").forEach(p => p.classList.toggle("active", p.dataset.env === env));
-    for (const [key, el] of [["notebook", this.notebook], ["slides", this.slidesEl], ["code", this.codeEl]])
+    for (const [key, el] of [["notebook", this.notebook], ["slides", this.slidesEl], ["code", this.codeEl], ["visual", this.visualEl]])
       el.classList.toggle("active", key === env);
   }
 
@@ -105,7 +120,7 @@ export class Stage {
     for (const ch of text) {
       shown += ch;
       el.textContent = shown;
-      if (ch !== " ") await ctl.tick(ms);
+      if (ch !== " ") await ctl.tick(ctl.charMs ?? ms);
     }
     el.classList.remove("writing");
   }
@@ -191,9 +206,9 @@ export class Stage {
         row.classList.add("typing");
         row.scrollIntoView({ block: "nearest" });
         let shown = "";
-        for (const ch of line) { shown += ch; src.innerHTML = highlightLine(shown); if (ch !== " ") await ctl.tick(CODE_MS); }
+        for (const ch of line) { shown += ch; src.innerHTML = highlightLine(shown); if (ch !== " ") await ctl.tick(ctl.charMs ?? CODE_MS); }
         row.classList.remove("typing");
-        await ctl.tick(60);
+        await ctl.tick(ctl.lineMs ?? 60);
       }
       src.innerHTML = highlightLine(line) || " ";
     }
@@ -208,11 +223,91 @@ export class Stage {
     return true;
   }
 
-  // Where the class is looking (environment, notebook page, open file), to come back after a doubt.
-  view() { return { env: this.env, page: this.page, file: this.current }; }
+  // ---------- visuals ----------
+  _visualEmpty() { return h("div", { class: "vz-empty" }, icon("sparkle"), "No visual yet"); }
+
+  _activateVisual(id) {
+    const v = this.visuals[id];
+    this.currentVisual = id;
+    Object.entries(this.visuals).forEach(([k, x]) => {
+      x.frame.classList.toggle("off", k !== id);  // still rendered, so its animations keep running
+      x.tab.classList.toggle("active", k === id);
+    });
+    this.visualTitle.textContent = v.title;
+    this.visualTabs.classList.toggle("hidden", Object.keys(this.visuals).length < 2);
+  }
+
+  // Load a built visual into its own sandboxed frame and wait until it has drawn itself.
+  // Returns an error string, or "" when it is ready.
+  async showVisual(id, url, title) {
+    this.setEnv("visual");
+    let v = this.visuals[id];
+    if (!v) {
+      const frame = h("iframe", { class: "vz-frame", title, sandbox: "allow-scripts", referrerpolicy: "no-referrer" });
+      const tab = h("span", { class: "vz-tab" }, title);
+      v = this.visuals[id] = { frame, tab, title, state: "", errors: [], waiting: new Map() };
+      v.ready = new Promise(resolve => { v._ready = resolve; });
+      this.visualBody.querySelector(".vz-empty")?.remove();
+      this.visualBody.append(frame);
+      this.visualTabs.append(tab);
+      // Loaded as srcdoc (fetched like any API call): some browsers and embedders block framed page loads.
+      // The sandbox (scripts only, opaque origin) and the page's own CSP still apply.
+      fetch(url).then(r => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))))
+        .then(html => { frame.srcdoc = html; })
+        .catch(e => v.errors.push(`could not load: ${e.message}`));
+    }
+    this._activateVisual(id);
+    v.frame.classList.remove("enter"); void v.frame.offsetWidth; v.frame.classList.add("enter");
+    const ok = await Promise.race([v.ready.then(() => true), new Promise(r => setTimeout(() => r(false), VISUAL_READY_MS))]);
+    if (!ok) return `visual ${id} did not load${v.errors.length ? `: ${v.errors[0]}` : ""}`;
+    return v.errors.length ? `visual ${id} reported an error: ${v.errors[0]}` : "";
+  }
+
+  // Move one control of a visual (the frame animates it and points at it). Returns an error string or "".
+  async setVisual(id, control, value, { instant = false } = {}) {
+    const v = this.visuals[id];
+    if (!v) return `visual ${id} is not on the board`;
+    if (!instant) { this.setEnv("visual"); this._activateVisual(id); }
+    await v.ready;
+    const req = ++this._req;
+    const done = new Promise(resolve => v.waiting.set(req, resolve));
+    v.frame.contentWindow?.postMessage({ __visual: true, type: "set", control, value, req, instant }, "*");
+    const reply = await Promise.race([done, new Promise(r => setTimeout(() => r({ error: "it did not respond" }), VISUAL_SET_MS))]);
+    v.waiting.delete(req);
+    return reply.error ? `visual ${id}, control ${control}: ${reply.error}` : "";
+  }
+
+  openVisual(id) {
+    if (!this.visuals[id]) return false;
+    this.setEnv("visual");
+    this._activateVisual(id);
+    return true;
+  }
+
+  // What each visual shows now, in its own words (Visual.state), for the doubt agent.
+  visualStates() {
+    return Object.entries(this.visuals).filter(([, v]) => v.state)
+      .map(([id, v]) => `${id} (${v.title}): ${v.state}`).join("\n");
+  }
+
+  _onVisualMessage(e) {
+    const m = e.data;
+    if (!m || !m.__visual) return;
+    const entry = Object.entries(this.visuals).find(([, v]) => v.frame.contentWindow === e.source);
+    if (!entry) return;
+    const [id, v] = entry;
+    if (typeof m.state === "string" && m.state) v.state = m.state;
+    if (m.type === "ready") v._ready();
+    else if (m.type === "done") v.waiting.get(m.req)?.(m);
+    else if (m.type === "error") { v.errors.push(String(m.message)); console.warn(`[visual ${id}]`, m.message); }
+  }
+
+  // Where the class is looking (environment, notebook page, open file, visual), to come back after a doubt.
+  view() { return { env: this.env, page: this.page, file: this.current, visual: this.currentVisual }; }
 
   restoreView(v) {
     if (!v) return;
+    if (v.visual && this.visuals[v.visual]) this._activateVisual(v.visual);
     if (v.file && this.files[v.file]) this._openFile(v.file);
     if (v.page != null && this.pages[v.page]) this.showPage(v.page);
     this.setEnv(v.env || "notebook");
@@ -268,6 +363,10 @@ export class Stage {
     this.termBody.replaceChildren();
     this.slideBox.replaceChildren(h("div", { class: "slide-empty" }, icon("slides"), "No slide shown yet"));
     this.slideNum.textContent = "";
+    Object.values(this.visuals).forEach(v => { v.frame.remove(); v.tab.remove(); });
+    this.visuals = {}; this.currentVisual = null;
+    this.visualTitle.textContent = "";
+    this.visualBody.replaceChildren(this._visualEmpty());
     this.env = null; this.setEnv("notebook");
   }
 }

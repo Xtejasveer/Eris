@@ -37,7 +37,7 @@ TTS_VOICE = os.getenv("TTS_VOICE", "Kaveri").strip()
 TTS_LANGUAGE = os.getenv("TTS_LANGUAGE", "en-IN").strip()
 STT_LANGUAGE = os.getenv("STT_LANGUAGE", "en-IN").strip()
 try:
-    TTS_SPEED = float(os.getenv("TTS_SPEED", "1.0") or "1.0")
+    TTS_SPEED = float(os.getenv("TTS_SPEED", "0.9") or "0.9")  # 1.0 sounds rushed for teaching
 except ValueError:
     print("[config] TTS_SPEED must be a number between 0.85 and 1.15. Fix it in .env.")
     sys.exit(1)
@@ -54,16 +54,45 @@ EMBED_BATCH = 64
 TOP_K = 4
 DRY_RUN_TIMEOUT_S = 15
 OUTPUT_LIMIT_BYTES = 8000   # a run printing more than this is stopped (endless loop guard)
-MAX_DOUBTS_PER_CHECK = 3
+MAX_DOUBTS_PER_CHECK = 4
 MAX_DOUBTS_FINAL = 8
 DOUBT_TIME_SHARE = 0.2
 NOTE_TIME_SHARE = 0.15     # share of the lecture spent writing in the notebook
 RUN_MIN_EACH = 0.5
-TTS_CHUNK_CHARS = 400      # long narration is synthesized in sentence groups of this size
+TTS_CHUNK_CHARS = 400      # a sentence longer than this is split at commas before synthesis
+SHORT_SENTENCE_CHARS = 40  # shorter sentences are joined to the next one (fewer TTS calls, natural flow)
+SENTENCE_PAUSE_S = 0.35    # silence after a sentence (Gnani has no pause markup, so we add it to the audio)
+QUESTION_PAUSE_S = 0.5     # silence after a question or exclamation
 MIC_MAX_SECONDS = 55       # Gnani REST STT accepts clips up to 60 s
 FIX_ATTEMPTS = 2           # times generate asks the model to fix a script that fails the checks
 TYPE_DELAY_S = 0.04        # per-line delay when "typing" code on the board
 NOTE_CHARS_PER_S = 25      # "handwriting" speed in the notebook, used for time estimates
+NOTE_MAX_LINES = 10        # generate rejects a [NOTE] longer than this (the prompt asks for 2-6 lines)
+MAX_DOUBT_CHECKS = 3       # generate allows this many [DOUBT_CHECK]s plus the final one
+PAUSE_MAX_S = 3            # generate shortens longer [PAUSE]s: silence in class feels broken
+MAX_SENTENCE_WORDS = 30    # longer narration sentences go back to the writer (they sound rushed when spoken)
+WORDS_PER_NOTE = 180       # about one [NOTE] per this many spoken words, or the writer is told to use the notebook more
+SECTION_TWO_NOTES_WORDS = 250  # a section with more narration than this needs at least two [NOTE] blocks
+
+# --- Talking avatar (web/js/avatar): 3D head that lip-syncs the teacher's voice, rendered in the browser ---
+AVATAR_ENABLED = os.getenv("AVATAR_ENABLED", "true").strip().lower() not in ("0", "false", "no", "off")
+AVATAR_MODEL_URL = os.getenv("AVATAR_MODEL_URL", "").strip()  # empty = the bundled CC0 avatar
+
+# --- Interactive visuals ([VISUAL]): a model builds each one as a small HTML page shown in the Visual workspace ---
+VISUALS_ENABLED = os.getenv("VISUALS_ENABLED", "true").strip().lower() not in ("0", "false", "no", "off")
+VISUAL_MODEL = os.getenv("VISUAL_MODEL", "").strip() or LLM_MODEL  # a stronger coding model draws better visuals
+VISUAL_BUILD_ATTEMPTS = 2  # the builder gets its problems back once and tries again
+VISUAL_TIMEOUT_S = 180     # a visual is a few hundred lines of HTML; slow models need time
+MAX_VISUALS = 2            # per lecture (each one takes class time); extra ones are removed
+MAX_ANSWER_VISUALS = 1     # per doubt answer (the student waits while it is built)
+
+# --- Script judge (Jev, a decision model on OpenRouter: answers yes/no questions with probabilities) ---
+JUDGE_MODEL = os.getenv("JUDGE_MODEL", "typesafe/jev-1.13")  # pinned so pass thresholds stay meaningful
+JUDGE_ENABLED = os.getenv("JUDGE_ENABLED", "true").strip().lower() not in ("0", "false", "no", "off")
+JUDGE_PASS = 0.5           # a question passes when P(yes) >= this
+JUDGE_REVISIONS = 2        # quality rounds: times generate sends the judge's findings back to the writer
+JUDGE_MIN_SCORE = 0.85     # below this score (or with any blocker) the script goes back to the writer
+PAIR_UNFLAG = 0.3          # a while_speaking pair is un-flagged when P(sentence describes the writing) < this
 
 # Status order. A lecture "has reached" a status if its index is >= that one.
 STATUSES = ["indexed", "draft", "approved", "completed"]

@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Avatar Demo · Eris</title>
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
+  <style>
+    :root { --bg: #f4f2ee; --panel: #ffffff; --text: #1b1c21; --muted: #6b6c74; --border: #e2ded4; --accent: #2d5be3; color-scheme: light; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #0f1115; --panel: #171a21; --text: #e9eaee; --muted: #8b909c; --border: #2a2f3a; --accent: #6f8fff; color-scheme: dark; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; padding: 16px; height: 100vh; }
+    #stage { position: relative; border-radius: 16px; overflow: hidden; background: radial-gradient(circle at 50% 35%, #2b3350, #12151d); min-height: 360px; }
+    #debug { position: absolute; left: 12px; top: 12px; padding: 10px 12px; border-radius: 10px; background: rgba(0,0,0,.55); color: #e8ecf5; font: 12px/1.6 ui-monospace, Menlo, monospace; min-width: 190px; pointer-events: none; }
+    #debug b { color: #9fb6ff; font-weight: 600; }
+    #meter { height: 6px; border-radius: 3px; background: rgba(255,255,255,.15); overflow: hidden; margin-top: 4px; }
+    #meter i { display: block; height: 100%; width: 0; background: #7ee0a1; }
+    #loading { position: absolute; inset: 0; display: grid; place-items: center; color: #cfd6e6; }
+    aside { display: flex; flex-direction: column; gap: 12px; overflow: auto; }
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+    .card h2 { margin: 0; font-size: 14px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    button, select { font: inherit; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    button.stop { color: #d64545; }
+    small, .muted { color: var(--muted); }
+    input[type=range] { width: 100%; }
+    @media (max-width: 760px) { main { grid-template-columns: 1fr; height: auto; } #stage { height: 62vh; } }
+  </style>
+</head>
+<body>
+<main>
+  <section id="stage">
+    <div id="loading">Loading avatar…</div>
+    <div id="debug">
+      <div>FPS <b id="d-fps">–</b></div>
+      <div>mode <b id="d-mode">–</b></div>
+      <div>viseme <b id="d-viseme">–</b></div>
+      <div>RMS <b id="d-rms">–</b> <span id="d-db"></span></div>
+      <div id="meter"><i></i></div>
+      <div>speaking <b id="d-speaking">no</b></div>
+      <div>audio nodes alive <b id="d-nodes">0</b></div>
+    </div>
+  </section>
+  <aside>
+    <div class="card">
+      <h2>Play</h2>
+      <div class="row">
+        <button class="primary" id="play-file">Play file</button>
+        <button id="play-stream">Stream 100 ms chunks</button>
+        <button id="play-words">Speak with word timings</button>
+      </div>
+      <button class="stop" id="stop">Stop (interrupt)</button>
+      <small>“Play file” taps an &lt;audio&gt; element (how the classroom plays TTS). “Stream” splits the same WAV into 100 ms PCM chunks over a fake, jittery async stream. “Speak with word timings” uses the browser voice and its word boundaries (timestamp mode).</small>
+    </div>
+    <div class="card">
+      <h2>Mood</h2>
+      <div class="row">
+        <button data-mood="neutral">Neutral</button><button data-mood="happy">Happy</button><button data-mood="thinking">Thinking</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Audio delay compensation: <span id="delay-v">0</span> ms</h2>
+      <input id="delay" type="range" min="-150" max="150" step="5" value="0">
+      <small>Positive delays the sound (lips lead); negative delays the lips.</small>
+    </div>
+    <div class="card">
+      <h2>Leak check</h2>
+      <button id="stress">Run 10 streamed lectures</button>
+      <small id="stress-out" class="muted">Streams and interrupts the sample 10 times, then reports audio nodes still alive.</small>
+    </div>
+  </aside>
+</main>
+<script type="module">
+  import { createAvatar } from "./js/avatar/avatar.js";
+  import { parseWav, splitPcm } from "./js/avatar/scheduler.js";
+
+  const $ = (id) => document.getElementById(id);
+  const stage = $("stage");
+  const avatar = await createAvatar({ container: stage, options: { background: null } }).catch((e) => {
+    $("loading").textContent = "Could not load the avatar: " + e.message; throw e;
+  });
+  $("loading").remove();
+  window.avatar = avatar;  // handy for debugging in the console
+
+  const sampleUrl = "./assets/avatar-demo/sample.wav";
+  const sampleText = (await (await fetch("./assets/avatar-demo/sample.json")).json()).text;
+  const wavBytes = await (await fetch(sampleUrl)).arrayBuffer();
+
+  // 1) Whole file through an <audio> element, tapped by the avatar (played once, through the avatar).
+  const audioEl = new Audio(sampleUrl);
+  window.demoAudio = audioEl;  // for debugging and the sync measurement
+  avatar.attachAudioStream(audioEl);
+  $("play-file").onclick = async () => { await avatar.ctx.resume(); audioEl.currentTime = 0; audioEl.play(); };
+
+  // 2) The same WAV as 100 ms PCM chunks over a fake async stream with network jitter.
+  let streamRun = 0;
+  async function* fakeStream(ms = 100) {
+    const wav = parseWav(wavBytes);
+    for (const chunk of splitPcm(wavBytes, wav, ms)) {
+      await new Promise(r => setTimeout(r, ms * (0.5 + Math.random() * 0.6)));  // arrives a bit faster than real time, jittery
+      yield { chunk, format: { type: "pcm16", sampleRate: wav.sampleRate, channels: wav.channels } };
+    }
+  }
+  async function playStream(stopAfterMs = 0) {
+    const run = ++streamRun;
+    await avatar.ctx.resume();
+    const started = performance.now();
+    for await (const { chunk, format } of fakeStream()) {
+      if (run !== streamRun) return;
+      avatar.pushAudioChunk(chunk, format);
+      if (stopAfterMs && performance.now() - started > stopAfterMs) { avatar.stop(); return; }
+    }
+  }
+  $("play-stream").onclick = () => playStream();
+
+  // 3) Browser voice + word boundary events → timestamp mode (the browser voice can't be routed into Web Audio).
+  $("play-words").onclick = () => {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(sampleText);
+    u.rate = 0.9; u.lang = "en-US";
+    const words = sampleText.split(/\s+/);
+    let fired = false;
+    u.onboundary = (e) => {
+      if (e.name && e.name !== "word") return;
+      fired = true;
+      const word = sampleText.slice(e.charIndex).split(/\s/)[0];
+      avatar.setTimestamps({ words: [word], times: [0], durations: [Math.max(180, word.length * 75)] }, { clock: "perf" });
+    };
+    u.onstart = () => setTimeout(() => {  // voices without boundary events: spread the words over an estimate
+      if (fired) return;
+      let t = 0; const times = [], durs = [];
+      for (const w of words) { const d = Math.max(180, w.length * 75); times.push(t); durs.push(d); t += d + 60; }
+      avatar.setTimestamps({ words, times, durations: durs }, { clock: "perf" });
+    }, 300);
+    speechSynthesis.speak(u);
+  };
+
+  $("stop").onclick = () => { streamRun++; audioEl.pause(); speechSynthesis.cancel(); avatar.stop(); };
+  document.querySelectorAll("[data-mood]").forEach(b => b.onclick = () => avatar.setMood(b.dataset.mood));
+  $("delay").oninput = (e) => { avatar.setDelay(+e.target.value); $("delay-v").textContent = e.target.value; };
+
+  $("stress").onclick = async () => {
+    $("stress-out").textContent = "Running…";
+    for (let i = 1; i <= 10; i++) {
+      $("stress-out").textContent = `Lecture ${i}/10…`;
+      await playStream(1200 + Math.random() * 800);
+      await new Promise(r => setTimeout(r, 300));
+    }
+    await new Promise(r => setTimeout(r, 500));
+    const s = avatar.audio.stats;
+    $("stress-out").textContent = `Done: ${s.created} buffer sources created, ${s.released} released, ${avatar.audio.sources.size} still alive.`;
+  };
+
+  // Debug overlay (10×/s is plenty).
+  avatar.addEventListener("speechstart", () => $("d-speaking").textContent = "yes");
+  avatar.addEventListener("speechend", () => $("d-speaking").textContent = "no");
+  setInterval(() => {
+    const d = avatar.debug;
+    $("d-fps").textContent = d.fps; $("d-mode").textContent = d.mode; $("d-viseme").textContent = d.viseme;
+    $("d-rms").textContent = d.rms.toFixed(3); $("d-db").textContent = `(${d.db.toFixed(0)} dB)`;
+    document.querySelector("#meter i").style.width = `${Math.round(d.level * 100)}%`;
+    $("d-nodes").textContent = avatar.audio.sources.size;
+  }, 100);
+</script>
+</body>
+</html>

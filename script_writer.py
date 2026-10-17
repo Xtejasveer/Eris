@@ -1,53 +1,19 @@
-"""The `generate` command: the script agent writes the lecture, code validates it."""
+"""The `generate` command: the model researches and writes the lecture (script_agent.py), code validates it."""
 
 import json
 import sys
 from datetime import datetime
 
-from langchain.agents import create_agent
-from langgraph.checkpoint.memory import InMemorySaver
-
 import config
 from persona import persona_to_text
-from prompts import script_prompt
+from prompts import research_prompt, script_prompt
 from script_parser import estimate_minutes, parse_script, word_budget
-from tools import dry_run_python, program_output, read_outline, run_code_file, search_material, set_lecture
-
-
-# Smaller models skip the tools unless the first message spells the steps out.
-KICKOFF = """Write the full lecture script now. Work in this order:
-1. Call read_outline().
-2. Call search_material for each concept you will teach.
-3. Call dry_run_python with the exact code of every file you will RUN.
-4. Then output the whole script, about {budget} words of narration. Write every marker with key=value args,
-   e.g. [SLIDE n=1], [SECTION title="Recap"]. Put keywords and worked examples in [NOTE] blocks.
-   Highlight code by quoting it: [HIGHLIGHT file="demo.py" text="<exact code from one line>"].
-Do not write any part of the script while you are still calling tools. Your FINAL message must contain
-the ENTIRE script, from the Opening section to the last [DOUBT_CHECK]."""
-
-
-def build_script_agent(system_prompt):
-    return create_agent(
-        model=f"openrouter:{config.LLM_MODEL}",
-        tools=[search_material, read_outline, dry_run_python],
-        system_prompt=system_prompt,
-        checkpointer=InMemorySaver(),
-        name="script_writer",
-    )
-
-
-def extract_text(result):
-    """Text of the last message. Handles content given as a list of blocks."""
-    content = result["messages"][-1].content
-    if isinstance(content, list):
-        parts = [b.get("text", "") if isinstance(b, dict) else str(b) for b in content]
-        content = "".join(parts)
-    text = content.strip()
-    # Models sometimes wrap the whole script in ``` fences despite the prompt.
-    if text.startswith("```") and text.endswith("```"):
-        text = text.split("\n", 1)[1] if "\n" in text else ""
-        text = text[: text.rfind("```")].strip()
-    return text
+from script_agent import ScriptWriter, run_research
+from quality_loop import review
+from script_pipeline import ScriptPipeline
+from script_fixes import drop_visual
+from tools import program_output, run_code_file, set_lecture
+from visual_builder import drop_visual_segments, ensure_visuals
 
 
 def fill_expected_outputs(segments, files=None):
@@ -65,6 +31,20 @@ def fill_expected_outputs(segments, files=None):
             seg["expected_output"] = program_output(exit_code, stdout, stderr)
             label = "ok" if exit_code == 0 else f"exit {exit_code}"
             print(f"[generate] ran {file}: {label}")
+
+
+def build_visuals(lecture_id, topic, text, segments):
+    """Build every [VISUAL] (reusing ones already built). A visual that can't be built is removed, with its
+    [VISUAL_SET]s, as a recorded last resort. Returns (text, segments, fixes)."""
+    failed = ensure_visuals(segments, lecture_id, topic, config.MAX_VISUALS)
+    fixes = []
+    for vid, reason in failed:
+        text = drop_visual(text, vid)
+        fixes.append(f"removed the visual '{vid}' ({reason[:200]})")
+        print(f"[generate] auto-fixed: {fixes[-1]}")
+    if failed:
+        segments = drop_visual_segments(segments, [vid for vid, _ in failed])
+    return text, segments, fixes
 
 
 def count_slides(lecture_id):
@@ -97,6 +77,25 @@ def _notebook_errors(segments):
     return errors
 
 
+def _limit_errors(segments):
+    """Rules from the prompt that models often ignore: short notes, few question breaks."""
+    errors, section = [], "Opening"
+    for seg in segments:
+        if seg.get("name") == "SECTION":
+            section = seg["args"]["title"]
+        elif seg.get("name") == "NOTE":
+            lines = [ln for ln in seg["args"]["text"].splitlines() if ln.strip()]
+            if len(lines) > config.NOTE_MAX_LINES:
+                errors.append(f'section "{section}": the [NOTE] starting "{lines[0][:40]}" has {len(lines)} lines; '
+                              "keep each [NOTE] to 2-6 short lines (split it, or show a long "
+                              "trace with code instead)")
+    checks = sum(1 for s in segments if s.get("name") == "DOUBT_CHECK")
+    if checks > config.MAX_DOUBT_CHECKS + 1:
+        errors.append(f"the script has {checks} [DOUBT_CHECK] markers; use at most {config.MAX_DOUBT_CHECKS} "
+                      "(after the major blocks) plus the final one on the last line. Remove the extra ones")
+    return errors
+
+
 def check_generated(text, budget, slide_count):
     """parse_script plus checks that only make sense for a freshly generated script."""
     segments, errors = parse_script(text, slide_count)
@@ -104,6 +103,7 @@ def check_generated(text, budget, slide_count):
         errors.append("the script must start with [SECTION title=\"Opening\"]; "
                       "your final message must contain the WHOLE script, not just the end")
     errors += _notebook_errors(segments)
+    errors += _limit_errors(segments)
     for seg in segments:
         if seg.get("name") == "HIGHLIGHT" and "text" not in seg["args"]:
             errors.append(f'[HIGHLIGHT file="{seg["args"]["file"]}" lines="{seg["args"]["lines"]}"] uses a line number; '
@@ -128,6 +128,11 @@ def approve_script(lecture_id):
         return errors
     set_lecture(lecture_id)
     fill_expected_outputs(segments)  # Edits may have changed the code.
+    # Edited visual descriptions are rebuilt; unchanged ones are reused.
+    failed = ensure_visuals(segments, lecture_id, manifest["topic"], config.MAX_VISUALS)
+    if failed:
+        return [f"the visual '{vid}' could not be built: {reason}. Edit its description or remove it."
+                for vid, reason in failed]
     out = config.lecture_dir(lecture_id) / "script.json"
     out.write_text(json.dumps(segments, indent=2, ensure_ascii=False), encoding="utf-8")
     manifest.update({
@@ -145,17 +150,6 @@ def save_script(lecture_id, text, segments):
     (out / "script.json").write_text(json.dumps(segments, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
-def _ask(agent, message, thread_id):
-    """Invoke the agent once; exit with a hint on API/model problems."""
-    cfg = {"configurable": {"thread_id": thread_id}, "recursion_limit": 100}
-    try:
-        return extract_text(agent.invoke({"messages": [{"role": "user", "content": message}]}, cfg))
-    except Exception as e:
-        print(f"[generate] the model call failed: {e}")
-        print("[generate] Check OPENROUTER_API_KEY, and that LLM_MODEL supports tool calling.")
-        sys.exit(1)
-
-
 def run_generate(lecture_id):
     manifest = config.load_manifest(lecture_id)
     if not config.status_at_least(manifest, "indexed"):
@@ -167,24 +161,20 @@ def run_generate(lecture_id):
     set_lecture(lecture_id)
     persona = manifest["persona"]
     budget = word_budget(manifest["duration_min"])
-    prompt = script_prompt(persona, persona_to_text(persona), manifest["topic"], manifest["duration_min"], budget)
-    agent = build_script_agent(prompt)
-    thread_id = f"script_{lecture_id}"
-
-    print(f"[generate] writing script (~{budget} words) with {config.LLM_MODEL} ...")
+    args = (persona, persona_to_text(persona), manifest["topic"], manifest["duration_min"], budget)
+    prompt = script_prompt(*args)  # the writer: no tools, so no tool instructions
+    print(f"[generate] step 1/2: researching the material with {config.LLM_MODEL} ...")
+    notes = run_research(research_prompt(*args), f"script_{lecture_id}")
+    print(f"[generate] step 2/2: writing the script (~{budget} words) in one message, no tools ...")
+    writer = ScriptWriter(prompt)
     slides = count_slides(lecture_id)
-    text = _ask(agent, KICKOFF.format(budget=budget), thread_id)
-    segments, errors = check_generated(text, budget, slides)
 
-    for attempt in range(1, config.FIX_ATTEMPTS + 1):
-        if not errors:
-            break
-        print(f"[generate] {len(errors)} error(s) in the script; asking the model to fix them "
-              f"(attempt {attempt}/{config.FIX_ATTEMPTS})")
-        fix = "Your script has these errors. Return the full corrected script only:\n" + "\n".join(errors)
-        text = _ask(agent, fix, thread_id)
-        segments, errors = check_generated(text, budget, slides)
-
+    pipe = ScriptPipeline(writer, budget, slides, notes)
+    text, segments, errors = pipe.until_valid(writer.write(notes, budget))
+    if errors:  # e.g. far too short: code can't repair that, so a fresh writer tries once more
+        print(f"[generate] {len(errors)} problem(s) left; a fresh writer rewrites the script once more")
+        pipe.rounds.append({"kind": "rewrite", "problems": len(errors)})
+        text, segments, errors = pipe.until_valid(pipe.rewrite("\n".join(f"- {e}" for e in errors)))
     if errors:
         failed = config.lecture_dir(lecture_id) / "script_failed.md"
         failed.write_text(text + "\n", encoding="utf-8")
@@ -193,10 +183,22 @@ def run_generate(lecture_id):
             print("  " + e)
         print(f"[generate] Saved to {failed}. Fix it by hand, save as script.md, and run approve, or run generate again.")
         sys.exit(1)
+    text, segments = pipe.finalize(text)
+    text, segments, report = review(pipe, text, segments, persona, manifest["topic"])
+    text, segments, visual_fixes = build_visuals(lecture_id, manifest["topic"], text, segments)
 
-    fill_expected_outputs(segments)
     save_script(lecture_id, text, segments)
     (config.lecture_dir(lecture_id) / "script_failed.md").unlink(missing_ok=True)  # now stale
+    judge_path = config.lecture_dir(lecture_id) / "judge.json"
+    report = report or {"model": "", "findings": [], "error": "the quality check is turned off (JUDGE_ENABLED=false)"}
+    report["rounds"] = pipe.rounds  # what happened on the way, for Studio (auto_fixes: set by review)
+    report["advice"] = pipe.advice  # soft problems the writer left (long sentences, little notebook use)
+    report.setdefault("auto_fixes", pipe.auto_fixes)
+    report["auto_fixes"] = list(report["auto_fixes"]) + visual_fixes
+    if report:
+        judge_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+    else:
+        judge_path.unlink(missing_ok=True)
 
     minutes = estimate_minutes(segments)
     manifest.update({
@@ -206,6 +208,7 @@ def run_generate(lecture_id):
         "script_md": "script.md",
         "script_json": "script.json",
         "estimated_min": minutes,
+        "judge": {k: report[k] for k in ("score", "blockers", "failed_minor") if k in report} if report else None,
     })
     config.save_manifest(lecture_id, manifest)
 

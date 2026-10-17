@@ -159,6 +159,24 @@ def pause(board, args):
     return {"ok": True, "error": ""}
 
 
+def visual(board, args):
+    controls = ", ".join(c["name"] for c in args.get("controls", []))
+    print(f"\n🖼  [VISUAL {args['id']}] {args['title']}: {args.get('brief', '')}  (controls: {controls}; "
+          "shown in the browser class only)")
+    return {"ok": True, "error": ""}
+
+
+def visual_set(board, args):
+    value = f" = {args['value']}" if "value" in args else " (pressed)"
+    print(f"\n🖼  [VISUAL_SET {args['id']}] {args['control']}{value}")
+    return {"ok": True, "error": ""}
+
+
+def open_visual(board, args):
+    print(f"\n🖼  [OPEN_VISUAL {args['id']}]")
+    return {"ok": True, "error": ""}
+
+
 ACTIONS = {
     "WRITE_CODE": write_code,
     "HIGHLIGHT": highlight,
@@ -173,6 +191,9 @@ ACTIONS = {
     "LOOK_BACK": look_back,
     "OPEN_FILE": open_file,
     "NEW_PAGE": new_page,
+    "VISUAL": visual,
+    "VISUAL_SET": visual_set,
+    "OPEN_VISUAL": open_visual,
 }
 
 
