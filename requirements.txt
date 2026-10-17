@@ -1,0 +1,17 @@
+langchain
+langgraph
+langchain-openrouter
+langchain-openai
+langchain-chroma
+chromadb
+langchain-text-splitters
+pypdf
+python-pptx
+python-docx
+python-dotenv
+gnani-vachana
+sounddevice
+numpy
+fastapi
+uvicorn
+python-multipart

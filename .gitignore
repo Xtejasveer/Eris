@@ -1,0 +1,14 @@
+.env
+.venv/
+.uv-cache/
+__pycache__/
+.pytest_cache/
+*.pyc
+.DS_Store
+chroma_db/
+workspace/
+# Teacher material stays local; only the example persona is committed.
+data/*
+!data/example/
+data/example/*
+!data/example/persona.md

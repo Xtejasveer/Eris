@@ -1,0 +1,32 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 688 >>
+stream
+BT /F1 12 Tf 72 740 Td 16 TL (Notes: Python while loops) Tj T* (A while loop repeats its body as long as its condition is True.) Tj T* (Syntax: while condition: followed by an indented body.) Tj T* (The condition is checked before every round, including the first one.) Tj T* (Always change something inside the loop so the condition can become False.) Tj T* (Example: a batsman needs 50 runs. Keep adding runs until the total reaches 50.) Tj T* (break exits the loop at once. continue skips to the next round.) Tj T* (Common mistake: forgetting to update the counter gives an infinite loop.) Tj T* (Use for when you know how many rounds; use while when you stop on a condition.) Tj T* ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000980 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1050
+%%EOF

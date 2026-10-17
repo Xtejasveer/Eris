@@ -1,0 +1,30 @@
+[SECTION]
+[FLY_AWAY]
+[SLIDE n=two]
+[PAUSE s=abc]
+[READ_OUTPUT]
+[WRITE_CODE file="notes.txt"]
+print("hi")
+[/WRITE_CODE]
+[HIGHLIGHT file="ghost.py" lines="1"]
+[RUN cmd="python ghost.py"]
+[WRITE_CODE file="demo.py"]
+x = 1
+print(x)
+[/WRITE_CODE]
+[HIGHLIGHT file="demo.py" lines="5"]
+[HIGHLIGHT file="demo.py" lines="2-1"]
+[HIGHLIGHT file="demo.py" text="y = 2"]
+[HIGHLIGHT file="demo.py" text="x"]
+[HIGHLIGHT file="demo.py" text="x = 1" to="return x"]
+[HIGHLIGHT file="demo.py"]
+[RUN cmd="python3 demo.py && rm -rf /"]
+[/WRITE_CODE]
+[NOTE_TITLE]
+[NOTE]
+[/NOTE]
+[NOTE_HIGHLIGHT text="banana"]
+[/NOTE]
+Some narration at the end, and no doubt check.
+[WRITE_CODE file="open.py"]
+print("never closed")
