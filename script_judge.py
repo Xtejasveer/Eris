@@ -238,10 +238,11 @@ def judge_script(segments, persona, topic, figs=None):
 
 
 GRAPH_ALIGNMENT = _noul(
-    "For every move in moves, does teacher_says agree with graph_reports, which is what the interactive graph itself "
-    "reports it shows after that slider move?",
-    "Every sentence the teacher says after a slider move agrees with what the graph shows at that value.",
-    "At least one sentence describes something the graph does not show at that value (different numbers or shape).")
+    "For every move in moves, is everything teacher_says states consistent with graph_reports (what the interactive "
+    "graph itself reports it shows after that slider move)? The graph may show more than the teacher mentions, and "
+    "other sliders may not have been moved yet; only a direct contradiction counts.",
+    "Nothing the teacher says after a slider move contradicts what the graph shows at that point.",
+    "At least one sentence states a value or shape that the graph clearly does not show at that point.")
 
 
 def check_graph_alignment(title, plots, moves):

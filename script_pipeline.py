@@ -56,7 +56,8 @@ class ScriptPipeline:
         outputs = [s.get("expected_output", "") for s in self._with_outputs(segments) if s.get("name") == "RUN"]
         problems += format_problems(text, outputs)
         flagged, _ = add_sync_flags(text)  # the pairs the class will see: written while this sentence plays
-        self.advice = (teaching_problems(segments, self.figures, self.slides if self.env.get("slides", True) else None)
+        self.advice = (teaching_problems(segments, self.figures, self.slides if self.env.get("slides", True) else None,
+                                         self.env)
                        + narration_problems(parse_script(flagged, self.slides)[0]))
         return text, segments, problems
 

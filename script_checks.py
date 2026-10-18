@@ -110,7 +110,7 @@ def format_problems(text, outputs=()):
     return problems
 
 
-def teaching_problems(segments, figs=None, slide_count=None):
+def teaching_problems(segments, figs=None, slide_count=None, env=None):
     """Soft problems (advice): they go back to the writer as feedback but never fail a generation.
     Long spoken sentences sound rushed; a notebook written once per section looks like a slide, not a teacher."""
     problems, long_ones = [], []
@@ -137,6 +137,10 @@ def teaching_problems(segments, figs=None, slide_count=None):
         problems.append(f"the notebook is under-used: {notes} [NOTE] blocks for {words} spoken words; write at least "
                         f"{wanted}. Come back to the notebook after each program's output, and add worked examples, "
                         "traces, comparisons or common mistakes as [NOTE] blocks")
+    if env and env.get("code") and not any(seg.get("name") == "WRITE_CODE" for seg in segments):
+        problems.append("the teacher's material has code (for example its lab programs), but the script shows none: "
+                        "in the section it fits, type one short program from the research notes with [WRITE_CODE], "
+                        "[RUN] it and [READ_OUTPUT], and explain what it prints")
     visuals = [seg for seg in segments if seg.get("name") == "VISUAL"]
     from figures import flows, graphs, matches
     flow_segs = [seg for seg in segments if seg.get("name") == "FLOW"]
@@ -204,7 +208,7 @@ def teaching_problems(segments, figs=None, slide_count=None):
 # The sentence spoken while a note or program appears should say what is being written.
 ANNOUNCES_WRITING_RE = re.compile(
     r"\b(let me|let's|let us|i'll|i will|i'm|i am|we'll|we will|we're)\s+(now\s+)?"
-    r"(write|type|jot|note|put|draw|add|list|sketch|copy|show|open)|\b(writing|typing|jotting)\b", re.I)
+    r"(write|type|jot|note|put|draw|add|list|sketch|copy|show|open|visuali[sz]e|plot|graph)|\b(writing|typing|jotting)\b", re.I)
 
 
 STOP_WORDS = {"the", "a", "an", "to", "of", "it", "is", "and", "or", "in", "on", "for", "any", "into", "with", "we"}

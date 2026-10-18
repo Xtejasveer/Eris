@@ -232,29 +232,32 @@ def visual_context(segments, board_files=None, figs=None):
     return context
 
 
+CONTRADICTS_BELOW = 0.2  # a graph whose best version still scores below this clearly contradicts the narration
+
+
 def check_against_script(html, args, moves):
-    """Replay the teacher's slider moves on the built graph and ask Jev whether each sentence the teacher says
-    afterwards matches what the graph reports. Returns problems for the builder ([] = aligned, or not checked)."""
+    """Replay the teacher's slider moves on the built graph and ask Jev whether anything the teacher says after a
+    move contradicts what the graph reports. Returns (advice for the builder, P(no contradiction) or None)."""
     if not moves or not config.JUDGE_ENABLED:
-        return []
+        return [], None
     out = smoke_test(html, args["controls"], [[c, v] for c, v, _ in moves], full=True)
     replay = out.get("moves") or []
     if len(replay) != len(moves):
-        return []
+        return [], None
     from script_judge import check_graph_alignment
     pairs = [{"control": c, "value": v, "teacher_says": said, "graph_reports": r["graph_reports"]}
              for (c, v, said), r in zip(moves, replay) if said]
     if not pairs:
-        return []
+        return [], None
     value, cost = check_graph_alignment(args["title"], args["brief"], pairs)
     if value is None or value >= config.JUDGE_PASS:
         if value is not None:
-            print(f"[visual] '{args['id']}' matches what the teacher says (P={value:.2f}, ${cost:.5f})")
-        return []
-    print(f"[visual] '{args['id']}' does not match what the teacher says (P={value:.2f})")
-    return [f'after {p["control"]} = {p["value"]} the teacher says "{p["teacher_says"]}" but the graph reports '
-            f'"{p["graph_reports"]}"; make the graph show (and report in Visual.state) what the teacher says'
-            for p in pairs]
+            print(f"[visual] '{args['id']}' agrees with what the teacher says (P={value:.2f}, ${cost:.5f})")
+        return [], value
+    print(f"[visual] '{args['id']}' may disagree with what the teacher says (P={value:.2f})")
+    return [f'after {p["control"]} = {p["value"]} the teacher says "{p["teacher_says"]}" while the graph reports '
+            f'"{p["graph_reports"]}"; make the graph show (and report in Visual.state) what the teacher says, '
+            "with the real data" for p in pairs], value
 
 
 def build_visual(topic, args):
@@ -264,7 +267,7 @@ def build_visual(topic, args):
     from prompts import visual_prompt
     controls_text = "\n".join(f"- {describe_control(c)}" for c in args["controls"])
     ctx = args.get("_context", {})
-    feedback, problems, best = "", ["not built"], None
+    feedback, problems, best = "", ["not built"], None  # best = (score, html, layout, P(agrees) or None)
     for attempt in range(1, config.VISUAL_BUILD_ATTEMPTS + 1):
         try:
             html = clean_fragment(_ask_model(visual_prompt(topic, args["title"], args["brief"], controls_text, feedback,
@@ -273,25 +276,30 @@ def build_visual(topic, args):
             problems = [f"the visual model failed: {e}"]
             print(f"[visual] '{args['id']}' attempt {attempt}: {problems[0]}")
             continue
-        problems = check_fragment(html, args["controls"])
-        layout = []
+        problems = check_fragment(html, args["controls"])  # must be fixed: the graph would not work
+        layout, agree, mismatch = [], None, []
         if not problems:
             problems, layout = smoke_test(html, args["controls"])
+        if not problems:  # agreement with the narration is advice: the best version is kept
+            mismatch, agree = check_against_script(html, args, ctx.get("moves", []))
         if not problems:
-            problems = check_against_script(html, args, ctx.get("moves", []))
-        if not problems and (best is None or len(layout) < len(best[1])):
-            best = (html, layout)
-        if not problems and not layout:
+            score = (1.0 if agree is None else agree, -len(layout))
+            if best is None or score > best[0]:
+                best = (score, html, layout, agree)
+        if not problems and not layout and not mismatch:
             break
-        print(f"[visual] '{args['id']}' attempt {attempt}: {'; '.join(problems + layout)}")
-        feedback = "\n".join(f"- {p}" for p in problems + layout)
+        print(f"[visual] '{args['id']}' attempt {attempt}: {'; '.join(problems + layout + mismatch)}")
+        feedback = "\n".join(f"- {p}" for p in problems + layout + mismatch)
     if best is None:
         return None, "; ".join(problems)
-    html, layout = best
+    _, html, layout, agree = best
+    if agree is not None and agree < CONTRADICTS_BELOW:  # every version shows something the teacher contradicts
+        return None, f"the graph contradicts what the teacher says (P={agree:.2f}): {feedback[:300]}"
     note = f", {len(layout)} layout clash(es) left" if layout else ""
+    note += f", may not fully match the narration (P={agree:.2f})" if agree is not None and agree < config.JUDGE_PASS else ""
     print(f"[visual] built '{args['id']}' ({len(html)} chars{note})")
     return {"id": args["id"], "title": args["title"], "brief": args["brief"], "controls": args["controls"],
-            "html": html, "model": config.VISUAL_MODEL, "layout_advice": layout}, None
+            "html": html, "model": config.VISUAL_MODEL, "layout_advice": layout, "agrees": agree}, None
 
 
 def ensure_visuals(segments, lecture_id, topic, limit=None, board_files=None):
