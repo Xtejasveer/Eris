@@ -7,11 +7,8 @@ __pycache__/
 .DS_Store
 chroma_db/
 workspace/
-# Teacher material stays local; only the example persona is committed.
+# Teacher material stays local (the example persona lives in templates/persona.md).
 data/*
-!data/example/
-data/example/*
-!data/example/persona.md
 
 # Frontend (web/ is plain HTML/CSS/JS with no build step; these cover tooling added later)
 node_modules/
@@ -23,3 +20,6 @@ npm-debug.log*
 .idea/
 *.log
 .claude/settings.local.json
+
+# Lectures moved out of the platform (kept, not shown)
+archive/

@@ -1,5 +1,9 @@
 # Testing checklist: "Python while loops" lecture
 
+> The platform now ships with two lectures, `for_loops` (code only) and `stats_basics` (graphs and code).
+> The while-loops lecture used below was moved to `archive/`; `python tests/make_while_loop_data.py`
+> recreates its material in `data/while_loops/` when you want to run this checklist.
+
 A fresh end-to-end test of the website with new material. It takes about 15 minutes.
 
 ## 0. Setup (once per machine)

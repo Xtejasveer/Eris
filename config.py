@@ -29,7 +29,7 @@ def _int_env(name, default):
 
 
 LECTURE_DURATION_MIN = _int_env("LECTURE_DURATION_MIN", 30)
-SPEAKING_WPM = _int_env("SPEAKING_WPM", 130)
+SPEAKING_WPM = _int_env("SPEAKING_WPM", 115)  # with the slower voice and pauses; sets the script's word budget
 
 # --- Voice (Gnani). Only needed for `render` and `session --voice/--mic` ---
 GNANI_API_KEY = os.getenv("GNANI_API_KEY", "").strip()
@@ -37,7 +37,7 @@ TTS_VOICE = os.getenv("TTS_VOICE", "Kaveri").strip()
 TTS_LANGUAGE = os.getenv("TTS_LANGUAGE", "en-IN").strip()
 STT_LANGUAGE = os.getenv("STT_LANGUAGE", "en-IN").strip()
 try:
-    TTS_SPEED = float(os.getenv("TTS_SPEED", "0.9") or "0.9")  # 1.0 sounds rushed for teaching
+    TTS_SPEED = float(os.getenv("TTS_SPEED", "0.85") or "0.85")  # Gnani's slowest; 1.0 sounds rushed for teaching
 except ValueError:
     print("[config] TTS_SPEED must be a number between 0.85 and 1.15. Fix it in .env.")
     sys.exit(1)
@@ -60,9 +60,11 @@ DOUBT_TIME_SHARE = 0.2
 NOTE_TIME_SHARE = 0.15     # share of the lecture spent writing in the notebook
 RUN_MIN_EACH = 0.5
 TTS_CHUNK_CHARS = 400      # a sentence longer than this is split at commas before synthesis
-SHORT_SENTENCE_CHARS = 40  # shorter sentences are joined to the next one (fewer TTS calls, natural flow)
-SENTENCE_PAUSE_S = 0.35    # silence after a sentence (Gnani has no pause markup, so we add it to the audio)
-QUESTION_PAUSE_S = 0.5     # silence after a question or exclamation
+SHORT_SENTENCE_CHARS = 20  # only very short sentences ("Right.") join the next one; others get their own pause
+SENTENCE_PAUSE_S = 0.6     # silence after a sentence (Gnani has no pause markup, so we add it to the audio)
+QUESTION_PAUSE_S = 0.85    # silence after a question or exclamation: time to think
+PHRASE_PAUSE_S = 0.25      # a short break at a comma inside a sentence
+PHRASE_MIN_WORDS = 4       # a comma splits a sentence only when both sides have this many words
 MIC_MAX_SECONDS = 55       # Gnani REST STT accepts clips up to 60 s
 FIX_ATTEMPTS = 2           # times generate asks the model to fix a script that fails the checks
 TYPE_DELAY_S = 0.04        # per-line delay when "typing" code on the board
@@ -79,9 +81,11 @@ AVATAR_ENABLED = os.getenv("AVATAR_ENABLED", "true").strip().lower() not in ("0"
 AVATAR_MODEL_URL = os.getenv("AVATAR_MODEL_URL", "").strip()  # empty = the bundled CC0 avatar
 
 # --- Interactive visuals ([VISUAL]): a model builds each one as a small HTML page shown in the Visual workspace ---
+# On: a chart in the slides becomes an interactive graph ([VISUAL]) on the Visual board, next to the flow
+# diagrams ([FLOW]) drawn from step lists. Off: charts are only explained on their slide.
 VISUALS_ENABLED = os.getenv("VISUALS_ENABLED", "true").strip().lower() not in ("0", "false", "no", "off")
 VISUAL_MODEL = os.getenv("VISUAL_MODEL", "").strip() or LLM_MODEL  # a stronger coding model draws better visuals
-VISUAL_BUILD_ATTEMPTS = 2  # the builder gets its problems back once and tries again
+VISUAL_BUILD_ATTEMPTS = 3  # the builder gets its problems (checks, test run, layout) back and tries again
 VISUAL_TIMEOUT_S = 180     # a visual is a few hundred lines of HTML; slow models need time
 MAX_VISUALS = 2            # per lecture (each one takes class time); extra ones are removed
 MAX_ANSWER_VISUALS = 1     # per doubt answer (the student waits while it is built)

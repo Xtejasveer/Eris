@@ -1,7 +1,7 @@
 // Classroom: teacher panel, stage and question breaks around the browser player.
 
 import { api } from "./api.js";
-import { h, icon, toast, initials } from "./ui.js";
+import { h, icon, toast, initials, formatDuration } from "./ui.js";
 import { lectureHeader } from "./header.js";
 import { inlineCode } from "./script-view.js";
 import { Stage } from "./stage.js";
@@ -36,7 +36,12 @@ export async function mountClassroom(lectureId, ctx) {
   const segments = info.segments;
   const sections = segments.map((s, i) => ({ s, i })).filter(x => x.s.name === "SECTION").map(x => ({ title: x.s.args.title, index: x.i }));
   const voice = new Voice(lectureId);
-  const stage = new Stage(info.slides);
+  // Only the environments this class uses get a pill (notebook always).
+  const ENV_OF = { SLIDE: "slides", SLIDE_HIGHLIGHT: "slides", WRITE_CODE: "code", RUN: "code", OPEN_FILE: "code",
+    FLOW: "visual", VISUAL: "visual" };
+  const used = [...new Set(info.segments.map(s => ENV_OF[s.name]).filter(Boolean))];
+  if (Object.keys(info.slides || {}).length) used.push("slides");  // doubt answers may always show slides
+  const stage = new Stage(info.slides, used);
   let player = null;
   let running = false;
 
@@ -92,7 +97,7 @@ export async function mountClassroom(lectureId, ctx) {
 
   const voiceChip = h("span", { class: "chip" }, icon("volume"), info.voice ? "Gnani voice" : "Browser voice");
   const header = lectureHeader(lectureId, "class", info.status,
-    h("span", { class: "chip" }, icon("clock"), `${info.estimated_min ?? "?"} min`), voiceChip);
+    h("span", { class: "chip" }, icon("clock"), formatDuration(info.estimated_min)), voiceChip);
   main.replaceChildren(header, h("div", { class: "classroom" }, side, stageCard));
 
   // ---------- panel + overlay ----------
@@ -112,7 +117,7 @@ export async function mountClassroom(lectureId, ctx) {
     showOverlay(h("div", { class: "splash" },
       h("div", { class: "splash-badge" }, icon("class")),
       h("h2", {}, info.topic), h("p", { class: "muted" }, `Taught by the AI substitute for ${info.teacher}`),
-      h("div", { class: "sp-grid" }, item("clock", "Length", `${info.estimated_min ?? "?"} min`), item("layers", "Sections", sections.length),
+      h("div", { class: "sp-grid" }, item("clock", "Length", formatDuration(info.estimated_min)), item("layers", "Sections", sections.length),
         item("question", "Question breaks", segments.filter(s => s.name === "DOUBT_CHECK").length), item("volume", "Voice", info.voice ? "Gnani" : "Browser")),
       h("div", { class: "splash-actions" },
         h("button", { class: "btn primary lg", onclick: () => start(0) }, icon("play"), "Start class"),

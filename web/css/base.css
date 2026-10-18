@@ -115,12 +115,17 @@ code, pre, .mono { font-family: var(--mono); }
 }
 .lecture-link .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-footer { border-top: 1px solid var(--border); padding-top: 8px; display: flex; flex-direction: column; gap: 2px; }
-.app.collapsed .brand-text, .app.collapsed .nav-item span, .app.collapsed .sidebar-heading span,
-.app.collapsed .lecture-link .name, .app.collapsed .lecture-link .dot { display: none; }
-.app.collapsed .sidebar-heading { justify-content: center; padding: 0 0 6px; }
-.app.collapsed .nav-item, .app.collapsed .lecture-link { justify-content: center; padding: 8px 0; }
-.app.collapsed .brand { justify-content: center; padding-left: 0; padding-right: 0; }
-.app.collapsed #collapse-btn svg { transform: rotate(180deg); }
+/* Folded to an icon rail (lecture pages). While the mouse is on it (.peek) it slides out over the page at full
+   width, without moving the page. */
+.app.collapsed:not(.peek) .brand-text, .app.collapsed:not(.peek) .nav-item span, .app.collapsed:not(.peek) .sidebar-heading span,
+.app.collapsed:not(.peek) .lecture-link .name, .app.collapsed:not(.peek) .lecture-link .dot { display: none; }
+.app.collapsed:not(.peek) .sidebar-heading { justify-content: center; padding: 0 0 6px; }
+.app.collapsed:not(.peek) .nav-item, .app.collapsed:not(.peek) .lecture-link { justify-content: center; padding: 8px 0; }
+.app.collapsed:not(.peek) .brand { justify-content: center; padding-left: 0; padding-right: 0; }
+.app.collapsed .sidebar { position: relative; z-index: 40; width: 64px; transition: width .2s ease, box-shadow .2s ease; }
+.app.collapsed.peek .sidebar { width: 256px; box-shadow: var(--shadow-lg); }
+#collapse-btn svg { transform: rotate(180deg); transition: transform .2s; }
+#collapse-btn.pinned svg { transform: none; }
 .main { min-width: 0; overflow-y: auto; display: flex; flex-direction: column; }
 
 /* ---------- page header ---------- */

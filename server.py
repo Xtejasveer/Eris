@@ -49,7 +49,7 @@ def _manifest_or_none(lecture_id):
 
 @app.get("/api/persona/template")
 def persona_template():
-    values = parse_persona("data/example/persona.md")
+    values = parse_persona("templates/persona.md")  # the example persona, kept apart from any lecture
     return {"fields": REQUIRED, "values": values, "topic": config.TOPIC_NAME,
             "duration_min": config.LECTURE_DURATION_MIN}
 

@@ -206,6 +206,17 @@ def run_index(lecture_id, reset=True, topic=None, duration_min=None):
         print(f"[index] embedded batch {n + 1}/{total}")
 
     out_dir = config.lecture_dir(lecture_id)
+    # Graphs and diagrams in the material: the only graphs the script may turn into an interactive [VISUAL].
+    from figures import find_figures
+    figures = find_figures(folder)
+    for entry in outline:
+        entry["figures"] = [f"{f['kind']} {f['ref']}: {f['title']}" for f in figures if f["source"] == entry["source"]]
+    (out_dir / "figures.json").write_text(json.dumps(figures, indent=2, ensure_ascii=False), encoding="utf-8")
+    print(f"[index] found {sum(f['kind'] == 'graph' for f in figures)} graph(s) and "
+          f"{sum(f['kind'] == 'diagram' for f in figures)} diagram(s) in the material")
+    from figures import environments
+    envs = environments(docs, figures, chunks)  # which class environments this material allows
+    print(f"[index] environments: {', '.join(k for k, v in envs.items() if v)}")
     (out_dir / "outline.json").write_text(json.dumps(outline, indent=2, ensure_ascii=False), encoding="utf-8")
 
     manifest_file = config.manifest_path(lecture_id)
@@ -219,6 +230,7 @@ def run_index(lecture_id, reset=True, topic=None, duration_min=None):
         "status": "indexed",
         "approved_at": None,
         "persona": persona,
+        "environments": envs,
     })
     manifest.setdefault("created_at", None)
     config.save_manifest(lecture_id, manifest)

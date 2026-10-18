@@ -67,9 +67,26 @@ def speech_text(text):
     return re.sub(r"\s+", " ", text.replace("`", "")).strip()
 
 
+def _phrases(sentence):
+    """Split a sentence at commas into phrases of at least PHRASE_MIN_WORDS words each, so the voice takes a
+    short break there (like a teacher does). Lists of short items ("1, 2 and 3") stay whole."""
+    parts, cur = [], ""
+    for bit in re.split(r"(?<=,)\s+", sentence):
+        cur = f"{cur} {bit}".strip()
+        if cur.endswith(",") and len(cur.split()) >= config.PHRASE_MIN_WORDS:
+            parts.append(cur)
+            cur = ""
+    if cur:
+        if parts and len(cur.split()) < config.PHRASE_MIN_WORDS:
+            parts[-1] = f"{parts[-1]} {cur}"  # too short to stand alone: keep it with the phrase before
+        else:
+            parts.append(cur)
+    return parts
+
+
 def _chunks(text):
-    """One piece per sentence, so we can put real pauses between them. Very short sentences join the
-    next one; a sentence longer than TTS_CHUNK_CHARS is split at commas."""
+    """One piece per phrase, so we can put real pauses between them: after each sentence, and a short one at
+    commas. Very short sentences join the next one; a sentence longer than TTS_CHUNK_CHARS is split at commas."""
     pieces, carry = [], ""
     for sentence in re.split(r"(?<=[.!?])\s+", text):
         sentence = (carry + " " + sentence).strip()
@@ -79,24 +96,25 @@ def _chunks(text):
         carry = ""
         while len(sentence) > config.TTS_CHUNK_CHARS and "," in sentence[:config.TTS_CHUNK_CHARS]:
             cut = sentence[:config.TTS_CHUNK_CHARS].rfind(",") + 1
-            pieces.append(sentence[:cut].strip())
+            pieces.extend(_phrases(sentence[:cut].strip()))
             sentence = sentence[cut:].strip()
-        pieces.append(sentence)
+        pieces.extend(_phrases(sentence))
     if carry:
         pieces.append(carry)
     return [p for p in pieces if p]
 
 
 def _pause_after(piece):
-    """Seconds of silence after a piece: longer after a question, none mid-sentence (after a comma split)."""
+    """Seconds of silence after a piece: longest after a question, a breath after a sentence, a short break at a comma."""
     if piece.endswith(("?", "!")):
         return config.QUESTION_PAUSE_S
-    return config.SENTENCE_PAUSE_S if piece.endswith((".", ":", ";")) else 0.12
+    return config.SENTENCE_PAUSE_S if piece.endswith((".", ":", ";")) else config.PHRASE_PAUSE_S
 
 
 def clip_path(lecture_id, text):
     """Cache file for this text + voice settings."""
-    key = f"{config.TTS_VOICE}|{config.TTS_LANGUAGE}|{config.TTS_SPEED}|{speech_text(text)}"
+    pacing = f"{config.SENTENCE_PAUSE_S}/{config.QUESTION_PAUSE_S}/{config.PHRASE_PAUSE_S}/{config.PHRASE_MIN_WORDS}"
+    key = f"{config.TTS_VOICE}|{config.TTS_LANGUAGE}|{config.TTS_SPEED}|{pacing}|{speech_text(text)}"  # new pacing = new clips
     folder = config.lecture_dir(lecture_id) / "audio"
     folder.mkdir(exist_ok=True)
     return folder / (hashlib.sha1(key.encode("utf-8")).hexdigest()[:16] + ".wav")

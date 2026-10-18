@@ -177,6 +177,27 @@ def open_visual(board, args):
     return {"ok": True, "error": ""}
 
 
+def flow(board, args):
+    board.setdefault("flows", {})[args["id"]] = {"blocks": args.get("blocks", []), "shown": 0}
+    print(f"\n🧭 DIAGRAM — {args['title']}")
+    return {"ok": True, "error": ""}
+
+
+def flow_next(board, args):
+    f = board.get("flows", {}).get(args["id"])
+    if not f or f["shown"] >= len(f["blocks"]):
+        return {"ok": False, "error": f"flow {args['id']} has no block left to draw"}
+    block = f["blocks"][f["shown"]]
+    f["shown"] += 1
+    print(f"   {'◇' if block['kind'] == 'question' else '▭'} {block['label']}" + ("" if f["shown"] == len(f["blocks"]) else "\n   ↓"))
+    return {"ok": True, "error": ""}
+
+
+def flow_highlight(board, args):
+    print(f"\n🧭 [FLOW_HIGHLIGHT {args['id']} {args['block']}]")
+    return {"ok": True, "error": ""}
+
+
 ACTIONS = {
     "WRITE_CODE": write_code,
     "HIGHLIGHT": highlight,
@@ -194,6 +215,10 @@ ACTIONS = {
     "VISUAL": visual,
     "VISUAL_SET": visual_set,
     "OPEN_VISUAL": open_visual,
+    "FLOW": flow,
+    "FLOW_NEXT": flow_next,
+    "FLOW_HIGHLIGHT": flow_highlight,
+    "OPEN_FLOW": flow_highlight,
 }
 
 

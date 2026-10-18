@@ -72,7 +72,7 @@ def load_persona_or_exit(path):
     try:
         return parse_persona(path)
     except FileNotFoundError:
-        print(f"[persona] Not found: {path}. Copy data/example/persona.md there and fill it in.")
+        print(f"[persona] Not found: {path}. Copy templates/persona.md there and fill it in.")
     except ValueError as e:
         print(f"[persona] {e}")
     sys.exit(1)
@@ -105,5 +105,5 @@ def persona_to_text(persona):
 if __name__ == "__main__":
     import json
 
-    target = sys.argv[1] if len(sys.argv) > 1 else "data/example/persona.md"
+    target = sys.argv[1] if len(sys.argv) > 1 else "templates/persona.md"
     print(json.dumps(load_persona_or_exit(target), indent=2, ensure_ascii=False))

@@ -1,12 +1,16 @@
-// The class stage: three environments the script switches between.
-// Notebook (hand-written ruled page), Slides, Code (editor tabs + terminal) and Visual (interactive pictures
-// built from the script's [VISUAL] blocks, each in a sandboxed frame the teacher drives with [VISUAL_SET]).
+// The class stage: the environments the script switches between.
+// Notebook (hand-written ruled page), Slides, Code (editor tabs + terminal) and Visual: one board with a tab per
+// picture, holding flow diagrams drawn block by block from [FLOW] and interactive graphs from [VISUAL] (each graph
+// in its own sandboxed frame).
+// Only the environments this class uses get a pill.
 
 import { h, icon, esc } from "./ui.js";
 import { highlightLine } from "./highlight.js";
+import { FlowBoard } from "./flow.js";
 
 const ENVS = [["notebook", "Notebook", "book"], ["slides", "Slides", "slides"], ["code", "Code", "code"],
   ["visual", "Visual", "sparkle"]];
+const PILL_W = 96;
 const VISUAL_READY_MS = 10000;  // a visual that hasn't drawn itself by then is reported as failed
 const VISUAL_SET_MS = 8000;     // the longest a control change (with its animation) may take
 export const NOTE_MS = 26;   // per character, "handwriting"
@@ -14,15 +18,18 @@ export const CODE_MS = 14;   // per character, "typing"
 // A ctl may carry charMs / lineMs to pace writing to a sentence (while_speaking); otherwise these are used.
 
 export class Stage {
-  constructor(slides) {
+  // used: environment keys this class uses (from its script); null = show all.
+  constructor(slides, used = null) {
     this.slides = slides || {};
+    this.envs = ENVS.filter(([key]) => !used || key === "notebook" || used.includes(key));
     this.files = {};          // name -> { lines, tab, body }
     this.current = null;
     this.env = null;
 
-    this.indicator = h("div", { class: "env-indicator", role: "status", "aria-label": "Current environment" },
+    this.indicator = h("div", { class: "env-indicator", role: "status", "aria-label": "Current environment",
+      style: `grid-template-columns: repeat(${this.envs.length}, var(--pill-w, ${PILL_W}px))` },
       h("span", { class: "env-glider" }),
-      ENVS.map(([key, label, ic]) => h("span", { class: "env-pill", dataset: { env: key } }, icon(ic), label)));
+      this.envs.map(([key, label, ic]) => h("span", { class: "env-pill", dataset: { env: key } }, icon(ic), label)));
 
     // Notebook pages: "Lecture" plus one per [NEW_PAGE]. Like the environment pills, the page tabs
     // only show where the teacher is; the script turns the pages.
@@ -54,6 +61,9 @@ export class Stage {
       h("div", { class: "vz-win" }, h("div", { class: "vz-head" }, icon("sparkle"), this.visualTitle, this.visualTabs), this.visualBody));
     window.addEventListener("message", (e) => this._onVisualMessage(e));
 
+    this.flows = {};          // id -> { board, tab, title }
+    this.currentFlow = null;  // diagrams share the Visual board (title, tabs, body) with the graphs
+
     this.el = h("div", { class: "stage-envs" }, this.notebook, this.slidesEl, this.codeEl, this.visualEl);
     this.setEnv("notebook");
   }
@@ -61,10 +71,11 @@ export class Stage {
   setEnv(env) {
     if (this.env === env) return;
     this.env = env;
-    const i = ENVS.findIndex(e => e[0] === env);
+    const i = Math.max(0, this.envs.findIndex(e => e[0] === env));
     this.indicator.style.setProperty("--i", i);
     this.indicator.querySelectorAll(".env-pill").forEach(p => p.classList.toggle("active", p.dataset.env === env));
-    for (const [key, el] of [["notebook", this.notebook], ["slides", this.slidesEl], ["code", this.codeEl], ["visual", this.visualEl]])
+    for (const [key, el] of [["notebook", this.notebook], ["slides", this.slidesEl], ["code", this.codeEl],
+      ["visual", this.visualEl]])
       el.classList.toggle("active", key === env);
   }
 
@@ -223,18 +234,77 @@ export class Stage {
     return true;
   }
 
-  // ---------- visuals ----------
-  _visualEmpty() { return h("div", { class: "vz-empty" }, icon("sparkle"), "No visual yet"); }
+  // ---------- the Visual board: flow diagrams and graphs, one tab each ----------
+  _visualEmpty() { return h("div", { class: "vz-empty" }, icon("sparkle"), "Nothing drawn yet"); }
 
-  _activateVisual(id) {
-    const v = this.visuals[id];
-    this.currentVisual = id;
-    Object.entries(this.visuals).forEach(([k, x]) => {
-      x.frame.classList.toggle("off", k !== id);  // still rendered, so its animations keep running
-      x.tab.classList.toggle("active", k === id);
+  _boardTabs() {
+    this.visualTabs.classList.toggle("hidden", Object.keys(this.flows).length + Object.keys(this.visuals).length < 2);
+  }
+
+  _addToBoard(el, tab) {
+    this.visualBody.querySelector(".vz-empty")?.remove();
+    this.visualBody.append(el);
+    this.visualTabs.append(tab);
+  }
+
+  // Show one picture on the board (a diagram or a graph) and hide the others.
+  _showOnBoard(kind, id) {
+    this.currentFlow = kind === "flow" ? id : null;
+    this.currentVisual = kind === "graph" ? id : null;
+    Object.entries(this.flows).forEach(([k, x]) => {
+      x.wrap.classList.toggle("hidden", !(kind === "flow" && k === id));
+      x.tab.classList.toggle("active", kind === "flow" && k === id);
     });
-    this.visualTitle.textContent = v.title;
-    this.visualTabs.classList.toggle("hidden", Object.keys(this.visuals).length < 2);
+    Object.entries(this.visuals).forEach(([k, x]) => {
+      x.frame.classList.toggle("off", !(kind === "graph" && k === id));  // still rendered: its animations keep running
+      x.tab.classList.toggle("active", kind === "graph" && k === id);
+    });
+    this.visualTitle.textContent = (kind === "flow" ? this.flows[id] : this.visuals[id]).title;
+    this._boardTabs();
+  }
+
+  _activateFlow(id) { this._showOnBoard("flow", id); }
+  _activateVisual(id) { this._showOnBoard("graph", id); }
+
+  // A new, empty diagram; [FLOW_NEXT] draws its blocks one by one.
+  showFlow(id, flow) {
+    this.setEnv("visual");
+    if (!this.flows[id]) {
+      const board = new FlowBoard({ id, ...flow });
+      const wrap = h("div", { class: "flow-wrap" }, board.svg);
+      const tab = h("span", { class: "vz-tab" }, flow.title);
+      this.flows[id] = { board, wrap, tab, title: flow.title };
+      this._addToBoard(wrap, tab);
+    }
+    this._activateFlow(id);
+    return true;
+  }
+
+  flowNext(id, animate = true) {
+    const f = this.flows[id];
+    if (!f) return null;
+    if (animate) { this.setEnv("visual"); this._activateFlow(id); }
+    return f.board.next(animate);
+  }
+
+  flowHighlight(id, block) {
+    const f = this.flows[id];
+    if (!f) return false;
+    this.setEnv("visual");
+    this._activateFlow(id);
+    return f.board.highlight(block);
+  }
+
+  openFlow(id) {
+    if (!this.flows[id]) return false;
+    this.setEnv("visual");
+    this._activateFlow(id);
+    return true;
+  }
+
+  // What each diagram shows now, for the doubt agent.
+  flowStates() {
+    return Object.entries(this.flows).map(([id, f]) => `${id}: ${f.board.describe()}`).join("\n");
   }
 
   // Load a built visual into its own sandboxed frame and wait until it has drawn itself.
@@ -247,9 +317,7 @@ export class Stage {
       const tab = h("span", { class: "vz-tab" }, title);
       v = this.visuals[id] = { frame, tab, title, state: "", errors: [], waiting: new Map() };
       v.ready = new Promise(resolve => { v._ready = resolve; });
-      this.visualBody.querySelector(".vz-empty")?.remove();
-      this.visualBody.append(frame);
-      this.visualTabs.append(tab);
+      this._addToBoard(frame, tab);
       // Loaded as srcdoc (fetched like any API call): some browsers and embedders block framed page loads.
       // The sandbox (scripts only, opaque origin) and the page's own CSP still apply.
       fetch(url).then(r => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))))
@@ -303,11 +371,12 @@ export class Stage {
   }
 
   // Where the class is looking (environment, notebook page, open file, visual), to come back after a doubt.
-  view() { return { env: this.env, page: this.page, file: this.current, visual: this.currentVisual }; }
+  view() { return { env: this.env, page: this.page, file: this.current, visual: this.currentVisual, flow: this.currentFlow }; }
 
   restoreView(v) {
     if (!v) return;
     if (v.visual && this.visuals[v.visual]) this._activateVisual(v.visual);
+    if (v.flow && this.flows[v.flow]) this._activateFlow(v.flow);
     if (v.file && this.files[v.file]) this._openFile(v.file);
     if (v.page != null && this.pages[v.page]) this.showPage(v.page);
     this.setEnv(v.env || "notebook");
@@ -363,6 +432,8 @@ export class Stage {
     this.termBody.replaceChildren();
     this.slideBox.replaceChildren(h("div", { class: "slide-empty" }, icon("slides"), "No slide shown yet"));
     this.slideNum.textContent = "";
+    Object.values(this.flows).forEach(f => { f.wrap.remove(); f.tab.remove(); });
+    this.flows = {}; this.currentFlow = null;
     Object.values(this.visuals).forEach(v => { v.frame.remove(); v.tab.remove(); });
     this.visuals = {}; this.currentVisual = null;
     this.visualTitle.textContent = "";

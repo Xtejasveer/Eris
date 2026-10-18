@@ -8,7 +8,7 @@ The doubt agent reads it (read_board tool) and its answers are checked against i
 def new_board():
     return {"section": "Introduction", "files": {}, "notebook": [], "pages": [["Lecture", []]],
             "slides_shown": [], "current_slide": None, "has_run": False, "last_output": "", "latest_file": None,
-            "visuals": {}, "latest_visual": None}
+            "visuals": {}, "latest_visual": None, "flows": {}, "latest_flow": None}
 
 
 def _page_lines(board, section):
@@ -53,6 +53,14 @@ def add_segments(board, segments):
                 visual["values"][args["control"]] = args["value"]
             elif name == "VISUAL_SET":
                 visual["presses"][args["control"]] = visual["presses"].get(args["control"], 0) + 1
+        elif name == "FLOW":
+            board["flows"][args["id"]] = {"title": args["title"], "blocks": args.get("blocks", []),
+                                          "edges": args.get("edges", []), "revealed": 0}
+            board["latest_flow"] = args["id"]
+        elif name in ("FLOW_NEXT", "FLOW_HIGHLIGHT", "OPEN_FLOW") and args["id"] in board.get("flows", {}):
+            board["latest_flow"] = args["id"]
+            if name == "FLOW_NEXT":
+                board["flows"][args["id"]]["revealed"] += 1
         elif name in ("NOTE", "WRITE", "NOTE_TITLE"):
             lines = args["text"].splitlines()
             board["notebook"].extend(lines)
@@ -69,7 +77,11 @@ def rebuild(segments, upto):
 def describe(board, slides=None):
     """Readable board for the doubt agent: notebook by page and section, code, slides shown."""
     slides = slides or {}
-    parts = ["# NOTEBOOK (quote a line exactly in [LOOK_BACK text=\"...\"] to scroll back to it)"]
+    from figures import describe_environments
+    parts = ["# ENVIRONMENTS IN THIS CLASS (use only these in your answers)\n"
+             + describe_environments(board.get("environments") or {"notebook": True, "slides": True, "code": True,
+                                                                    "graphs": True}),
+             "\n# NOTEBOOK (quote a line exactly in [LOOK_BACK text=\"...\"] to scroll back to it)"]
     for title, groups in board["pages"]:
         parts.append(f"\n## Page: {title}")
         for section, lines in groups:
@@ -95,6 +107,21 @@ def describe(board, slides=None):
             parts.append(f"  control {describe_control(c)}{extra}")
     if not board.get("visuals"):
         parts.append("  none yet")
+    parts.append("\n# DIAGRAMS ON THE BOARD (point at a drawn block with [FLOW_HIGHLIGHT id=\"...\" block=\"...\"], "
+                 "show one again with [OPEN_FLOW id=\"...\"])")
+    for fid, f in board.get("flows", {}).items():
+        latest = "  <- the most recent diagram" if fid == board.get("latest_flow") else ""
+        parts.append(f"\n## {fid}: {f['title']}{latest}")
+        for n, b in enumerate(f["blocks"]):
+            parts.append(f"  block {b['id']}: {b['label']}{'' if n < f['revealed'] else '  (not drawn yet)'}")
+    if not board.get("flows"):
+        parts.append("  none yet")
+    from figures import describe as describe_figures, flows as material_flows
+    from figures import graphs as material_graphs
+    parts.append("\n# DIAGRAMS AND STEP LISTS IN THE MATERIAL (a new [FLOW] must draw one of these, with from=\"...\")\n"
+                 + describe_figures(material_flows(board.get("figures"))))
+    parts.append("\n# CHARTS IN THE MATERIAL (a new [VISUAL] must recreate one of these, with from=\"...\")\n"
+                 + describe_figures(material_graphs(board.get("figures"))))
     shown = {}
     for section, n in board["slides_shown"]:
         shown.setdefault(n, section)

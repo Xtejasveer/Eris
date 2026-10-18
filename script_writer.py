@@ -5,6 +5,7 @@ import sys
 from datetime import datetime
 
 import config
+import figures
 from persona import persona_to_text
 from prompts import research_prompt, script_prompt
 from script_parser import estimate_minutes, parse_script, word_budget
@@ -96,14 +97,112 @@ def _limit_errors(segments):
     return errors
 
 
-def check_generated(text, budget, slide_count):
+def _flow_errors(segments):
+    """Every diagram block is drawn, and the sentence about it comes after its [FLOW_NEXT], not before."""
+    import re as _re
+    from script_checks import said_too_early
+    errors, flows = [], {}
+    for i, seg in enumerate(segments):
+        a = seg.get("args", {})
+        if seg.get("name") == "FLOW":
+            flows[a["id"]] = [0, [b["label"] for b in a.get("blocks", [])]]
+        elif seg.get("name") == "FLOW_NEXT" and a["id"] in flows:
+            k = flows[a["id"]][0]
+            flows[a["id"]][0] += 1
+            blocks = flows[a["id"]][1]
+            before = segments[i - 1] if i else {}
+            after = segments[i + 1] if i + 1 < len(segments) else {}
+            said_before = _re.split(r"(?<=[.!?])\s+", before["text"].strip())[-1] if before.get("kind") == "say" else ""
+            said_after = after["text"].split(". ")[0] if after.get("kind") == "say" else ""
+            if said_too_early(said_before, said_after, a.get("label", ""), blocks[k + 1] if k + 1 < len(blocks) else ""):
+                errors.append(f'the sentence about block "{a.get("label")}" comes before its [FLOW_NEXT id="{a["id"]}"]; '
+                              "put the [FLOW_NEXT] first, then the sentence naming the block, so it appears as you say it")
+    for fid, (shown, blocks) in flows.items():
+        if shown < len(blocks):
+            errors.append(f'the diagram "{fid}" draws only {shown} of its {len(blocks)} blocks; add a [FLOW_NEXT id="{fid}"] '
+                          "for each remaining block, each followed by a sentence naming it")
+    return errors
+
+
+def _doubt_check_errors(segments):
+    """The prompt asks for a question break after each of the first three concept sections and one at the end."""
+    from script_fixes import concept_sections
+    want = min(config.MAX_DOUBT_CHECKS, len(concept_sections(segments))) + 1
+    have = sum(1 for s in segments if s.get("name") == "DOUBT_CHECK")
+    errors = []
+    if have < want:
+        errors.append(f"the script has {have} [DOUBT_CHECK](s); put one at the end of each of the first "
+                      f"{want - 1} concept sections and one as the very last line ({want} in all)")
+    errors += _flow_errors(segments)
+    from script_fixes import early_doubt_checks
+    for section in early_doubt_checks(segments):
+        errors.append(f'section "{section}" asks for doubts in the middle: move its [DOUBT_CHECK] to the end of the '
+                      "section, after everything it teaches (just before the next [SECTION])")
+    return errors
+
+
+def visual_source_errors(segments, figs):
+    """A [VISUAL] is only allowed for a graph in the material: [(visual id, problem)] for the others."""
+    out, known = [], figures.graphs(figs)
+    listed = "; ".join(f'from="{f["ref"]}" ({f["title"]})' for f in known)
+    for seg in segments:
+        if seg.get("name") != "VISUAL":
+            continue
+        a = seg["args"]
+        if not known:
+            out.append((a["id"], f'[VISUAL id="{a["id"]}"]: the material has no graph, so the script makes none; remove '
+                                 "this [VISUAL] and its [VISUAL_SET]s (show a slide or write a note instead)"))
+        elif not figures.matches(a.get("from"), figs):
+            out.append((a["id"], f'[VISUAL id="{a["id"]}"] must recreate a graph from the material: add from="..." with '
+                                 f"one of: {listed}; or remove it"))
+    return out
+
+
+def environment_errors(segments, env):
+    """Markers from an environment this class doesn't have (its material has no code / no graphs / no slides)."""
+    if not env:
+        return []
+    errors = []
+    for name in ("code", "graphs", "slides"):
+        if env.get(name):
+            continue
+        used = sorted({s["name"] for s in segments if s.get("name") in figures.ENV_MARKERS[name]})
+        if used:
+            errors.append(f"this class has no {name} (the teacher's material has none), so remove every "
+                          f"{', '.join(f'[{u}]' for u in used)} and teach it in the notebook instead")
+    return errors
+
+
+def flow_source_errors(segments, figs):
+    """A [FLOW] is only allowed for a diagram or a written step list in the material: [(id, problem)]."""
+    out, known = [], figures.flows(figs)
+    listed = "; ".join(f'from="{f["ref"]}" ({f["title"]})' for f in known)
+    for seg in segments:
+        if seg.get("name") != "FLOW":
+            continue
+        a = seg["args"]
+        if not known:
+            out.append((a["id"], f'[FLOW id="{a["id"]}"]: the material has no diagram or list of steps, so the script '
+                                 "draws none; remove this [FLOW] and its [FLOW_NEXT]s (write a note instead)"))
+        elif not figures.matches(a.get("from"), figs, kind="flow"):
+            out.append((a["id"], f'[FLOW id="{a["id"]}"] must draw a diagram or list of steps from the material: '
+                                 f'add from="..." with one of: {listed}; or remove it'))
+    return out
+
+
+def check_generated(text, budget, slide_count, figs=None, env=None):
     """parse_script plus checks that only make sense for a freshly generated script."""
     segments, errors = parse_script(text, slide_count)
+    errors += environment_errors(segments, env)
+    if figs is not None:
+        errors += [msg for _, msg in visual_source_errors(segments, figs)]
+        errors += [msg for _, msg in flow_source_errors(segments, figs)]
     if segments and segments[0].get("name") != "SECTION":
         errors.append("the script must start with [SECTION title=\"Opening\"]; "
                       "your final message must contain the WHOLE script, not just the end")
     errors += _notebook_errors(segments)
     errors += _limit_errors(segments)
+    errors += _doubt_check_errors(segments)
     for seg in segments:
         if seg.get("name") == "HIGHLIGHT" and "text" not in seg["args"]:
             errors.append(f'[HIGHLIGHT file="{seg["args"]["file"]}" lines="{seg["args"]["lines"]}"] uses a line number; '
@@ -164,12 +263,21 @@ def run_generate(lecture_id):
     args = (persona, persona_to_text(persona), manifest["topic"], manifest["duration_min"], budget)
     prompt = script_prompt(*args)  # the writer: no tools, so no tool instructions
     print(f"[generate] step 1/2: researching the material with {config.LLM_MODEL} ...")
-    notes = run_research(research_prompt(*args), f"script_{lecture_id}")
+    env = figures.lecture_environments(lecture_id, manifest, count_slides(lecture_id))
+    env_text = "\n\n# Environments for this class\n" + figures.describe_environments(env)
+    notes = run_research(research_prompt(*args) + env_text, f"script_{lecture_id}")
+    figs = figures.load(lecture_id)  # graphs and diagrams found in the material at index time
+    notes += env_text
+    notes += ("\n\n# Diagrams and step lists in the material (the only processes you may draw with [FLOW])\n"
+              + figures.describe(figures.flows(figs)))
+    if figures.graphs(figs):
+        how = ("make each interactive with [VISUAL]" if env.get("graphs") else "explain each on its slide")
+        notes += f"\n\n# Graphs in the material ({how})\n" + figures.describe(figures.graphs(figs))
     print(f"[generate] step 2/2: writing the script (~{budget} words) in one message, no tools ...")
     writer = ScriptWriter(prompt)
     slides = count_slides(lecture_id)
 
-    pipe = ScriptPipeline(writer, budget, slides, notes)
+    pipe = ScriptPipeline(writer, budget, slides, notes, figs, env)
     text, segments, errors = pipe.until_valid(writer.write(notes, budget))
     if errors:  # e.g. far too short: code can't repair that, so a fresh writer tries once more
         print(f"[generate] {len(errors)} problem(s) left; a fresh writer rewrites the script once more")

@@ -63,6 +63,12 @@
     for (const fn of handlers[name] || []) {
       try { await fn(value); } catch (e) { report(e); }
     }
+    if (Visual._needsRedraw) {  // the graph helper grew an axis mid-draw: draw once more at the new scale
+      Visual._needsRedraw = false;
+      for (const fn of handlers[name] || []) {
+        try { await fn(value); } catch (e) { report(e); }
+      }
+    }
   }
 
   // Run changes one at a time, so a quick second click never interleaves with an animation.
@@ -153,14 +159,14 @@
     }
     if (c.type === "slider") {
       const from = +values[c.name], to = +value;
-      const steps = Math.min(12, Math.max(1, Math.round(Math.abs(to - from) / c.step)));
+      const steps = Math.min(24, Math.max(1, Math.round(Math.abs(to - from) / c.step)));
       for (let i = 1; i <= steps; i++) {
         let v = i === steps ? to : from + ((to - from) * i) / steps;
         v = Math.round(v / c.step) * c.step;
         values[c.name] = +v.toFixed(6);
         syncWidget(c);
         await fire(c.name, values[c.name]);
-        await Visual.sleep(steps > 1 ? 60 : 0);
+        await Visual.sleep(steps > 1 ? Math.round(900 / steps) : 0);  // about a second for the whole drag
       }
       return;
     }

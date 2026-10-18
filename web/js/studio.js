@@ -1,7 +1,7 @@
 // Studio: upload material, describe the teacher, generate, review/edit and approve the script.
 
 import { api } from "./api.js";
-import { h, icon, toast, confirmDialog, sleep } from "./ui.js";
+import { h, icon, toast, confirmDialog, sleep, formatDuration } from "./ui.js";
 import { lectureHeader } from "./header.js";
 import { renderScriptDoc, scriptStats } from "./script-view.js";
 
@@ -105,11 +105,41 @@ export async function mountStudio(lectureId, ctx) {
   const generateBtn = h("button", { class: "btn primary lg block", onclick: generate }, icon("sparkle"), "Generate script");
   const resetBtn = h("button", { class: "btn ghost danger sm", onclick: reset }, icon("reset"), "Reset lecture");
 
+  // Which classroom environments this material unlocks. The notebook and slides are always used; code and
+  // diagrams only when the material has them (found when the material is indexed). Graphs show only if turned on.
+  const ENV_INFO = [["notebook", "book", "Notebook"], ["slides", "slides", "Slides"], ["code", "code", "Code"],
+    ["visual", "sparkle", "Visual"]];
+  const envChips = (env) => h("div", { class: "env-chips" }, ENV_INFO.map(([key, ic, base]) => {
+    // Visual is on when the material unlocks diagrams, graphs or both; the chip says which.
+    const on = key === "visual" ? env.flows || env.graphs : env[key];
+    const what = [env.flows && "diagrams", env.graphs && "graphs"].filter(Boolean).join(" + ");
+    const label = key === "visual" && what ? `${base}: ${what}` : base;
+    return h("span", { class: `env-chip ${on ? "on" : "off"}`, title: on ? `${label}: used in this class`
+      : `${label}: not in this class (the material has none)` }, icon(ic), label, on ? icon("check") : null);
+  }));
+  const env = data.manifest?.environments;
+  const envNote = h("div", { class: "env-note" },
+    h("div", { class: "env-note-head" }, icon("info"), h("strong", {}, "What the AI teacher can use")),
+    h("p", {}, "It always teaches with the notebook and your slides. It writes and runs code only if your material ",
+      "contains code. On the Visual board it draws a diagram, block by block, only if your slides or PDF contain a ",
+      "diagram or a numbered list of steps (like 1. 2. 3. or A → B → C), and an interactive graph only if your slides ",
+      "contain a chart. Add code, step lists or charts to your material so the AI teacher can explain them better."),
+    env ? envChips(env) : h("small", { class: "muted" }, "Generate the script to see which environments this material unlocks."));
+
   const materialStep = h("span", { class: "step-num" }, "1");
-  const left = h("div", { class: "studio-left" },
+  // Once a script exists, the setup folds into this summary so the script gets the room.
+  const summaryBody = h("div", { class: "setup-summary-body" });
+  const regenBtn = h("button", { class: "btn primary block", onclick: () => generate() }, icon("sparkle"), "Regenerate script");
+  const setupSummary = h("section", { class: "card setup-summary" },
+    h("div", { class: "card-header" }, icon("layers"), h("h3", {}, "Lecture setup"), h("div", { class: "spacer" }),
+      h("button", { class: "btn ghost sm", onclick: () => setFolded(false) }, icon("edit"), "Edit setup")),
+    summaryBody, h("div", { class: "setup-summary-foot" }, regenBtn));
+  const doneBtn = h("button", { class: "btn ghost sm", onclick: () => setFolded(true) }, icon("chevron"), "Done");
+  const setupFull = h("div", { class: "setup-full" },
+    h("div", { class: "setup-full-head" }, h("strong", {}, "Lecture setup"), h("div", { class: "spacer" }), doneBtn),
     h("section", { class: "card" },
       h("div", { class: "card-header" }, materialStep, h("h3", {}, "Study material")),
-      h("div", { class: "card-body stack" }, drop, fileList)),
+      h("div", { class: "card-body stack" }, drop, fileList, envNote)),
     h("section", { class: "card" },
       h("div", { class: "card-header" }, h("span", { class: "step-num" }, "2"), h("h3", {}, "Lecture")),
       h("div", { class: "card-body grid-2" },
@@ -119,16 +149,39 @@ export async function mountStudio(lectureId, ctx) {
     h("section", { class: "card" },
       h("div", { class: "card-header" }, h("span", { class: "step-num" }, "3"), h("h3", {}, "Teacher persona"),
         h("div", { class: "spacer" }),
-        h("button", { class: "btn ghost sm", title: "Fill with data/example/persona.md", onclick: () => {
+        h("button", { class: "btn ghost sm", title: "Fill with templates/persona.md", onclick: () => {
           Object.assign(persona, structuredClone(template.values)); renderPersona(); toast("Loaded the example persona");
         } }, "Use example")),
       personaBody),
     h("div", { class: "generate-bar" }, generateBtn,
       h("div", { class: "generate-meta" }, h("small", { class: "muted" }, "Indexes the material, then writes the script. Takes 1–3 minutes."), resetBtn)));
+  const left = h("div", { class: "studio-left" }, setupSummary, setupFull);
+
+  function renderSummary() {
+    const files = data.files.filter(f => f !== "persona.md");
+    const row = (ic, text) => h("div", { class: "sum-row" }, icon(ic), h("span", {}, text));
+    summaryBody.replaceChildren(...[
+      row("file", files.length ? `${files.length} file${files.length > 1 ? "s" : ""}: ${files.join(", ")}` : "No material yet"),
+      row("user", persona.Teacher?.Name || "No teacher yet"),
+      row("clock", `${topicInput.value || "No topic"} · ${durationInput.value} min`),
+      data.manifest?.environments ? envChips(data.manifest.environments) : null].filter(Boolean));
+  }
+
+  // Folded: the setup is a summary card (default once a script exists); unfolded: everything to edit.
+  let folded = !!data.script_md;
+  function setFolded(on) {
+    folded = on && !!data.script_md;
+    page.classList.toggle("folded", folded);
+    doneBtn.classList.toggle("hidden", !data.script_md);
+    if (folded) renderSummary();
+  }
 
   // ---------- right: script ----------
   const tabBtn = (key, label, ic) => h("button", { class: "tab", dataset: { tab: key }, onclick: () => setTab(key) }, icon(ic), label);
-  const tabs = h("div", { class: "tabs" }, tabBtn("preview", "Preview", "eye"), tabBtn("edit", "Edit", "edit"), tabBtn("log", "Log", "log"));
+  const qualityBadge = h("span", { class: "tab-badge" });
+  const tabs = h("div", { class: "tabs" }, tabBtn("preview", "Preview", "eye"), tabBtn("quality", "Quality", "checkCircle"),
+    tabBtn("edit", "Edit", "edit"), tabBtn("log", "Progress", "log"));
+  tabs.querySelector('[data-tab="quality"]').append(qualityBadge);
   const saveBtn = h("button", { class: "btn sm", onclick: save, disabled: true }, icon("save"), "Save");
   const approveBtn = h("button", { class: "btn success sm", onclick: approve }, icon("check"), "Approve");
   const classBtn = h("a", { class: "btn primary sm", href: `#/lecture/${encodeURIComponent(lectureId)}/class` }, icon("play"), "Start class");
@@ -147,13 +200,16 @@ export async function mountStudio(lectureId, ctx) {
   const editPane = h("div", { class: "script-pane edit" }, h("div", { class: "editor" }, gutter, textarea));
   const logList = h("div", { class: "log-lines" });
   const logStatus = h("div", { class: "log-status" });
-  const logPane = h("div", { class: "script-pane log" }, logStatus, logList);
+  const logActions = h("div", { class: "progress-actions" });
+  const logPane = h("div", { class: "script-pane log" }, h("div", { class: "progress-card" }, logStatus, logList, logActions));
+  const qualityPane = h("div", { class: "script-pane quality" });
 
   const right = h("section", { class: "card studio-right" },
     h("div", { class: "card-header script-head" }, h("h3", {}, "Lecture script"), tabs, h("div", { class: "spacer" }), saveBtn, approveBtn, classBtn),
-    statsEl, notices, previewPane, editPane, logPane);
+    statsEl, notices, previewPane, qualityPane, editPane, logPane);
 
-  main.replaceChildren(header, h("div", { class: "page studio" }, left, right));
+  const page = h("div", { class: "page studio" }, left, right);
+  main.replaceChildren(header, page);
 
   function renderGutter() {
     const n = textarea.value.split("\n").length;
@@ -182,51 +238,85 @@ export async function mountStudio(lectureId, ctx) {
           return h("li", {}, line ? h("button", { class: "linkish", onclick: () => jumpToLine(line) }, `Line ${line}`) : null,
             h("span", {}, line ? e.replace(/^line \d+:\s*/, " ") : e));
         })))));
-    } else if (status() === "approved") {
-      notices.append(h("div", { class: "callout ok" }, icon("checkCircle"), h("div", {}, "Approved. The class is ready to start.")));
     }
-    const jc = judgeCard();
-    if (jc) notices.append(jc);
+    const q = qualitySummary();
+    if (q && state.tab !== "quality") notices.append(h("button", { class: `quality-line ${q.ok ? "ok" : "warn"}`, onclick: () => setTab("quality") },
+      icon(q.ok ? "checkCircle" : "alert"), h("span", {}, q.text), icon("chevron")));
   }
 
-  // Jev's quality check from generation (judge.json): which checks passed and what failed.
+  // "All 10 checks passed" / "2 things to look at", for the tab badge and the line above the script.
+  function qualitySummary() {
+    const j = data.judge;
+    if (!j || state.dirty || j.error || !j.findings?.length) return null;
+    const byCheck = new Map();
+    for (const f of j.findings) if (PLAIN_CHECKS[f.check]) byCheck.set(f.check, (byCheck.get(f.check) ?? true) && f.passed);
+    const total = byCheck.size, failed = [...byCheck.values()].filter(v => !v).length;
+    return { ok: !failed, failed, total,
+      text: failed ? `Quality check: ${failed} thing${failed > 1 ? "s" : ""} to look at` : `Quality check: all ${total} passed`,
+      badge: failed ? `${failed} to fix` : `✓ ${total}/${total}` };
+  }
+
+  function renderQuality() {
+    const q = qualitySummary();
+    qualityBadge.textContent = q ? q.badge : "";
+    qualityBadge.className = `tab-badge ${q ? (q.ok ? "ok" : "warn") : "hidden"}`;
+    const card = judgeCard();
+    qualityPane.replaceChildren(card ? h("div", { class: "quality-wrap" }, card) : h("div", { class: "empty" },
+      h("div", { class: "empty-icon" }, icon("checkCircle")), h("h3", {}, "No quality check yet"),
+      h("p", {}, "It runs when the script is generated.")));
+  }
+
+  // The quality check from generation (judge.json), in the teacher's words: what was checked, what passed, and
+  // where to look when something didn't. Technical details (writer rounds, code repairs) stay in the server terminal.
+  const PLAIN_CHECKS = {
+    covers_must_cover: ["Teaches everything in your “Must cover” list", "Something from “Must cover” is missing."],
+    respects_avoid: ["Stays away from the topics you listed under “Avoid”", "It touches a topic you asked to avoid."],
+    opening_absence: ["The opening says why you're away and passes on your message", "The opening misses your reason or your message."],
+    closing_next_class: ["The closing mentions the next class and what to prepare", "The closing misses the next class or the preparation."],
+    sounds_like_teacher: ["Sounds like you: your tone, pace and habits", "It doesn't sound much like your teaching style yet."],
+    notes_match_code: ["Notebook examples match the programs", "A notebook example doesn't match its program."],
+    narration_matches_output: ["Program results are explained correctly", "What is said about a program's result is not what it prints."],
+    narration_is_speech: ["Everything spoken sounds like natural speech", "Some spoken lines sound like notes or symbols, not speech."],
+    graph_matches_text: ["Graphs agree with what is said about them", "What is said about a graph doesn't match the graph."],
+    graph_matches_material: ["Graphs match the ones in your slides", "A graph shows something different from your slide's graph."],
+    flow_matches_material: ["Diagrams follow the steps in your material", "A diagram's steps differ from your material."],
+    has_worked_example: ["Each topic has a worked example with real numbers", "A topic has no worked example yet."],
+  };
+  const CHECK_ORDER = Object.keys(PLAIN_CHECKS);
+  // While-speaking pairs are checked too (is the sentence about what appears?) but they adjust timing, not quality.
+
   function judgeCard() {
     const j = data.judge;
     if (!j || state.dirty) return null;
-    const rounds = j.rounds || [], autoFixes = j.auto_fixes || [];
-    const history = rounds.length
-      ? `${rounds.length} feedback round(s) with the writer: ${rounds.filter(r => r.kind === "rules").length} for rules, ${rounds.filter(r => r.kind === "quality").length} for quality${rounds.some(r => r.kind === "rewrite") ? ", 1 fresh rewrite" : ""}`
-      : "The writer's first draft passed every rule check.";
-    const extras = [
-      h("p", { class: "judge-pair" }, icon("chat"), history),
-      ...autoFixes.map(f => h("p", { class: "judge-pair warn" }, icon("alert"), `Code fixed this after the writer didn't: ${f}`)),
-      ...(j.advice || []).map(a => h("p", { class: "judge-pair" }, icon("info"), `Advice the writer didn't fully follow: ${a}`)),
-      ...(j.pairs || []).filter(p => p.unflag).map(p => h("p", { class: "judge-pair" }, icon("info"),
-        `Written before speaking instead (the sentence isn't about it): “${p.said.slice(0, 70)}…” in ${p.section}`)),
-    ];
-    if (j.error) return h("div", { class: "judge-card" },
-      h("div", { class: "judge-head" }, icon("info"), h("span", {}, "Quality check did not run: " + j.error)), ...extras);
-    const failed = j.findings.filter(f => !f.passed);
-    const check = (f) => f.check.replaceAll("_", " ").replace(/^./, c => c.toUpperCase());
-    const label = (f) => `${check(f)}${f.section ? ` · ${f.section}` : ""}`;
-    return h("details", { class: `judge-card ${j.blockers ? "bad" : "ok"}`, open: failed.length > 0 || autoFixes.length > 0 || (j.advice || []).length > 0 },
-      h("summary", {}, icon(j.blockers ? "alert" : "checkCircle"),
-        h("strong", {}, "Quality check"),
-        h("span", { class: "judge-meta" }, `score ${Math.round(j.score * 100)}% · ${j.findings.length - failed.length}/${j.findings.length} checks passed`
-          + (j.pairs?.length ? ` · ${j.pairs.length - (j.unflagged || 0)}/${j.pairs.length} while-speaking pairs kept` : "")),
-        h("span", { class: "judge-by" }, j.model)),
-      failed.length ? h("ul", { class: "judge-list" }, failed.map(f => h("li", {},
-        h("span", { class: `badge ${f.severity === "blocker" ? "failed" : "draft"}` }, f.severity),
-        h("div", {}, h("strong", {}, label(f)), h("small", {}, `${f.fix} (yes: ${Math.round(f.value * 100)}%)`)))))
-        : h("p", { class: "judge-ok" }, "Every check passed."),
-      ...extras);
+    if (j.error) return h("div", { class: "judge-card" }, h("div", { class: "judge-head" }, icon("info"),
+      h("span", {}, "The quality check couldn't run this time. The script was still checked for mistakes; you can review it below.")));
+    // One line per check, however many sections it was asked for; a check passes only if it passed everywhere.
+    const byCheck = new Map();
+    for (const f of j.findings || []) {
+      if (!PLAIN_CHECKS[f.check]) continue;
+      const c = byCheck.get(f.check) || { passed: true, sections: [] };
+      if (!f.passed) { c.passed = false; if (f.section) c.sections.push(f.section); }
+      byCheck.set(f.check, c);
+    }
+    const checks = CHECK_ORDER.filter(k => byCheck.has(k)).map(k => ({ key: k, ...byCheck.get(k) }));
+    const failed = checks.filter(c => !c.passed);
+    const summary = failed.length ? `${checks.length - failed.length} of ${checks.length} checks passed` : `All ${checks.length} checks passed`;
+    return h("details", { class: `judge-card ${failed.length ? "bad" : "ok"}`, open: true },
+      h("summary", {}, icon(failed.length ? "alert" : "checkCircle"), h("strong", {}, "Quality check"),
+        h("span", { class: "judge-meta" }, summary)),
+      h("ul", { class: "judge-checks" }, checks.map(c => h("li", { class: c.passed ? "ok" : "bad" },
+        icon(c.passed ? "check" : "alert"),
+        h("div", {}, h("span", {}, PLAIN_CHECKS[c.key][0]),
+          c.passed ? null : h("small", {}, PLAIN_CHECKS[c.key][1]
+            + (c.sections.length ? ` Look at: ${[...new Set(c.sections)].join(", ")}.` : "")))))),
+      failed.length ? h("p", { class: "judge-hint" }, "Fix these in Edit, or click Generate script again.") : null);
   }
 
   function renderStats() {
     const s = scriptStats(state.segments);
     const est = data.manifest?.estimated_min;
     const item = (ic, v, l) => h("div", { class: "s-item" }, icon(ic), h("strong", {}, v), h("span", {}, l));
-    statsEl.replaceChildren(item("layers", s.sections, "sections"), item("clock", est ? `${est}` : `~${Math.round(s.words / 130)}`, "min"),
+    statsEl.replaceChildren(item("layers", s.sections, "sections"), item("clock", est ? formatDuration(est) : `~${formatDuration(s.words / 115)}`, ""),
       item("book", s.notes, "notes"), item("code", s.files, "programs"), item("question", s.breaks, "question breaks"));
     statsEl.classList.toggle("hidden", !state.segments.length);
   }
@@ -255,25 +345,51 @@ export async function mountStudio(lectureId, ctx) {
   }
 
   function setTab(key) {
+    const job = data.job?.status;
+    const generating = job === "running";
+    if (generating) key = "log";  // the old script is being replaced: only the progress is shown
     state.tab = key;
-    tabs.querySelectorAll(".tab").forEach(b => b.classList.toggle("active", b.dataset.tab === key));
+    const visible = { preview: !generating, quality: !generating && !!data.judge, edit: !generating,
+      log: generating || job === "failed" };
+    tabs.querySelectorAll(".tab").forEach(b => {
+      b.classList.toggle("active", b.dataset.tab === key);
+      b.classList.toggle("hidden", !visible[b.dataset.tab]);
+    });
     previewPane.classList.toggle("hidden", key !== "preview");
+    qualityPane.classList.toggle("hidden", key !== "quality");
     editPane.classList.toggle("hidden", key !== "edit");
     logPane.classList.toggle("hidden", key !== "log");
+    statsEl.classList.toggle("hidden", generating || !state.segments.length);
+    notices.classList.toggle("hidden", generating || key === "log");
+    right.classList.toggle("generating", key === "log");
+    [saveBtn, approveBtn, classBtn].forEach(b => b.classList.toggle("gone", generating));
     if (key === "edit") renderGutter();
+    renderNotices();
   }
 
+  // Generation progress in plain steps (the technical log stays in the server's terminal).
   function renderLog() {
-    const job = data.job || { status: "idle", log: [] };
-    logList.replaceChildren(...job.log.map(line => h("div", { class: `log-line ${/^\[tool\]/.test(line) ? "tool" : /error|fail/i.test(line) ? "bad" : ""}` }, line)));
-    const label = { running: "Generating…", done: "Finished", failed: "Failed", idle: "No generation in this server run yet" }[job.status];
-    logStatus.replaceChildren(job.status === "running" ? h("span", { class: "spinner" }) : icon(job.status === "failed" ? "alert" : job.status === "done" ? "checkCircle" : "info"),
-      h("strong", {}, label), job.error ? h("pre", { class: "log-error" }, job.error) : null);
+    const job = data.job || { status: "idle", steps: [] };
+    const label = { running: "Making your script…", done: "Your script is ready", failed: "The script couldn't be finished",
+      idle: "Click Generate script to make the lecture script." }[job.status];
+    logStatus.replaceChildren(...[job.status === "running" ? h("span", { class: "spinner" }) : icon(job.status === "failed" ? "alert" : job.status === "done" ? "checkCircle" : "info"),
+      h("strong", {}, label), job.error ? h("p", { class: "log-error" }, job.error) : null].filter(Boolean));
     logStatus.className = `log-status ${job.status}`;
-    logList.scrollTop = logList.scrollHeight;
+    // A new mark element per row (one element can only sit in one place).
+    const mark = { done: () => icon("check"), now: () => h("span", { class: "spinner" }), failed: () => icon("alert"),
+      later: () => h("span", { class: "step-dot" }) };
+    logList.replaceChildren(...(job.steps || []).map(st => h("div", { class: `progress-step ${st.state}` }, mark[st.state](), h("span", {}, st.label))));
+    if (job.status === "running") logList.append(h("p", { class: "progress-note" }, "This usually takes 1–3 minutes. You can leave this page and come back."));
+    logActions.replaceChildren(...(job.status === "failed" ? [
+      h("button", { class: "btn primary sm", onclick: () => generate() }, icon("reset"), "Try again"),
+      data.script_md ? h("button", { class: "btn ghost sm", onclick: () => { data.job = { status: "idle" }; setTab("preview"); } }, "Back to the script") : null,
+    ] : []).filter(Boolean));
   }
 
-  function renderAll() { renderFiles(); renderStats(); renderNotices(); renderPreview(); renderGutter(); renderLog(); renderActions(); }
+  function renderAll() {
+    renderFiles(); renderStats(); renderNotices(); renderPreview(); renderQuality(); renderGutter(); renderLog(); renderActions();
+    setFolded(folded);
+  }
 
   async function reload() {
     data = await api.lecture(lectureId);
@@ -291,11 +407,18 @@ export async function mountStudio(lectureId, ctx) {
       await sleep(1200);
     }
     if (!alive) return;
+    const finished = data.job;  // reload() fetches the lecture again; keep how the job ended
     await reload();
-    if (data.job.status === "done") {
+    data.job = finished;
+    renderLog(); renderActions();
+    if (finished.status === "done") {
       toast(state.errors.length ? "Script generated with problems to fix" : "Script ready. Review it, then approve.", state.errors.length ? "error" : "success");
+      setFolded(true);
       setTab(state.errors.length ? "edit" : "preview");
-    } else if (data.job.status === "failed") toast("Generation failed. See the log.", "error");
+    } else if (finished.status === "failed") {
+      toast(data.job.error || "The script couldn't be finished. Please try again.", "error");
+      setTab("log");
+    }
   }
 
   function collectPersona() {
@@ -317,8 +440,9 @@ export async function mountStudio(lectureId, ctx) {
     if (state.segments.length && !await confirmDialog("Regenerate the script?", "This replaces the current script, including any edits.", "Regenerate")) return;
     try {
       await api.generate(lectureId, { persona, topic: topicInput.value.trim(), duration_min: duration });
-      data.job = { status: "running", log: [], error: "" };
-      setTab("log"); renderLog(); renderActions();
+      data.job = { status: "running", steps: [], error: "" };
+      data.judge = null;  // the old quality result belongs to the old script
+      renderQuality(); renderLog(); renderActions(); setTab("log");
       ctx.refreshLectures();
       poll();
     } catch (e) { toast(e.message, "error", 6000); }

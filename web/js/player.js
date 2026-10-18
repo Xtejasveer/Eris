@@ -8,12 +8,18 @@ import { NOTE_MS, CODE_MS } from "./stage.js";
 
 export class Stopped extends Error {}
 
+// A slide (or slide highlight) followed by another screen action, not by a sentence about it: the class would
+// see it flash. Keep it on screen a few seconds first. (A slide followed by its highlight needs no wait.)
+const needsDwell = (seg, next) => SLIDE_MARKERS.has(seg.name) && next && next.kind !== "say" && !SLIDE_MARKERS.has(next.name);
+
 // Level 2 sync: a while_speaking action runs during the narration right after it.
 const isPair = (seg, next) => seg.kind === "action" && !!seg.args?.while_speaking && next?.kind === "say";
 
 const NO_DOUBT_WORDS = new Set(["", "no", "none", "no doubts", "nope", "n"]);  // as in doubt_agent.py
-const BREATH_MS = 300;          // a short breath after each spoken line, before the next step
-const SECTION_BREATH_MS = 700;  // a longer one when a new part of the lesson starts
+const BREATH_MS = 500;          // a short breath after each spoken line, before the next step
+const SECTION_BREATH_MS = 1100; // a longer one when a new part of the lesson starts
+const SLIDE_DWELL_MS = 3000;    // a slide nobody talks about stays this long before the next workspace opens
+const SLIDE_MARKERS = new Set(["SLIDE", "SLIDE_HIGHLIGHT"]);
 const DOUBT_WAIT_S = 10;    // how long the class has to start asking before the lesson goes on
 const ANSWER_WAIT_S = 25;   // when the teacher asked the student something back, they get longer to reply
 const BREAK_MAX_QUESTIONS = 4;   // a mid-lecture break takes at most this many questions…
@@ -76,7 +82,8 @@ export class Player {
       `Current slide: ${b.currentSlide || "none"}\n` +
       `Last program output: ${b.lastOutput.trim().slice(0, 300) || "none"}\n` +
       `Notebook (latest lines):\n${b.notebook.slice(-12).join("\n") || "empty"}\n` +
-      `Visuals on screen:\n${this.stage.visualStates() || "none"}\n\n` +
+      `Visuals on screen:\n${this.stage.visualStates() || "none"}\n` +
+      `Diagrams on the board:\n${this.stage.flowStates() || "none"}\n\n` +
       `What was taught in this section (narration and code):\n` + s.sectionText.join("\n").slice(0, 3000);
   }
 
@@ -98,6 +105,8 @@ export class Player {
         case "NEW_PAGE": this.board.notebook.push(a.title); await this.stage.newPage(a.title); break;
         case "VISUAL": if (a.key) await this.stage.showVisual(a.id, this.visualUrl(a.key), a.title); break;
         case "VISUAL_SET": await this.stage.setVisual(a.id, a.control, a.value, { instant: true }); break;
+        case "FLOW": this.stage.showFlow(a.id, { title: a.title, blocks: a.blocks, edges: a.edges }); break;
+        case "FLOW_NEXT": this.stage.flowNext(a.id, false); break;
       }
     }
     this.cursor = upTo;
@@ -164,7 +173,9 @@ export class Player {
     if (seg.name === "WRITE_CODE") this.state.sectionText.push(`Code in ${a.file}:\n${a.code}`);
     if (["NOTE", "NOTE_TITLE", "WRITE"].includes(seg.name)) this.state.sectionText.push(`Notebook:\n${a.text}`);
     if (seg.name === "VISUAL") this.state.sectionText.push(`Visual "${a.title}" (${a.id}): ${a.brief}`);
+    if (seg.name === "FLOW") this.state.sectionText.push(`Diagram "${a.title}" (${a.id}): ${a.blocks.map(b => b.label).join(" -> ")}`);
     const error = withSay ? await this.pair(seg, withSay, index) : await this.action(seg);
+    if (!error && !withSay && needsDwell(seg, this.segments[index + 1])) await this.tick(SLIDE_DWELL_MS);
     if (error) {  // for a pair, the recovery line comes after the sentence has ended
       this.stage.classLine(error);
       let line = "Let's keep going.";
@@ -259,6 +270,17 @@ export class Player {
         await this.tick(250);  // let the class see the change before the teacher talks about it
         return err;
       }
+      case "FLOW":
+        st.showFlow(a.id, { title: a.title, blocks: a.blocks, edges: a.edges }); await this.tick(300); return "";
+      case "FLOW_NEXT":
+        if (!st.flowNext(a.id)) return `flow ${a.id} has no block left to draw`;
+        await this.tick(700); return "";  // the block and its arrows draw themselves
+      case "FLOW_HIGHLIGHT":
+        if (!st.flowHighlight(a.id, a.block)) return `block ${a.block} is not drawn in ${a.id}`;
+        await this.tick(500); return "";
+      case "OPEN_FLOW":
+        if (!st.openFlow(a.id)) return `diagram ${a.id} is not on the board`;
+        await this.tick(400); return "";
       case "OPEN_VISUAL":
         if (!st.openVisual(a.id)) return `visual ${a.id} is not on the board`;
         await this.tick(400); return "";
@@ -276,6 +298,7 @@ export class Player {
       if (seg.kind === "say") { await this.say(seg.text); continue; }
       const pair = isPair(seg, segments[j + 1]);
       const err = pair ? await this.pair(seg, segments[j + 1]) : await this.action(seg);
+      if (!err && !pair && needsDwell(seg, segments[j + 1])) await this.tick(SLIDE_DWELL_MS);
       if (err) this.stage.classLine(err);
       if (pair) j += 1;
     }
@@ -314,7 +337,7 @@ export class Player {
         try {
           turn = await api.doubtAsk(this.lectureId, {
             question, context: this.snapshot(), section: this.state.section, final, cursor: this.cursor,
-            threadId: this.doubtThread, visuals: this.stage.visualStates(),
+            threadId: this.doubtThread, visuals: [this.stage.visualStates(), this.stage.flowStates()].filter(Boolean).join("\n"),
           });
         } finally { chk.thinking(false); }
         this.doubtThread = turn.thread_id || this.doubtThread;

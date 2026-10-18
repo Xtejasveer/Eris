@@ -124,7 +124,7 @@ def run_checkpoint(agent, thread_id, context_text, max_doubts, log_path, section
 # already there. No sections or doubt checks.
 ANSWER_MARKERS = {"NOTE", "NOTE_TITLE", "NOTE_HIGHLIGHT", "WRITE", "WRITE_CODE", "HIGHLIGHT",
                   "RUN", "READ_OUTPUT", "SLIDE", "SLIDE_HIGHLIGHT", "LOOK_BACK", "OPEN_FILE", "NEW_PAGE",
-                  "VISUAL", "VISUAL_SET", "OPEN_VISUAL"}
+                  "VISUAL", "VISUAL_SET", "OPEN_VISUAL", "FLOW", "FLOW_NEXT", "FLOW_HIGHLIGHT", "OPEN_FLOW"}
 
 
 INLINE_BLOCK_RE = re.compile(r"\[([A-Z_]{3,})\b[^\]]*\].*?\[/\1\]")  # [RUN]cmd=...[/RUN]
@@ -142,17 +142,32 @@ def answer_segments(text, slide_count=None, board=None):
     are dropped (never shown), and the code is run here to record the real output."""
     from script_parser import parse_script
     from script_writer import fill_expected_outputs
-    from script_fixes import add_sync_flags, announce_writing
+    from script_fixes import add_sync_flags, announce_writing, drop_bad_visuals
 
     if not text.strip():
         return []
     text = _repair_runs(text, (board or {}).get("latest_file"))
+    env = (board or {}).get("environments")
+    if env:  # only the environments this class used, whatever the student asked for (before any leads are added)
+        from figures import ENV_MARKERS
+        from script_fixes import drop_markers
+        banned = set().union(*(ENV_MARKERS[name] for name in ENV_MARKERS if not env.get(name)))
+        text, n = drop_markers(text, banned)
+        if n:
+            print(f"[doubts] left out {n} marker(s) from an environment this class doesn't use")
+    # A visual the parser can't read is removed first, so no "Let me show you..." lead is added for it.
+    _, early = parse_script(text, slide_count, require_doubt_check=False, board=board)
+    text, broken = drop_bad_visuals(text, early)
+    for e in broken:
+        print(f"[doubts] left out a visual: {e}")
     text, _ = announce_writing(text)  # the class hears what is being written while it appears
     text, _ = add_sync_flags(text)  # notes and code are written while the next sentence is spoken
     segments, errors = parse_script(text, slide_count, require_doubt_check=False, board=board)
     for e in errors:
         print(f"[doubts] skipped in answer: {e.splitlines()[0]}")
     segments = [s for s in segments if s["kind"] == "say" or s["name"] in ANSWER_MARKERS]
+    if env:  # nothing from a banned environment survives, even a marker written oddly
+        segments = [s for s in segments if s.get("name") not in banned]
     for s in segments:
         if s["kind"] == "say":  # markers written inside a sentence are never spoken
             s["text"] = _strip_inline_markers(s["text"])

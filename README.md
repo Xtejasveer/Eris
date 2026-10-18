@@ -51,7 +51,7 @@ python main.py serve        # then open http://127.0.0.1:8000
 ```
 
 - **Home:** pick a Lecture in the sidebar, drop the study material on the upload area, check
-  the persona fields (prefilled from `data/example/persona.md`), set the Topic, and click
+  the persona fields (prefilled from `templates/persona.md`), set the Topic, and click
   **Generate script**. The log streams while it indexes and writes. The script appears on the
   right as a readable document (speech, notebook cards, code, actions). **Edit** it if needed,
   then **Approve**. **Reset lecture** clears that lecture's knowledge base (its Chroma
@@ -77,7 +77,7 @@ Put the teacher's files in `data/<id>/`:
 
 ```
 data/<id>/
-├── persona.md      # required (copy data/example/persona.md)
+├── persona.md      # required (copy templates/persona.md)
 ├── lecture.pptx    # at least one PPTX, PDF or DOCX
 ├── notes.pdf
 └── lab.docx        # code in Courier/Consolas font is kept as code
@@ -241,42 +241,87 @@ The answer is a short script, checked against that board before it plays. A `LOO
 and new code is run first to record its real output. After the break, the stage returns to the
 page and view the class was on.
 
-### Interactive visuals
+### What the AI teacher may use: environments
 
-For an idea that moves or changes (a process step by step, a value that changes a result), the script can
-describe an **interactive picture**. A model builds it, and it appears in the **Visual** workspace next to
-the notebook, slides and code:
+The classroom has four environments: **notebook**, **slides**, **code** and **visual**. The Visual board holds
+two kinds of pictures, each in its own tab: flow **diagrams** and interactive **graphs**. The notebook and slides
+are always used. Code and the Visual board depend on the teacher's material, so the agent never invents a program
+for a history class or a picture the material doesn't have:
+
+| Environment | Used when |
+|---|---|
+| Notebook | always |
+| Slides | the material has a PPTX deck |
+| Code (`WRITE_CODE`, `RUN`, ...) | the material contains code (several code lines in the slides, PDF or DOCX) |
+| Visual: diagrams (`FLOW`, ...) | the slides, PDF or DOCX have a diagram, or a written list of steps (1. 2. 3., Step 1/2/3, or A → B → C) |
+| Visual: graphs (`VISUAL`, ...) | the slides contain a chart (`VISUALS_ENABLED=true`, the default); otherwise it is explained on its slide |
+
+`index` finds them (`figures.py`) and saves them in `lecture.json` (`environments`) and `figures.json` (each diagram,
+step list and chart with where it is). The writer is told which environments it has and which processes exist; a
+script that uses another environment goes back to the writer, and as a last resort code removes those markers
+(listed in the Log). In doubts, the agent may use only the environments the class itself used (notebook and slides
+always). Studio shows a note about this and which environments the material unlocks.
+
+### Flow diagrams, drawn block by block
+
+For a process in the material, the teacher draws a diagram on the **Visual** board the way a teacher does at a
+whiteboard: one block, an explanation, then the next block with its arrow. The script gives only the structure;
+our own code (`web/js/flow.js`) draws it, top to bottom, the same way every time (no model writes any code):
 
 ```
-[VISUAL id="squares" title="Squaring a list"]
-Bars for the numbers 1 to n; pressing step squares the next bar.
-controls: n (slider 2-6), step (button), labels (toggle)
+[FLOW id="for-loop" title="How a for loop runs" from="slide 2"]
+take: Take the next item
+body: Run the loop body
+more: Any items left? | yes -> take | no -> end
+[/FLOW]
+[FLOW_NEXT id="for-loop"]                      draws the next block and its arrows (in the order listed)
+Let me draw the first step: take the next item.
+[FLOW_HIGHLIGHT id="for-loop" block="more"]    points back at a drawn block
+[OPEN_FLOW id="for-loop"]                      shows the diagram again
+```
+
+One block per line (`id: label`); a label ending in `?` is a question (a diamond) with branches `| answer -> id`
+(or `end`). A loop back runs up the right side, a skip or exit down the left. Up to 8 blocks. `from` must name a
+diagram or step list in the material. The parser checks the order (no block drawn twice, highlights only on drawn
+blocks); the judge checks that each sentence said while a block appears is about that block, and that the diagram
+follows the material's steps. Doubt answers can point at blocks, or draw a new diagram if the class used diagrams.
+
+### Interactive graphs (on the Visual board; `VISUALS_ENABLED=false` turns them off)
+
+A `[VISUAL]` is an **interactive graph** the class explores with sliders, like the ones Claude draws in chat:
+a normal curve with mean and sd sliders, a fitted line with a slope slider and its error, how a value grows
+with `n`. Diagrams are left to the slides. The graph appears in the **Visual** workspace next to the notebook,
+slides and code, and redraws instantly as a slider moves.
+
+```
+[VISUAL id="normal" title="The normal distribution"]
+A normal curve of value against probability density, with the area within one sd shaded.
+controls: mean (slider -3-3 step 0.5), sd (slider 0.5-3 step 0.25)
 [/VISUAL]
-Let me show you this as a picture.
-[VISUAL_SET id="squares" control="n" value=5]     move a control (a button needs no value)
-[VISUAL_SET id="squares" control="step"]
-[OPEN_VISUAL id="squares"]                         show it again later
+Let me show you this on a graph you can play with.
+[VISUAL_SET id="normal" control="mean" value=1.5]   the teacher drags the slider there (about a second)
+[VISUAL_SET id="normal" control="sd" value=2]
+[OPEN_VISUAL id="normal"]                             show it again later
 ```
 
-Controls: `name (button)`, `name (slider 1-10)` (optional `step 0.5`), `name (toggle)` (value=on/off),
-`name (choice a/b/c)`. The parser checks every `VISUAL_SET` against these controls and their ranges.
+Controls: `name (slider 1-10)` (optional `step 0.5`); `name (choice a/b/c)` and `name (toggle)` when needed.
+The parser checks every `VISUAL_SET` against them. A visual without a slider is sent back to the writer.
 
-- **Building** (`visual_builder.py`, prompt `visual_prompt` in `prompts.py`): during `generate` (and on
-  approve, when a description was edited), `VISUAL_MODEL` writes each visual as a small HTML fragment.
-  Code then checks it: a `Visual.on` handler for every control, a `Visual.state` call, no network or
-  storage, the JavaScript syntax (with node, if it is installed), and the size. Problems go back to the
-  builder once. A visual that still fails is removed, with its `VISUAL_SET`s, and listed under auto-fixes
-  in Studio. Built visuals are saved in `workspace/lectures/<id>/visuals/` and reused until the
-  description changes. At most `MAX_VISUALS` (2) per lecture.
-- **In class**: each visual runs in a sandboxed frame (scripts only, no same-origin access, no network)
-  with a standard control panel from `web/js/visual/runtime.js`. `VISUAL_SET` lights up the control and
-  moves it visibly; students can use the controls too.
-- **In doubts**: `read_board` lists every visual with its controls and current values, and each question
-  carries what every visual shows right now (its `Visual.state` line, including student changes). An
-  answer can move the controls of any visual on the board, or build one new visual (`MAX_ANSWER_VISUALS`).
-  The student waits while it is built.
-- Settings (`.env`): `VISUALS_ENABLED=true`, and `VISUAL_MODEL` (defaults to `LLM_MODEL`; a stronger
-  coding model draws better visuals).
+- **Building** (`visual_builder.py`, prompt `visual_prompt`): during `generate` (and on approve, if a
+  description changed), `VISUAL_MODEL` writes one script that draws with the graph helper `Visual.chart`
+  (`web/js/visual/chart.js`: axes, `fn`, `line`, `dots`, `bars`, `area`, reference lines, labels, a readout row).
+  The builder also sees the programs on the screen and what the teacher says after each `VISUAL_SET`.
+  Code checks it (handlers, `Visual.state`, no network or storage, JS syntax), then `visual_smoke.mjs`
+  test-runs it in node: every slider is dragged across its range and must change the result, and text or
+  shapes on top of each other are reported. Problems go back to the builder (up to 3 tries). A visual that
+  still fails is removed and listed under auto-fixes in Studio. Built graphs are saved in
+  `workspace/lectures/<id>/visuals/`.
+- **In class**: each graph runs in a sandboxed frame (scripts only, no network) with a standard slider panel
+  from `web/js/visual/runtime.js`. `VISUAL_SET` lights the slider up and drags it; students can drag it too.
+- **In doubts**: `read_board` lists every graph with its sliders and values, and each question carries what
+  every graph shows right now. An answer can drag any graph's sliders, or build one new graph.
+- Settings (`.env`): `VISUALS_ENABLED=true`, `VISUAL_MODEL` (defaults to `LLM_MODEL`; a stronger coding model
+  draws better graphs). Needs `node` for the test run (skipped without it).
 
 ## 7. Talking avatar
 

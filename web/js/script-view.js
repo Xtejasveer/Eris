@@ -88,6 +88,24 @@ export function renderScriptDoc(segments, teacher = "Teacher", { lectureId = nul
       case "NEW_PAGE":
         target().append(h("div", { class: "doc-note title" }, h("span", { class: "doc-note-tag" }, icon("book"), "New page"), h("h4", {}, a.title)));
         break;
+      case "FLOW":
+        target().append(h("div", { class: "doc-run" },
+          h("div", { class: "doc-run-cmd" }, icon("layers"), h("strong", {}, `Diagram: ${a.title}`),
+            a.from ? h("span", { class: "muted" }, `from ${a.from}`) : null),
+          h("pre", {}, (a.blocks || []).map(b => {
+            const outs = (a.edges || []).filter(e => e.from === b.id && e.label).map(e => `${e.label} → ${e.to}`);
+            return `${b.kind === "question" ? "◇" : "▭"} ${b.label}${outs.length ? `   (${outs.join(", ")})` : ""}`;
+          }).join("\n  ↓\n"))));
+        break;
+      case "FLOW_NEXT":
+        target().append(chip("layers", `Draw the next block: “${a.label || a.block}”`));
+        break;
+      case "FLOW_HIGHLIGHT":
+        target().append(chip("layers", `Point at block “${a.block}” in ${a.id}`, "marker"));
+        break;
+      case "OPEN_FLOW":
+        target().append(chip("layers", `Show diagram ${a.id} again`));
+        break;
       case "VISUAL": {
         const url = lectureId && a.key ? `/api/lectures/${encodeURIComponent(lectureId)}/visuals/${encodeURIComponent(a.key)}` : null;
         target().append(h("div", { class: "doc-run" },

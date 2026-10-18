@@ -36,22 +36,37 @@ def _split_items(text):
     return [i.strip() for i in items + [cur] if i.strip()]
 
 
+BULLET_RE = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
+NAMED_RE = re.compile(r"^([A-Za-z][\w-]*)\s*[:\-–]\s*(.*)$")  # "Step: steps through it" (a list item)
+
+
 def parse_controls(body):
-    """Return (description, controls, problems) for a [VISUAL] body."""
+    """Return (description, controls, problems) for a [VISUAL] body.
+    Models also write the controls as a list under "Controls:" ("- Step: steps through it"): read that too."""
     desc, controls, problems = [], [], []
+    items, in_list = [], False
     for line in body.splitlines():
         match = CONTROLS_LINE_RE.match(line)
-        if not match:
-            desc.append(line)
+        if match:
+            items += _split_items(match.group(1))
+            in_list = not match.group(1).strip()
             continue
-        for item in _split_items(match.group(1)):
-            control, problem = _parse_item(item)
-            if problem:
-                problems.append(problem)
-            elif any(c["name"] == control["name"] for c in controls):
-                problems.append(f"control '{control['name']}' is listed twice")
-            else:
-                controls.append(control)
+        if in_list and BULLET_RE.match(line):
+            items.append(BULLET_RE.sub("", line).strip())
+            continue
+        if line.strip():
+            in_list = False  # the list ended; this is description again
+        desc.append(line)
+    unreadable = []
+    for item in items:
+        control, problem = _parse_item(item)
+        if problem:
+            unreadable.append(problem)
+        elif not any(c["name"] == control["name"] for c in controls):
+            controls.append(control)
+    # One odd item ("condition (text display)": a label, not a control) must not cost the whole visual.
+    if not controls:
+        problems += unreadable
     description = "\n".join(desc).strip()
     if not description:
         problems.append("describe what the visual shows (one to four sentences) before the controls line")
@@ -60,11 +75,31 @@ def parse_controls(body):
     return description, controls, problems
 
 
+def _guess_kind(name, text):
+    """A list item without a type ("Step: steps through it"): its type from its words."""
+    words = f"{name} {text}".lower()
+    rng = re.search(r"(-?\d+(?:\.\d+)?)\s*(?:-|to)\s*(-?\d+(?:\.\d+)?)", words)
+    if "slider" in words and rng:
+        return "slider", f"{rng.group(1)}-{rng.group(2)}"
+    if re.search(r"\b(toggle|on/off|show/hide|switch(es)? on)\b", words):
+        return "toggle", ""
+    return "button", ""
+
+
 def _parse_item(item):
-    match = ITEM_RE.match(item.strip())
+    item = item.strip().rstrip(".")
+    match = ITEM_RE.match(item)
+    if not match:  # "Step (button): what it does", or "Step: what it does"
+        typed = re.match(r"^(.*?\))\s*[:\-–].*$", item)
+        match = ITEM_RE.match(typed.group(1)) if typed else None
     if not match:
-        return None, f"cannot read the control '{item}'; write it as name (button|slider 1-10|toggle|choice a/b)"
-    name, kind, extra = match.group(1).lower(), match.group(2).lower(), match.group(3).strip()
+        named = NAMED_RE.match(item)
+        if not named:
+            return None, f"cannot read the control '{item}'; write it as name (button|slider 1-10|toggle|choice a/b)"
+        kind, extra = _guess_kind(named.group(1), named.group(2))
+        name = named.group(1).lower()
+    else:
+        name, kind, extra = match.group(1).lower(), match.group(2).lower(), match.group(3).strip()
     control = {"name": name, "type": kind, "label": name.replace("_", " ").replace("-", " ").capitalize()}
     if kind == "slider":
         rng = RANGE_RE.match(extra)

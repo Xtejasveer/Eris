@@ -1,7 +1,7 @@
 """Create small sample teaching files (PPTX, DOCX, PDF) in data/<lecture_id>/.
 
 usage: python tests/make_example_data.py [lecture_id]     (default: example)
-Copies data/example/persona.md into the folder if it has none.
+Copies templates/persona.md into the folder if it has none.
 """
 
 import shutil
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     folder.mkdir(parents=True, exist_ok=True)
     persona = folder / "persona.md"
     if not persona.exists():
-        shutil.copy(Path("data/example/persona.md"), persona)
+        shutil.copy(Path("templates/persona.md"), persona)
     make_pptx(folder / "lecture.pptx")
     make_docx(folder / "lab.docx")
     make_pdf(folder / "notes.pdf")

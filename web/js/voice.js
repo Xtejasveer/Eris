@@ -10,9 +10,25 @@ const CODE_WORDS = [["<=", " less than or equal to "], [">=", " greater than or 
   ["//", " divided by "], ["->", " gives "], ["<", " less than "], [">", " greater than "], ["=", " equals "],
   ["%", " mod "], ["_", " "], ["(", " "], [")", " "], ["[", " "], ["]", " "], ["{", " "], ["}", " "],
   ['"', ""], ["'", ""], [":", " "], ["#", " "]];
-const BROWSER_RATE = 0.9;        // like TTS_SPEED: 1.0 sounds rushed for teaching
-const SENTENCE_PAUSE_MS = 350;   // like SENTENCE_PAUSE_S
-const QUESTION_PAUSE_MS = 500;
+const BROWSER_RATE = 0.8;        // like TTS_SPEED: 1.0 sounds rushed for teaching
+const SENTENCE_PAUSE_MS = 600;   // like SENTENCE_PAUSE_S
+const QUESTION_PAUSE_MS = 850;   // like QUESTION_PAUSE_S
+const PHRASE_PAUSE_MS = 250;     // like PHRASE_PAUSE_S: a short break at a comma
+const PHRASE_MIN_WORDS = 4;
+
+// A sentence split at commas into phrases of at least PHRASE_MIN_WORDS words (same rule as voice.py).
+function phrases(sentence) {
+  const parts = []; let cur = "";
+  for (const bit of sentence.split(/(?<=,)\s+/)) {
+    cur = `${cur} ${bit}`.trim();
+    if (cur.endsWith(",") && cur.split(/\s+/).length >= PHRASE_MIN_WORDS) { parts.push(cur); cur = ""; }
+  }
+  if (cur) {
+    if (parts.length && cur.split(/\s+/).length < PHRASE_MIN_WORDS) parts[parts.length - 1] += ` ${cur}`;
+    else parts.push(cur);
+  }
+  return parts;
+}
 
 export function speechText(text) {
   const sayCode = (code) => CODE_WORDS.reduce((c, [sym, words]) => c.split(sym).join(words), code.replace(/\b[fFrRbB](?=["'])/g, ""));
@@ -147,7 +163,8 @@ export class Voice {
     if (!("speechSynthesis" in window)) { await new Promise(r => setTimeout(r, text.split(/\s+/).length * 380)); return; }
     // Chrome cuts long utterances off, so speak one sentence at a time, with a pause between sentences.
     text = speechText(text);
-    const parts = text.match(/[^.!?]+[.!?]+["')\]]*|\S[^.!?]*$/g) || [text];
+    const sentences = text.match(/[^.!?]+[.!?]+["')\]]*|\S[^.!?]*$/g) || [text];
+    const parts = sentences.flatMap(sn => phrases(sn.trim()));
     let cancelled = false;
     this._cancel = () => { cancelled = true; speechSynthesis.cancel(); };
     for (const part of parts) {
@@ -169,7 +186,8 @@ export class Voice {
         if (this.paused) speechSynthesis.pause();
       });
       if (!cancelled && part !== parts[parts.length - 1])
-        await new Promise(r => setTimeout(r, /[?!]["')\]]*\s*$/.test(part) ? QUESTION_PAUSE_MS : SENTENCE_PAUSE_MS));
+        await new Promise(r => setTimeout(r, /[?!]["')\]]*\s*$/.test(part) ? QUESTION_PAUSE_MS
+          : /,\s*$/.test(part) ? PHRASE_PAUSE_MS : SENTENCE_PAUSE_MS));
     }
     this._cancel = null;
   }

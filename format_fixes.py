@@ -5,6 +5,9 @@ A marker only works alone on its line. Models sometimes:
 2. type the program output under [READ_OUTPUT] ... [/READ_OUTPUT] (the terminal already shows the real one)
 3. write note bullets after [NOTE_TITLE] without a [NOTE] block around them
 In all three cases the text would be read out by the teacher. fix_format repairs them and says what it did.
+It also moves markers written inside a [NOTE]/[VISUAL] body out of it (they would be written in the notebook),
+removes an unclosed [VISUAL]/[NOTE] opener, drops a [NOTE] that repeats the one just before it, and turns
+[NOTE_HIGHLIGHT]words[/NOTE_HIGHLIGHT] into [NOTE_HIGHLIGHT text="words"].
 It also shortens long [PAUSE]s and strips markdown (** and backticks) from notebook lines.
 strip_typed_output runs later, once the real program output is known, for typed output with no closing tag.
 """
@@ -18,6 +21,31 @@ INLINE_RE = re.compile(r"\[([A-Z][A-Z_]+)\b[^\[\]]*\]")
 QUOTED_MARKERS = {"NOTE_HIGHLIGHT", "SLIDE_HIGHLIGHT", "LOOK_BACK"}  # their text= words are also said
 BULLET_RE = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
 NOTE_LINE_MAX = 80  # longer lines are sentences, not notes
+# [NOTE_HIGHLIGHT]words[/NOTE_HIGHLIGHT]: a highlight written like a block, inside a sentence
+PAIRED_RE = re.compile(r"\[(NOTE_HIGHLIGHT|SLIDE_HIGHLIGHT|LOOK_BACK)([^\]]*)\](.+?)\[/\1\]")
+REPEAT_WINDOW = 4  # a [NOTE] identical to one this many lines before it is a copy
+
+
+def paired_to_args(line):
+    """[NOTE_HIGHLIGHT]words[/NOTE_HIGHLIGHT] -> [NOTE_HIGHLIGHT text="words"] (the usual form)."""
+    def repl(m):
+        words = m.group(3).strip().replace('"', "'")
+        return f'[{m.group(1)}{m.group(2)} text="{words}"]' if "text=" not in m.group(2) else f"[{m.group(1)}{m.group(2)}]"
+    return PAIRED_RE.sub(repl, line)
+
+
+def inner_markers(lines, start, end, name):
+    """Lines inside a [NOTE]/[VISUAL] body (start..end exclusive) that are markers: [(index, marker name)]."""
+    found = []
+    for j in range(start + 1, end):
+        m = parse_line_marker(lines[j])
+        if m and (m[0] in MARKERS or m[0] == name) and not m[0].startswith("/"):
+            found.append((j, m[0]))
+    return found
+
+
+def _note_key(lines):
+    return " ".join(" ".join(ln.split()) for ln in lines if ln.strip()).lower()
 
 
 def _body_end(lines, start, name):
@@ -104,6 +132,29 @@ def fix_format(text):
         if marker and marker[0] in BLOCK_MARKERS:  # code bodies stay untouched; note lines lose markdown
             end = _body_end(lines, i, marker[0])
             end = len(lines) - 1 if end is None else end
+            if marker[0] in ("NOTE", "VISUAL"):
+                inner = inner_markers(lines, i, end, marker[0])
+                reopened = next((j for j, name in inner if name == marker[0]), None)
+                if reopened is not None:  # this opener was never closed: keep its lines as they are
+                    fixed.append(f"removed an unclosed [{marker[0]}] line")
+                    out += lines[i + 1:reopened]
+                    i = reopened
+                    continue
+                if inner:  # e.g. [SLIDE n=2] written inside a note: it would be handwritten, not shown
+                    fixed += [f"moved {lines[j].strip()} out of a [{marker[0]}] block" for j, _ in inner]
+                    moved = [lines[j].strip() for j, _ in inner]
+                    keep = [ln for j, ln in enumerate(lines[i + 1:end], start=i + 1) if j not in {k for k, _ in inner}]
+                    lines[i + 1:end + 1] = keep + [lines[end]] + moved
+                    end = i + 1 + len(keep)
+            if marker[0] == "NOTE":
+                key = _note_key(lines[i + 1:end])
+                recent = [ln for ln in out[-(end - i + REPEAT_WINDOW + 2):]]
+                text_before = "\n".join(recent)
+                prev = re.findall(r"\[NOTE(?:\s[^\]]*)?\]\n(.*?)\n\[/NOTE\]", text_before, re.S)
+                if key and any(_note_key(p.splitlines()) == key for p in prev):
+                    fixed.append("removed a [NOTE] block that repeated the one just before it")
+                    i = end + 1
+                    continue
             body = lines[i + 1:end]
             if marker[0] == "NOTE":
                 clean = [ln.replace("**", "").replace("`", "") for ln in body]
@@ -149,6 +200,9 @@ def fix_format(text):
             else:
                 i += 1
             continue
+        if marker is None and PAIRED_RE.search(line):
+            line = paired_to_args(line)
+            fixed.append("rewrote a [NOTE_HIGHLIGHT]words[/NOTE_HIGHLIGHT] as [NOTE_HIGHLIGHT text=\"words\"]")
         if marker is None and INLINE_RE.search(line):
             hoisted, sentence = _hoist_inline(line)
             if hoisted:

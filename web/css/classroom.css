@@ -111,8 +111,8 @@
 .stage-head { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
 .stage-head .spacer { flex: 1; }
 .stage-section { font-size: 13px; font-weight: 600; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.env-indicator { --i: 0; position: relative; display: inline-grid; grid-template-columns: repeat(4, 96px); padding: 3px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--border); user-select: none; }
-.env-glider { position: absolute; top: 3px; bottom: 3px; left: 3px; width: 96px; border-radius: 7px; background: var(--surface); box-shadow: var(--shadow-sm); transform: translateX(calc(var(--i) * 96px)); transition: transform .35s cubic-bezier(.3, .8, .3, 1); }
+.env-indicator { --i: 0; --pill-w: 96px; position: relative; display: inline-grid; grid-template-columns: repeat(4, var(--pill-w)); padding: 3px; border-radius: 9px; background: var(--surface-2); border: 1px solid var(--border); user-select: none; }
+.env-glider { position: absolute; top: 3px; bottom: 3px; left: 3px; width: var(--pill-w); border-radius: 7px; background: var(--surface); box-shadow: var(--shadow-sm); transform: translateX(calc(var(--i) * var(--pill-w))); transition: transform .35s cubic-bezier(.3, .8, .3, 1); }
 .env-pill { position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; font-size: 12.5px; font-weight: 500; color: var(--muted); transition: color .2s; cursor: default; }
 .env-pill svg { width: 15px; height: 15px; }
 .env-pill.active { color: var(--text); }
@@ -137,6 +137,26 @@
 @keyframes vz-enter { from { opacity: 0; transform: scale(.985); } to { opacity: 1; transform: none; } }
 .vz-empty { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px; color: #74757e; font-size: 13px; }
 .vz-empty svg { width: 26px; height: 26px; opacity: .6; }
+
+/* flow diagrams on the Visual board, drawn block by block like a whiteboard */
+.flow-wrap { position: absolute; inset: 0; overflow: auto; padding: 8px 12px 16px; background: #fbfaf7; }
+.flow-svg { width: 100%; height: auto; max-height: none; display: block; color: #1b1c21; stroke: none; stroke-width: 0; }
+.flow-shape { fill: #ffffff; stroke: #2d5be3; stroke-width: 3; }
+.flow-block.question .flow-shape { fill: #fff7e6; stroke: #b96a12; }
+.flow-block.end .flow-shape { fill: #eef6f1; stroke: #17885d; }
+/* The app's icon rules stroke SVG in the theme colour, and dark mode makes text light: pin the board's own ink. */
+.flow-text { font-family: var(--hand); font-size: 20px; fill: #1b1c21; -webkit-text-fill-color: #1b1c21; stroke: none; }
+.flow-line { fill: none; stroke: #5b5f6b; stroke-width: 2.5; }
+.flow-arrowhead { fill: #5b5f6b; }
+.flow-branch { font-family: var(--hand); font-size: 17px; font-weight: 700; fill: #b96a12; -webkit-text-fill-color: #b96a12; stroke: none; }
+.flow-block.enter { animation: flow-in .55s ease-out; }
+.flow-block.enter .flow-shape { stroke-dasharray: 1400; stroke-dashoffset: 1400; animation: flow-draw .7s ease-out forwards; }
+.flow-edge.enter .flow-line { stroke-dasharray: 900; stroke-dashoffset: 900; animation: flow-draw .6s .25s ease-out forwards; }
+.flow-edge.enter .flow-branch { opacity: 0; animation: flow-fade .3s .6s forwards; }
+.flow-block.hl .flow-shape { fill: #fff3b0; stroke-width: 4; }
+@keyframes flow-draw { to { stroke-dashoffset: 0; } }
+@keyframes flow-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@keyframes flow-fade { to { opacity: 1; } }
 
 /* notebook */
 .env-notebook { background: #efe9da; padding: 22px; overflow: hidden; display: flex; flex-direction: column; }
@@ -231,6 +251,5 @@
   .classroom { grid-template-columns: 1fr; height: auto; }
   .stage-card { min-height: 560px; order: -1; }
   .side-panel { min-height: 360px; }
-  .env-indicator { grid-template-columns: repeat(4, 78px); }
-  .env-glider { width: 78px; transform: translateX(calc(var(--i) * 78px)); }
+  .env-indicator { --pill-w: 78px; }
 }

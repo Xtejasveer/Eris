@@ -3,7 +3,8 @@ fragment, code checks it, and the class page shows it in a sandboxed frame next 
 and code. The teacher moves its controls with [VISUAL_SET] (in the script and in doubt answers).
 
 The model writes only the picture and the control handlers; the control panel, the messaging and the
-safety settings (no network, no same-origin access) come from web/js/visual/runtime.js and wrap_document,
+safety settings (no network, no same-origin access) come from web/js/visual/runtime.js (with the graph helper
+web/js/visual/chart.js) and wrap_document,
 so every visual looks and behaves the same way.
 """
 
@@ -20,8 +21,10 @@ import config
 from visual_controls import describe_control
 
 RUNTIME_JS = Path(__file__).parent / "web" / "js" / "visual" / "runtime.js"
+CHART_JS = Path(__file__).parent / "web" / "js" / "visual" / "chart.js"  # Visual.chart: axes, curves, bars
+SMOKE_JS = Path(__file__).parent / "visual_smoke.mjs"
 KEY_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}-[0-9a-f]{8}$")
-VISUAL_MARKERS = {"VISUAL", "VISUAL_SET", "OPEN_VISUAL"}
+VISUAL_MARKERS = {"VISUAL", "VISUAL_SET", "OPEN_VISUAL", "FLOW", "FLOW_NEXT", "FLOW_HIGHLIGHT", "OPEN_FLOW"}  # dropped by id
 FENCE_RE = re.compile(r"^```[a-z]*\s*|\s*```$", re.I)
 SCRIPT_RE = re.compile(r"<script\b([^>]*)>(.*?)</script>", re.I | re.S)
 # Things a visual may not do; the frame's sandbox and CSP block them anyway, but the builder gets told.
@@ -94,6 +97,8 @@ def clean_fragment(text):
         body = re.search(r"<body\b[^>]*>(.*?)(?:</body>|$)", text, re.I | re.S).group(1)
         text = styles + body
     text = re.sub(r"</?(?:html|head|body)\b[^>]*>|<!doctype[^>]*>|<meta\b[^>]*>|<title>.*?</title>", "", text, flags=re.I | re.S)
+    if "<script" not in text.lower() and "Visual." in text and not text.lstrip().startswith("<"):
+        text = f"<script>\n{text.strip()}\n</script>"  # plain JavaScript without its tags
     return text.strip()
 
 
@@ -138,10 +143,31 @@ def check_fragment(html, controls):
     return problems
 
 
+def smoke_test(html, controls, moves=None, full=False):
+    """Run the visual in node with a fake page and use every control (visual_smoke.mjs).
+    Returns (problems, layout): problems must be fixed; layout clashes are advice. ([], []) without node.
+    moves: the teacher's [(control, value)] to replay; full=True returns the whole result (with "moves")."""
+    node = shutil.which("node")
+    if not node:
+        return ({} if full else ([], []))
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as f:
+        json.dump({"html": html, "controls": controls, "moves": moves or []}, f)
+        path = f.name
+    try:
+        res = subprocess.run([node, str(SMOKE_JS), path], capture_output=True, text=True, timeout=30)
+        out = json.loads(res.stdout.strip().splitlines()[-1])
+        return out if full else (out.get("problems", []), out.get("layout", []))
+    except Exception as e:
+        print(f"[visual] test run skipped: {e}")
+        return {} if full else ([], [])
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
 def wrap_document(visual):
     """The full page served into the class frame: CSP, theme, controls, runtime, then the model's fragment."""
     controls = json.dumps(visual["controls"]).replace("</", "<\\/")
-    runtime = RUNTIME_JS.read_text(encoding="utf-8")
+    runtime = RUNTIME_JS.read_text(encoding="utf-8") + "\n" + CHART_JS.read_text(encoding="utf-8")
     title = re.sub(r"[<>&\"]", "", visual.get("title", "Visual"))
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -170,7 +196,7 @@ def _ask_model(prompt):
     from langchain.chat_models import init_chat_model
     if _model is None:
         _model = init_chat_model(f"openrouter:{config.VISUAL_MODEL}", temperature=0.2,
-                                 request_timeout=config.VISUAL_TIMEOUT_S, max_retries=1)
+                                 request_timeout=config.VISUAL_TIMEOUT_S * 1000, max_retries=1)  # milliseconds
     reply = _model.invoke(prompt)
     content = reply.content
     if isinstance(content, list):  # some providers return content parts
@@ -178,34 +204,103 @@ def _ask_model(prompt):
     return content or ""
 
 
+def visual_context(segments, board_files=None, figs=None):
+    """What the builder should know beyond the description, per visual id: the programs on the class screen when
+    the visual appears (so it uses their exact code), and how the teacher uses it (each [VISUAL_SET] with the
+    sentence said right after it), so each press does what the teacher says it does."""
+    files, context = dict(board_files or {}), {}
+    for i, seg in enumerate(segments):
+        name, a = seg.get("name"), seg.get("args", {})
+        if name == "WRITE_CODE":
+            files[a["file"]] = a["code"]
+        elif name == "VISUAL":
+            code = "\n\n".join(f"{f}:\n{c}" for f, c in list(files.items())[-2:])
+            from figures import matches
+            fig = matches(a.get("from"), figs)
+            context[a["id"]] = {"code": code[:1500], "usage": [], "moves": [],
+                                "material": f'{fig["title"]} ({fig["where"]}): {fig["details"]}' if fig else ""}
+        elif name == "VISUAL_SET" and a["id"] in context:
+            nxt = segments[i + 1] if i + 1 < len(segments) else {}
+            # Another move right after: the next sentence belongs to that one, not this one.
+            said = "" if nxt.get("name") == "VISUAL_SET" else next(
+                (s["text"] for s in segments[i + 1:i + 3] if s["kind"] == "say"), "")
+            said = re.split(r"(?<=[.!?])\s+", said)
+            value = f" to {a['value']}" if "value" in a else ""
+            context[a["id"]]["usage"].append(f"{a['control']}{value} -> \"{' '.join(said[:2])[:220]}\"")
+            if "value" in a:
+                context[a["id"]]["moves"].append([a["control"], a["value"], " ".join(said[:2])[:220]])
+    return context
+
+
+def check_against_script(html, args, moves):
+    """Replay the teacher's slider moves on the built graph and ask Jev whether each sentence the teacher says
+    afterwards matches what the graph reports. Returns problems for the builder ([] = aligned, or not checked)."""
+    if not moves or not config.JUDGE_ENABLED:
+        return []
+    out = smoke_test(html, args["controls"], [[c, v] for c, v, _ in moves], full=True)
+    replay = out.get("moves") or []
+    if len(replay) != len(moves):
+        return []
+    from script_judge import check_graph_alignment
+    pairs = [{"control": c, "value": v, "teacher_says": said, "graph_reports": r["graph_reports"]}
+             for (c, v, said), r in zip(moves, replay) if said]
+    if not pairs:
+        return []
+    value, cost = check_graph_alignment(args["title"], args["brief"], pairs)
+    if value is None or value >= config.JUDGE_PASS:
+        if value is not None:
+            print(f"[visual] '{args['id']}' matches what the teacher says (P={value:.2f}, ${cost:.5f})")
+        return []
+    print(f"[visual] '{args['id']}' does not match what the teacher says (P={value:.2f})")
+    return [f'after {p["control"]} = {p["value"]} the teacher says "{p["teacher_says"]}" but the graph reports '
+            f'"{p["graph_reports"]}"; make the graph show (and report in Visual.state) what the teacher says'
+            for p in pairs]
+
+
 def build_visual(topic, args):
-    """Build one visual; returns (visual dict, None) or (None, reason). The builder gets its problems back
-    and tries again, up to VISUAL_BUILD_ATTEMPTS times."""
+    """Build one visual; returns (visual dict, None) or (None, reason). Each version is checked by code and test-run
+    in node; its problems go back to the builder, up to VISUAL_BUILD_ATTEMPTS times. Layout clashes are advice:
+    when attempts run out, the working version with the fewest clashes is kept."""
     from prompts import visual_prompt
     controls_text = "\n".join(f"- {describe_control(c)}" for c in args["controls"])
-    feedback = ""
-    problems = ["not built"]
+    ctx = args.get("_context", {})
+    feedback, problems, best = "", ["not built"], None
     for attempt in range(1, config.VISUAL_BUILD_ATTEMPTS + 1):
         try:
-            html = clean_fragment(_ask_model(visual_prompt(topic, args["title"], args["brief"], controls_text, feedback)))
+            html = clean_fragment(_ask_model(visual_prompt(topic, args["title"], args["brief"], controls_text, feedback,
+                                                    ctx.get("code", ""), ctx.get("usage", []), ctx.get("material", ""))))
         except Exception as e:  # e.g. a timeout: try again, the next request usually works
             problems = [f"the visual model failed: {e}"]
             print(f"[visual] '{args['id']}' attempt {attempt}: {problems[0]}")
             continue
         problems = check_fragment(html, args["controls"])
+        layout = []
         if not problems:
-            print(f"[visual] built '{args['id']}' (attempt {attempt}, {len(html)} chars)")
-            return {"id": args["id"], "title": args["title"], "brief": args["brief"],
-                    "controls": args["controls"], "html": html, "model": config.VISUAL_MODEL}, None
-        print(f"[visual] '{args['id']}' attempt {attempt}: {'; '.join(problems)}")
-        feedback = "\n".join(f"- {p}" for p in problems)
-    return None, "; ".join(problems)
+            problems, layout = smoke_test(html, args["controls"])
+        if not problems:
+            problems = check_against_script(html, args, ctx.get("moves", []))
+        if not problems and (best is None or len(layout) < len(best[1])):
+            best = (html, layout)
+        if not problems and not layout:
+            break
+        print(f"[visual] '{args['id']}' attempt {attempt}: {'; '.join(problems + layout)}")
+        feedback = "\n".join(f"- {p}" for p in problems + layout)
+    if best is None:
+        return None, "; ".join(problems)
+    html, layout = best
+    note = f", {len(layout)} layout clash(es) left" if layout else ""
+    print(f"[visual] built '{args['id']}' ({len(html)} chars{note})")
+    return {"id": args["id"], "title": args["title"], "brief": args["brief"], "controls": args["controls"],
+            "html": html, "model": config.VISUAL_MODEL, "layout_advice": layout}, None
 
 
-def ensure_visuals(segments, lecture_id, topic, limit=None):
+def ensure_visuals(segments, lecture_id, topic, limit=None, board_files=None):
     """Build (or reuse) every [VISUAL] in `segments` and set its args["key"]. Returns [(id, reason)] for
-    the visuals that could not be built, so the caller can remove them."""
+    the visuals that could not be built, so the caller can remove them. board_files: programs already on the
+    class screen (a doubt answer), shown to the builder with the ones in `segments`."""
     wanted = [s for s in segments if s.get("name") == "VISUAL"]
+    from figures import load
+    context = visual_context(segments, board_files, load(lecture_id))
     failed = []
     if limit is not None and len(wanted) > limit:
         failed += [(s["args"]["id"], f"more than {limit} visuals") for s in wanted[limit:]]
@@ -222,7 +317,7 @@ def ensure_visuals(segments, lecture_id, topic, limit=None):
     if todo:
         print(f"[visual] building {len(todo)} visual(s) with {config.VISUAL_MODEL} ...")
         with ThreadPoolExecutor(max_workers=min(4, len(todo))) as pool:
-            results = list(pool.map(lambda s: build_visual(topic, s["args"]), todo))
+            results = list(pool.map(lambda s: build_visual(topic, {**s["args"], "_context": context.get(s["args"]["id"], {})}), todo))
         for seg, (visual, reason) in zip(todo, results):
             if visual is None:
                 failed.append((seg["args"]["id"], reason))
@@ -233,6 +328,20 @@ def ensure_visuals(segments, lecture_id, topic, limit=None):
 
 
 def drop_visual_segments(segments, ids):
-    """Remove these visuals and every [VISUAL_SET]/[OPEN_VISUAL] that uses them (the narration stays)."""
-    ids = set(ids)
-    return [s for s in segments if not (s.get("name") in VISUAL_MARKERS and s["args"].get("id") in ids)]
+    """Remove these visuals and every [VISUAL_SET]/[OPEN_VISUAL] that uses them. The narration stays, except
+    the "Let me show you..." lead code added right after a removed visual (it would announce nothing)."""
+    from script_fixes import FLOW_LEADS, VISUAL_LEADS
+    ids, out, after_dropped = set(ids), [], False
+    for seg in segments:
+        if seg.get("name") in VISUAL_MARKERS and seg["args"].get("id") in ids:
+            after_dropped = after_dropped or seg["name"] in ("VISUAL", "FLOW_NEXT")
+            continue
+        if after_dropped and seg["kind"] == "say":
+            for lead in VISUAL_LEADS + FLOW_LEADS:
+                if seg["text"].startswith(lead):
+                    seg = {**seg, "text": seg["text"][len(lead):].strip()}
+            after_dropped = False
+            if not seg["text"]:
+                continue
+        out.append(seg)
+    return out

@@ -137,7 +137,7 @@ function nextStep(status) {
 async function route() {
   if (unmount) { try { unmount(); } catch {} unmount = null; }
   const r = currentRoute();
-  appEl.classList.toggle("collapsed", r.page === "class" || localStorage.getItem("eris-collapsed") === "1");
+  applySidebar(r);
   renderSidebar();
   main.scrollTop = 0;
   if (r.page === "home") { await refreshLectures(); renderOverview(); return; }
@@ -153,10 +153,33 @@ $("#theme-btn").addEventListener("click", () => {
   root.dataset.theme = dark ? "light" : "dark";
   try { localStorage.setItem("eris-theme", root.dataset.theme); } catch {}
 });
+// Sidebar: open on the Overview; on a lecture's Studio and Classroom it folds to an icon rail to give the work
+// room, and slides out over the page while the mouse is on it. "Keep open" pins it open everywhere (remembered).
+const PIN_KEY = "eris-sidebar-pinned";
+const pinned = () => { try { return localStorage.getItem(PIN_KEY) === "1"; } catch { return false; } };
+function applySidebar(r = currentRoute()) {
+  appEl.classList.toggle("collapsed", r.page !== "home" && !pinned());
+  appEl.classList.remove("peek");
+  const btn = $("#collapse-btn");
+  btn.querySelector("span").textContent = pinned() ? "Auto-hide" : "Keep open";
+  btn.title = pinned() ? "Fold the sidebar away on lecture pages" : "Keep the sidebar open on lecture pages";
+  btn.classList.toggle("pinned", pinned());
+}
 $("#collapse-btn").addEventListener("click", () => {
-  const collapsed = !appEl.classList.contains("collapsed");
-  appEl.classList.toggle("collapsed", collapsed);
-  try { localStorage.setItem("eris-collapsed", collapsed ? "1" : "0"); } catch {}
+  try { localStorage.setItem(PIN_KEY, pinned() ? "0" : "1"); } catch {}
+  applySidebar();
 });
+let peekTimer = null;
+const sidebarEl = $("#sidebar");
+sidebarEl.addEventListener("mouseenter", () => {
+  if (!appEl.classList.contains("collapsed")) return;
+  clearTimeout(peekTimer);
+  peekTimer = setTimeout(() => appEl.classList.add("peek"), 120);  // a short delay, so passing the mouse by doesn't open it
+});
+sidebarEl.addEventListener("mouseleave", () => {
+  clearTimeout(peekTimer);
+  peekTimer = setTimeout(() => appEl.classList.remove("peek"), 200);
+});
+sidebarEl.addEventListener("click", (e) => { if (e.target.closest("a")) appEl.classList.remove("peek"); });
 window.addEventListener("hashchange", route);
 refreshLectures().then(route);

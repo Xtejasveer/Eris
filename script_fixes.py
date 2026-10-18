@@ -16,7 +16,7 @@ import re
 
 from script_parser import BLOCK_MARKERS, parse_line_marker
 
-AUTO_FLAG = {"NOTE", "NOTE_TITLE", "WRITE_CODE", "VISUAL"}
+AUTO_FLAG = {"NOTE", "NOTE_TITLE", "WRITE_CODE", "VISUAL", "FLOW_NEXT"}
 # Optional staging: if one of these can't be resolved, the lesson still works without it.
 DROPPABLE = {"HIGHLIGHT", "NOTE_HIGHLIGHT", "SLIDE_HIGHLIGHT", "LOOK_BACK", "VISUAL_SET", "OPEN_VISUAL"}
 ERROR_LINE_RE = re.compile(r"^line (\d+): \[([A-Z_]+)\]")
@@ -107,6 +107,143 @@ def trim_doubt_checks(text, keep):
     return "\n".join(ln for i, ln in enumerate(lines) if i not in drop), len(drop)
 
 
+NOT_CONCEPT_RE = re.compile(r"\b(opening|introduction|intro|recap|summary|closing|wrap[- ]?up|conclusion)\b", re.I)
+
+
+def concept_sections(segments):
+    """Titles of the teaching sections (not the opening, recap or closing)."""
+    titles = [s["args"]["title"] for s in segments if s.get("name") == "SECTION"]
+    return [t for t in titles[1:] if not NOT_CONCEPT_RE.search(t)]
+
+
+def add_doubt_checks(text, keep):
+    """Give each of the first `keep` concept sections a [DOUBT_CHECK] at its end (if it has none) and make the
+    last line one. Returns (text, number added)."""
+    lines = text.splitlines()
+    sections = _marker_lines(lines, "SECTION")
+    titles = [parse_line_marker(lines[i])[1].get("title", "") for i in sections]
+    concept = [k for k, t in enumerate(titles) if k > 0 and not NOT_CONCEPT_RE.search(t)][:keep]
+    inserts = []
+    for k in concept:
+        start, stop = sections[k], sections[k + 1] if k + 1 < len(sections) else len(lines)
+        if not any(parse_line_marker(ln) and parse_line_marker(ln)[0] == "DOUBT_CHECK" for ln in lines[start:stop]):
+            inserts.append(stop)
+    for at in sorted(inserts, reverse=True):
+        lines[at:at] = ["[DOUBT_CHECK]", ""]
+    added = len(inserts)
+    last = next((ln for ln in reversed(lines) if ln.strip()), "")
+    if parse_line_marker(last) is None or parse_line_marker(last)[0] != "DOUBT_CHECK":
+        lines.append("[DOUBT_CHECK]")
+        added += 1
+    return "\n".join(lines), added
+
+
+def _flow_labels(lines):
+    """flow id -> its block labels, from the [FLOW] blocks in the text."""
+    from flow_diagram import parse_flow
+    out = {}
+    for i, line in enumerate(lines):
+        m = parse_line_marker(line)
+        if m and m[0] == "FLOW":
+            end = _block_end(lines, i, "FLOW")
+            if end is not None:
+                out[m[1].get("id")] = [b["label"] for b in parse_flow("\n".join(lines[i + 1:end]))[0]]
+    return out
+
+
+def _say_line(lines, j, step):
+    """Index of the nearest non-blank line from j in direction step, if it is narration; else None."""
+    while 0 <= j < len(lines) and not lines[j].strip():
+        j += step
+    return j if 0 <= j < len(lines) and parse_line_marker(lines[j]) is None else None
+
+
+def fix_flow_order(text):
+    """A block's sentence said BEFORE its [FLOW_NEXT] (the narration runs one block ahead): move the marker in front
+    of that sentence. Returns (text, number moved)."""
+    from script_checks import said_too_early
+    lines = text.splitlines()
+    labels = _flow_labels(lines)
+    counts, moved, i = {}, 0, 0
+    while i < len(lines):
+        m = parse_line_marker(lines[i])
+        if m and m[0] == "FLOW_NEXT" and m[1].get("id") in labels:
+            fid = m[1]["id"]
+            k = counts.get(fid, 0)
+            counts[fid] = k + 1
+            blocks = labels[fid]
+            label = blocks[k] if k < len(blocks) else ""
+            nxt = blocks[k + 1] if k + 1 < len(blocks) else ""
+            before, after = _say_line(lines, i - 1, -1), _say_line(lines, i + 1, 1)
+            if label and before is not None and said_too_early(
+                    re.split(r"(?<=[.!?])\s+", lines[before].strip())[-1],
+                    lines[after].split(". ")[0] if after is not None else "", label, nxt):
+                lines.insert(before, lines.pop(i))
+                moved += 1
+        i += 1
+    return "\n".join(lines), moved
+
+
+def complete_flows(text):
+    """Draw every block a diagram leaves out: right before the sentence that already names it (after the last
+    [FLOW_NEXT]), or with a short sentence of its own. Returns (text, number added)."""
+    from script_checks import block_score
+    lines = text.splitlines()
+    added = 0
+    for fid, blocks in _flow_labels(lines).items():
+        idx = [i for i, ln in enumerate(lines) if (m := parse_line_marker(ln)) and m[0] == "FLOW_NEXT" and m[1].get("id") == fid]
+        for label in blocks[len(idx):]:
+            idx = [i for i, ln in enumerate(lines) if (m := parse_line_marker(ln)) and m[0] == "FLOW_NEXT" and m[1].get("id") == fid]
+            start = (idx[-1] + 1) if idx else next(i for i, ln in enumerate(lines) if ln.strip() == "[/FLOW]") + 1
+            j = start
+            while j < len(lines) and parse_line_marker(lines[j]) is None:  # the narration after the last drawn block
+                if lines[j].strip() and j > start and block_score(lines[j], label) >= 0.5:
+                    break
+                j += 1
+            if j < len(lines) and parse_line_marker(lines[j]) is None and lines[j].strip():
+                lines.insert(j, f'[FLOW_NEXT id="{fid}"]')  # the script already says this block here
+            else:
+                at = j
+                lines[at:at] = [f'[FLOW_NEXT id="{fid}"]', f"Next on the board: {label[0].lower() + label[1:]}."]
+            added += 1
+    return "\n".join(lines), added
+
+
+def early_doubt_checks(segments):
+    """Titles of sections whose [DOUBT_CHECK] comes before the section has finished teaching."""
+    out, section = [], None
+    for i, seg in enumerate(segments):
+        if seg.get("name") == "SECTION":
+            section = seg["args"]["title"]
+        elif seg.get("name") == "DOUBT_CHECK" and i + 1 < len(segments):
+            following = segments[i + 1:]
+            ends = next((k for k, s in enumerate(following) if s.get("name") == "SECTION"), len(following))
+            if any(s["kind"] == "action" for s in following[:ends]) and section:
+                out.append(section)
+    return out
+
+
+def move_doubt_checks_to_section_end(text):
+    """Move each [DOUBT_CHECK] that comes before its section has finished to just before the next [SECTION].
+    Returns (text, number moved)."""
+    lines = text.splitlines()
+    sections = _marker_lines(lines, "SECTION")
+    checks = _marker_lines(lines, "DOUBT_CHECK")
+    moves = []
+    for c in checks[:-1]:
+        nxt = next((s for s in sections if s > c), None)
+        if nxt is None:
+            continue
+        between = [ln for ln in lines[c + 1:nxt] if parse_line_marker(ln) and not parse_line_marker(ln)[0].startswith("/")]
+        if between:
+            moves.append((c, nxt))
+    for c, nxt in sorted(moves, reverse=True):
+        lines.insert(nxt, "[DOUBT_CHECK]")
+        lines.insert(nxt + 1, "")
+        del lines[c]
+    return "\n".join(lines), len(moves)
+
+
 def drop_bad_staging(text, errors):
     """Remove the marker lines named in parser errors when they are optional staging (DROPPABLE).
     Returns (text, dropped error messages)."""
@@ -120,15 +257,18 @@ def drop_bad_staging(text, errors):
     return "\n".join(ln for i, ln in enumerate(lines) if i not in drop), dropped
 
 
-def drop_visual(text, visual_id):
-    """Remove the [VISUAL id=visual_id] block and the markers that use it. Returns the text."""
+USERS = {"VISUAL": ("VISUAL", "VISUAL_SET", "OPEN_VISUAL"), "FLOW": ("FLOW", "FLOW_NEXT", "FLOW_HIGHLIGHT", "OPEN_FLOW")}
+
+
+def drop_visual(text, visual_id, block="VISUAL"):
+    """Remove the [VISUAL id=..] (or [FLOW id=..]) block and the markers that use it. Returns the text."""
     lines, out, i = text.splitlines(), [], 0
     while i < len(lines):
         marker = parse_line_marker(lines[i])
-        if marker and marker[1].get("id") == visual_id and marker[0] in ("VISUAL", "VISUAL_SET", "OPEN_VISUAL"):
-            end = _block_end(lines, i, "VISUAL") if marker[0] == "VISUAL" else i
+        if marker and marker[1].get("id") == visual_id and marker[0] in USERS[block]:
+            end = _block_end(lines, i, block) if marker[0] == block else i
             i = (end if end is not None else i) + 1
-            if marker[0] == "VISUAL" and i < len(lines) and lines[i].strip() in VISUAL_LEADS:
+            if i < len(lines) and lines[i].strip() in VISUAL_LEADS + FLOW_LEADS:
                 i += 1  # the lead code added for it ("Let me show you...") would announce nothing
             continue
         if marker and marker[0] in BLOCK_MARKERS:
@@ -140,6 +280,29 @@ def drop_visual(text, visual_id):
         out.append(lines[i])
         i += 1
     return "\n".join(out)
+
+
+def drop_markers(text, names):
+    """Remove every marker line in `names` (and the whole body of block markers among them). The narration
+    stays. Returns (text, number removed)."""
+    lines, out, removed, i = text.splitlines(), [], 0, 0
+    while i < len(lines):
+        marker = parse_line_marker(lines[i])
+        if marker and marker[0] in BLOCK_MARKERS:
+            end = _block_end(lines, i, marker[0])
+            end = len(lines) - 1 if end is None else end
+            if marker[0] in names:
+                removed += 1
+            else:
+                out += lines[i:end + 1]
+            i = end + 1
+            continue
+        if marker and marker[0] in names:
+            removed += 1
+        else:
+            out.append(lines[i])
+        i += 1
+    return "\n".join(out), removed
 
 
 def drop_bad_visuals(text, errors):
@@ -157,7 +320,8 @@ def drop_bad_visuals(text, errors):
     return text, dropped
 
 
-VISUAL_LEADS = ["Let me show you this as a picture.", "Let me draw this so you can see it.", "Let me show you how this looks."]
+FLOW_LEADS = ["Let me draw the next step on the board.", "Let me add the next block.", "Now the next step goes on the board."]
+VISUAL_LEADS = ["Let me show you this on a graph.", "Let me put this on a graph you can play with.", "Let me show you how this looks on a graph."]
 NOTE_LEADS = ["Let me write this down: {}.", "I'll note this down: {}.", "Let me jot this down: {}."]
 CODE_LEADS = ["Let me type this program out for you.", "I'll type the code into the editor now.",
               "Let me write this as a small program."]
@@ -187,15 +351,22 @@ def _generic_note_lead(body, n):
 def announce_writing(text):
     """For each note/program followed by narration whose first sentence doesn't say what is being written,
     insert a lead sentence that does. Returns (text, number of leads added)."""
-    from script_checks import ANNOUNCES_WRITING_RE  # script_checks imports format_fixes, not this module
+    from flow_diagram import parse_flow
+    from script_checks import ANNOUNCES_WRITING_RE, _names_block  # script_checks imports format_fixes, not this module
 
     lines, out, added, i = text.splitlines(), [], 0, 0
+    flows = {}  # flow id -> [labels still to draw], so a reveal whose sentence names its block needs no lead
     while i < len(lines):
         marker = parse_line_marker(lines[i])
+        if marker and marker[0] == "FLOW":
+            end = _block_end(lines, i, "FLOW")
+            if end is not None:
+                flows[marker[1].get("id")] = [b["label"] for b in parse_flow("\n".join(lines[i + 1:end]))[0]]
         if marker is None or marker[0] not in AUTO_FLAG:
             out.append(lines[i]); i += 1
             continue
         name, args = marker
+        label = flows.get(args.get("id"), [""]).pop(0) if name == "FLOW_NEXT" and flows.get(args.get("id")) else ""
         end = _block_end(lines, i, name) if name in BLOCK_MARKERS else i
         if end is None:
             out += lines[i:]; break
@@ -203,11 +374,19 @@ def announce_writing(text):
         j = end + 1
         while j < len(lines) and not lines[j].strip():
             j += 1
-        if j < len(lines) and parse_line_marker(lines[j]) is None and not ANNOUNCES_WRITING_RE.search(lines[j].split(". ")[0]):
+        first = lines[j].split(". ")[0] if j < len(lines) else ""
+        prev = _say_line(lines, i - 1, -1)
+        if prev is not None and ANNOUNCES_WRITING_RE.search(lines[prev]):
+            i = end + 1
+            continue  # "Let me type the code..." was said just before: a second lead would repeat it
+        if j < len(lines) and parse_line_marker(lines[j]) is None and not ANNOUNCES_WRITING_RE.search(first) \
+                and not (name == "FLOW_NEXT" and _names_block(first, label)):
             if name == "WRITE_CODE":
                 lead = CODE_LEADS[added % len(CODE_LEADS)]
             elif name == "VISUAL":
                 lead = VISUAL_LEADS[added % len(VISUAL_LEADS)]
+            elif name == "FLOW_NEXT":
+                lead = FLOW_LEADS[added % len(FLOW_LEADS)]
             elif name == "NOTE_TITLE":
                 lead = f"Let me write the heading: {args.get('text', '').strip()}."
             else:

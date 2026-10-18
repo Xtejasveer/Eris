@@ -10,6 +10,7 @@ import sys
 import textwrap
 
 import config
+from flow_diagram import parse_flow
 from visual_controls import VISUAL_ID_RE, coerce_value, parse_controls
 
 # Marker name -> required args.
@@ -35,15 +36,20 @@ MARKERS = {
     "VISUAL": ["id", "title"],          # body: what to show, then a "controls: ..." line
     "VISUAL_SET": ["id", "control"],    # move a control (value=...; a button needs none)
     "OPEN_VISUAL": ["id"],              # bring an earlier visual back on screen
+    # Flow diagrams drawn on the board block by block (see flow_diagram.py):
+    "FLOW": ["id", "title"],            # body: one block per line
+    "FLOW_NEXT": ["id"],                # draw the next block and its arrows
+    "FLOW_HIGHLIGHT": ["id", "block"],  # point at a block already drawn
+    "OPEN_FLOW": ["id"],                # show the diagram again
 }
 INT_ARGS = ("n", "s")
 # Level 2 sync: these actions may run while the narration right after them is spoken
 # (while_speaking=true). RUN, READ_OUTPUT, PAUSE, DOUBT_CHECK and SECTION must happen in order.
 WHILE_SPEAKING_OK = {"WRITE_CODE", "NOTE", "NOTE_TITLE", "WRITE", "NOTE_HIGHLIGHT", "HIGHLIGHT",
                      "SLIDE", "SLIDE_HIGHLIGHT", "NEW_PAGE", "OPEN_FILE", "LOOK_BACK",
-                     "VISUAL", "VISUAL_SET", "OPEN_VISUAL"}
+                     "VISUAL", "VISUAL_SET", "OPEN_VISUAL", "FLOW", "FLOW_NEXT", "FLOW_HIGHLIGHT", "OPEN_FLOW"}
 # Markers with a body that runs until [/NAME]. The body is stored in this arg.
-BLOCK_MARKERS = {"WRITE_CODE": "code", "NOTE": "text", "VISUAL": "brief"}
+BLOCK_MARKERS = {"WRITE_CODE": "code", "NOTE": "text", "VISUAL": "brief", "FLOW": "steps"}
 
 NAME_RE = re.compile(r"^/?[A-Z][A-Z_]*$")
 # key=value, key="value with spaces", or key='value with "double quotes"' (code often has them)
@@ -186,6 +192,33 @@ def _check_marker(name, args, line_no, state, errors):
             else:
                 args["value"] = value
 
+    if name == "FLOW":
+        if not VISUAL_ID_RE.match(args["id"]):
+            err(f"id must be short lowercase letters, digits or dashes (like id=\"for-loop\"), got '{args['id']}'")
+            return False
+        if args["id"] in state["flows"]:
+            err(f"a flow with id '{args['id']}' is already on the board; use a new id, or [OPEN_FLOW] it")
+            return False
+
+    if name in ("FLOW_NEXT", "FLOW_HIGHLIGHT", "OPEN_FLOW"):
+        flow = state["flows"].get(args["id"])
+        if flow is None:
+            known = ", ".join(state["flows"]) or "none yet"
+            err(f"flow '{args['id']}' is not on the board (flows: {known}); create it with a [FLOW] block first")
+            return False
+        if name == "FLOW_NEXT":
+            if flow["revealed"] >= len(flow["blocks"]):
+                err(f"every block of flow '{args['id']}' is already drawn ({len(flow['blocks'])} blocks)")
+                return False
+            args["block"] = flow["blocks"][flow["revealed"]]["id"]  # the player draws this one
+            args["label"] = flow["blocks"][flow["revealed"]]["label"]
+            flow["revealed"] += 1
+        if name == "FLOW_HIGHLIGHT":
+            drawn = [b["id"] for b in flow["blocks"][:flow["revealed"]]]
+            if args["block"] not in drawn:
+                err(f"block '{args['block']}' of flow '{args['id']}' is not drawn yet; drawn: {', '.join(drawn) or 'none'}")
+                return False
+
     if name == "OPEN_FILE" and args["file"] not in state["files"]:
         err(f"file '{args['file']}' is not on the board")
         return False
@@ -259,6 +292,13 @@ def _close_block(block, line_no, state, segments, errors):
         code = "\n".join(block["lines"]).strip("\n")
         args["code"] = code
         state["files"][args["file"]] = code.splitlines()
+    elif block["name"] == "FLOW":
+        blocks, edges, problems = parse_flow(textwrap.dedent("\n".join(block["lines"])))
+        if problems:
+            errors.extend(f"line {block['start']}: [FLOW] {p}" for p in problems)
+            return
+        args["blocks"], args["edges"] = blocks, edges
+        state["flows"][args["id"]] = {"blocks": blocks, "revealed": 0}
     elif block["name"] == "VISUAL":
         brief, controls, problems = parse_controls(textwrap.dedent("\n".join(block["lines"])))
         if problems:
@@ -293,7 +333,8 @@ def parse_script(text, slide_count=None, require_doubt_check=True, board=None):
     state = {"files": {n: c.splitlines() for n, c in board.get("files", {}).items()},
              "has_run": bool(board.get("has_run")), "slide_count": slide_count,
              "notebook": list(board.get("notebook", [])),
-             "visuals": {v: d["controls"] for v, d in board.get("visuals", {}).items()}}
+             "visuals": {v: d["controls"] for v, d in board.get("visuals", {}).items()},
+             "flows": {f: {"blocks": d["blocks"], "revealed": d["revealed"]} for f, d in board.get("flows", {}).items()}}
     say_lines = []
     block = None  # dict while inside a WRITE_CODE or NOTE body
 

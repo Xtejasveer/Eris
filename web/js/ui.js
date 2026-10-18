@@ -103,6 +103,15 @@ export function badge(status) {
   return h("span", { class: `badge ${status}` }, status);
 }
 
+// Decimal minutes as a person says them: 4.7 -> "4 min 42 s", 5 -> "5 min", 0.5 -> "30 s".
+export function formatDuration(minutes) {
+  if (minutes == null || !isFinite(minutes)) return "?";
+  const total = Math.round(minutes * 60);
+  const m = Math.floor(total / 60), s = total % 60;
+  if (!m) return `${s} s`;
+  return s ? `${m} min ${s} s` : `${m} min`;
+}
+
 export function initials(name) {
   const parts = String(name).split(/[_\-\s]+/).filter(Boolean);
   return ((parts[0]?.[0] || "") + (parts[1]?.[0] || parts[0]?.[1] || "")).toUpperCase();

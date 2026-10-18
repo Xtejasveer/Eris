@@ -23,7 +23,7 @@ def recovery_line(teacher_name, state_text, segment, error):
     try:
         if _model is None:
             _model = init_chat_model(f"openrouter:{config.LLM_MODEL}", temperature=0.3,
-                                     request_timeout=20, max_retries=1)
+                                     request_timeout=20_000, max_retries=1)  # milliseconds
         reply = _model.invoke(recovery_prompt(teacher_name, state_text, action, error))
         text = reply.content if isinstance(reply.content, str) else ""
         return text.strip() or FALLBACK

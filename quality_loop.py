@@ -47,7 +47,7 @@ def review(pipe, text, segments, persona, topic):
     if not config.JUDGE_ENABLED:
         return text, segments, None
     print(f"[judge] checking the script with {config.JUDGE_MODEL} ...")
-    report = latest = judge_script(segments, persona, topic)
+    report = latest = judge_script(segments, persona, topic, pipe.figures)
     report["auto_fixes"] = list(pipe.auto_fixes)
     print_report(report)
     latest_segments = segments
@@ -63,7 +63,7 @@ def review(pipe, text, segments, persona, topic):
             print("[judge] the rewrite broke the script; keeping the best version so far")
             break
         new_text, new_segments = pipe.finalize(new_text)
-        latest, latest_segments = judge_script(new_segments, persona, topic), new_segments
+        latest, latest_segments = judge_script(new_segments, persona, topic, pipe.figures), new_segments
         latest["auto_fixes"] = list(pipe.auto_fixes)
         print_report(latest)
         if not latest["error"] and better(latest, report):

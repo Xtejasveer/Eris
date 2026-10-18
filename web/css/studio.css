@@ -49,7 +49,7 @@
 .generate-bar { position: sticky; bottom: 0; padding: 14px; border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; }
 .generate-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 
-.studio-right { position: sticky; top: 84px; display: flex; flex-direction: column; max-height: calc(100vh - 104px); min-height: 520px; overflow: hidden; }
+.studio-right { position: sticky; top: 84px; display: flex; flex-direction: column; height: calc(100vh - 104px); min-height: 520px; overflow: hidden; }
 .script-head { flex-wrap: wrap; }
 .script-stats { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 18px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
 .s-item { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); font-size: 12.5px; color: var(--muted); }
@@ -77,7 +77,7 @@
 .script-pane { flex: 1; min-height: 0; overflow: auto; }
 
 /* preview document */
-.script-doc { max-width: 760px; margin: 0 auto; padding: 22px 28px 48px; display: flex; flex-direction: column; gap: 12px; }
+.script-doc { max-width: 1100px; margin: 0 auto; padding: 22px 32px 48px; display: flex; flex-direction: column; gap: 12px; }
 .doc-section { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; }
 .doc-section + .doc-section { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 24px; }
 .doc-section h2 { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 650; }
@@ -133,14 +133,90 @@ code.ic { font-size: .88em; padding: 1px 5px; border-radius: 5px; background: va
 .script-pane.log { display: flex; flex-direction: column; }
 .log-status { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; padding: 12px 18px; border-bottom: 1px solid var(--border); font-size: 13px; }
 .log-status.running { color: var(--primary); } .log-status.done { color: var(--success); } .log-status.failed { color: var(--danger); }
-.log-error { width: 100%; margin: 4px 0 0; padding: 10px; border-radius: 8px; background: var(--danger-soft); white-space: pre-wrap; font-size: 12px; }
-.log-lines { flex: 1; overflow: auto; padding: 12px 18px 24px; background: #101217; color: #c9ccd4; font: 12.5px/1.65 var(--mono); }
-.log-line { white-space: pre-wrap; word-break: break-word; }
-.log-line.tool { color: #82aaff; } .log-line.bad { color: #ff8a8a; }
+.log-error { width: 100%; margin: 4px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--danger-soft); font-size: 13px; color: var(--text); }
+/* generation progress, in plain steps */
+.log-lines { flex: 1; overflow: auto; padding: 16px 18px 24px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; }
+.progress-step { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+.progress-step svg, .progress-step .spinner { width: 16px; height: 16px; flex: none; }
+.progress-step.done { color: var(--text); } .progress-step.done svg { color: var(--success); }
+.progress-step.now { color: var(--primary); font-weight: 600; }
+.progress-step.failed { color: var(--danger); } .progress-step.failed svg { color: var(--danger); }
+.step-dot { width: 8px; height: 8px; margin: 0 4px; border-radius: 50%; background: var(--border-strong); flex: none; }
+.progress-note { margin: 6px 0 0; color: var(--muted); font-size: 12.5px; }
 
 @media (max-width: 1100px) {
-  .studio { grid-template-columns: 1fr; }
-  .studio-right { position: static; max-height: none; }
+  .studio, .studio.folded { grid-template-columns: 1fr; }
+  .setup-summary { position: static; }
+  .studio-right { position: static; height: auto; max-height: none; }
   .generate-bar { position: static; }
   .script-pane { max-height: 70vh; }
 }
+
+/* which classroom environments the material unlocks */
+.env-note { border: 1px solid var(--border); background: var(--surface-2); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 8px; }
+.env-note-head { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.env-note-head svg { width: 15px; height: 15px; color: var(--primary); }
+.env-note p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+.env-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.env-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--border); }
+.env-chip svg { width: 13px; height: 13px; }
+.env-chip.on { background: var(--success-soft); color: var(--success); border-color: transparent; }
+.env-chip.off { color: var(--muted); text-decoration: line-through; opacity: .75; }
+
+/* quality check in plain words */
+.judge-checks { list-style: none; margin: 0; padding: 2px 12px 10px; display: flex; flex-direction: column; gap: 6px; }
+.judge-checks li { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+.judge-checks li svg { width: 15px; height: 15px; flex: none; margin-top: 2px; }
+.judge-checks li.ok svg { color: var(--success); }
+.judge-checks li.bad svg { color: var(--warning); }
+.judge-checks li > div { display: flex; flex-direction: column; gap: 2px; }
+.judge-checks small { color: var(--muted); font-size: 12px; }
+.judge-hint { margin: 0; padding: 0 12px 10px; color: var(--muted); font-size: 12px; }
+
+/* ---------- the setup folds away once a script exists ---------- */
+.studio.folded { grid-template-columns: minmax(250px, 290px) minmax(0, 1fr); }
+.setup-summary { display: none; position: sticky; top: 84px; }
+.studio.folded .setup-summary { display: flex; flex-direction: column; }
+.studio.folded .setup-full { display: none; }
+.setup-full { display: flex; flex-direction: column; gap: 16px; }
+.setup-full-head { display: flex; align-items: center; gap: 8px; padding: 0 4px; font-size: 14px; }
+.setup-summary .card-header svg { width: 16px; height: 16px; color: var(--muted); }
+.setup-summary-body { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; }
+.sum-row { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-2); line-height: 1.4; }
+.sum-row svg { width: 15px; height: 15px; flex: none; margin-top: 2px; color: var(--muted); }
+.sum-row span { min-width: 0; overflow-wrap: anywhere; }
+.setup-summary-foot { padding: 0 16px 16px; }
+.setup-summary .env-chips { margin-top: 2px; }
+
+/* ---------- tabs: Preview / Quality / Edit (+ Progress) ---------- */
+.gone { display: none !important; }
+.tab-badge { margin-left: 6px; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; }
+.tab-badge.ok { color: var(--success); background: var(--success-soft); }
+.tab-badge.warn { color: var(--warning); background: var(--warning-soft); }
+.quality-line { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text-2); font: inherit; font-size: 13px; cursor: pointer; text-align: left; }
+.quality-line:hover { background: var(--surface-2); }
+.quality-line svg { width: 15px; height: 15px; flex: none; }
+.quality-line > svg:last-child { margin-left: auto; color: var(--muted); }
+.quality-line.ok > svg:first-child { color: var(--success); }
+.quality-line.warn > svg:first-child { color: var(--warning); }
+.script-pane.quality { overflow: auto; }
+.quality-wrap { padding: 18px 32px 28px; max-width: 1100px; margin: 0 auto; }
+.quality-wrap .judge-card { border: 0; background: transparent; font-size: 14px; }
+.quality-wrap .judge-card summary { padding: 0 0 12px; cursor: default; pointer-events: none; }
+.quality-wrap .judge-checks { padding: 0; gap: 10px; }
+.quality-wrap .judge-checks li { font-size: 14px; }
+.quality-wrap .judge-hint { padding: 12px 0 0; }
+
+/* ---------- generating: the progress fills the panel ---------- */
+.studio-right.generating .script-pane.log { display: flex; align-items: center; justify-content: center; overflow: auto; padding: 24px; }
+.progress-card { width: 100%; max-width: 560px; margin: auto; border: 1px solid var(--border); border-radius: var(--radius-lg);
+  background: var(--surface); overflow: hidden; }
+.progress-card .log-status { border-bottom: 1px solid var(--border); }
+.progress-card .log-lines { padding: 18px 20px; }
+.progress-actions:not(:empty) { display: flex; gap: 8px; padding: 0 20px 18px; }
+
+/* Studio uses the whole window width (the sidebar folds away), with an even gutter. */
+.page.studio { max-width: none; padding: 20px 28px 24px; }
+.setup-summary .env-chips { gap: 5px; }
+.setup-summary .env-chip { font-size: 11.5px; padding: 3px 8px; }

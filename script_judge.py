@@ -34,6 +34,26 @@ SECTION_QUESTIONS = {
         "Narration contains only sentences meant to be spoken.",
         "Narration contains markup, raw program output, or note fragments that would sound wrong read aloud."),
         1, "blocker", 'In section "{section}", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.'),
+    "graph_matches_text": (_noul(
+        "Does each graph in graphs fit what this section teaches: what it plots agrees with the narration, notebook "
+        "and code, and after each slider move in slider_moves, does teacher_says describe correctly what the graph "
+        "shows at that value?",
+        "Every graph agrees with the lesson, and every sentence after a slider move matches what the graph shows.",
+        "A graph plots something the lesson doesn't teach, or a sentence after a slider move describes something "
+        "the graph does not show at that value."),
+        2, "blocker", 'In section "{section}", make each graph and what you say after each slider move agree: say what '
+                      "the graph really shows at that value, consistent with the notes and code."),
+    "graph_matches_material": (_noul(
+        "Does each graph in graphs show the same quantity, axes and kind of graph as its material_graph?",
+        "Each graph recreates the graph from the teacher's material.",
+        "A graph plots something different from the graph in the material."),
+        1, "minor", 'In section "{section}", make the [VISUAL] recreate the graph from the material: same quantity, '
+                    "axes and kind of graph, with a slider for the value worth exploring."),
+    "flow_matches_material": (_noul(
+        "Does each diagram in flows show the same steps, in the same order, as its material_steps?",
+        "Each diagram follows the steps from the teacher's material.",
+        "A diagram leaves out, adds or reorders steps compared with the material."),
+        1, "minor", 'In section "{section}", make the diagram follow the steps from the material, in the same order.'),
     "has_worked_example": (_noul(
         "Does this section teach with a small worked example using concrete numbers?",
         "There is a concrete example with real values.", "The section stays abstract."),
@@ -67,16 +87,28 @@ PAIR_QUESTION = ("In spoken_while_writing, is {pair}'s 'said' sentence about {pa
                  "to say it while that text is being written on screen?")
 
 
-def section_states(segments):
-    """One state per [SECTION]: its narration, notebook, code, real outputs and while-speaking pairs.
-    Pairs are keyed pair_0, pair_1, ... and remember their position among all flagged markers (flag)."""
+def _said_after(segments, i):
+    """The first two sentences spoken after segment i (what the teacher says about a slider move)."""
+    import re
+    if i + 1 < len(segments) and segments[i + 1].get("name") == "VISUAL_SET":
+        return "(another move follows straight away)"
+    said = next((s["text"] for s in segments[i + 1:i + 4] if s["kind"] == "say"), "")
+    return " ".join(re.split(r"(?<=[.!?])\s+", said)[:2])
+
+
+def section_states(segments, figs=None):
+    """One state per [SECTION]: its narration, notebook, code, real outputs, graphs and while-speaking pairs.
+    Pairs are keyed pair_0, pair_1, ... and remember their position among all flagged markers (flag).
+    figs: the material's graphs (figures.py), so each graph can be compared with the one it recreates."""
+    from figures import matches
     states, cur, flag = [], None, -1
+    graphs = {}  # visual id -> its entry in the section that made it
     for i, seg in enumerate(segments):
         name, args = seg.get("name"), seg.get("args", {})
         flag += 1 if args.get("while_speaking") else 0  # counted everywhere, so it matches remove_flags
         if name == "SECTION":
             cur = {"section": args["title"], "narration": [], "notebook": [], "code": [],
-                   "real_outputs": [], "spoken_while_writing": {}, "_flags": {}}
+                   "real_outputs": [], "graphs": {}, "flows": {}, "spoken_while_writing": {}, "_flags": {}}
             states.append(cur)
             continue
         if cur is None:
@@ -89,9 +121,26 @@ def section_states(segments):
             cur["code"].append(f"{args['file']}:\n{args['code']}")
         elif name == "RUN":
             cur["real_outputs"].append(f"$ {args['cmd']}\n{seg.get('expected_output', '')}")
+        elif name == "FLOW":
+            fig = matches(args.get("from"), figs, kind="flow")
+            cur["flows"][args["id"]] = {"title": args["title"], "blocks": [b["label"] for b in args.get("blocks", [])],
+                                        "material_steps": fig["details"] if fig else ""}
+        elif name == "VISUAL":
+            fig = matches(args.get("from"), figs)
+            graphs[args["id"]] = cur["graphs"][args["id"]] = {
+                "title": args["title"], "plots": args.get("brief", ""),
+                "sliders": [f"{c['name']} {c.get('min', '')}-{c.get('max', '')}" for c in args.get("controls", [])],
+                "material_graph": f"{fig['title']}: {fig['details']}" if fig else "", "slider_moves": []}
+        elif name == "VISUAL_SET" and args["id"] in graphs:
+            if args["id"] not in cur["graphs"]:  # reopened in a later section
+                cur["graphs"][args["id"]] = graphs[args["id"]]
+            graphs[args["id"]]["slider_moves"].append({"control": args["control"], "value": args.get("value", "pressed"),
+                                                      "teacher_says": _said_after(segments, i)})
         if args.get("while_speaking") and i + 1 < len(segments) and segments[i + 1]["kind"] == "say":
             key = f"pair_{len(cur['spoken_while_writing'])}"
-            cur["spoken_while_writing"][key] = {"written": args.get("code") or args.get("text", ""),
+            cur["spoken_while_writing"][key] = {"written": args.get("code") or args.get("text") or (
+                                                    f"interactive graph: {args['title']}" if name == "VISUAL" else
+                                                    f"diagram block: {args.get('label', '')}" if name == "FLOW_NEXT" else ""),
                                                 "said": segments[i + 1]["text"]}
             cur["_flags"][key] = flag
     return states
@@ -106,6 +155,12 @@ def _section_questions(state):
         wanted.add("narration_matches_output")
     if state["code"]:  # Opening / Closing notes are messages and recaps, not lessons
         wanted.add("has_worked_example")
+    if any(f["material_steps"] for f in state["flows"].values()):
+        wanted.add("flow_matches_material")
+    if state["graphs"]:
+        wanted.add("graph_matches_text")
+        if any(g["material_graph"] for g in state["graphs"].values()):
+            wanted.add("graph_matches_material")
     questions = {k: v for k, v in SECTION_QUESTIONS.items() if k in wanted}
     for key in state["spoken_while_writing"]:  # one question per while_speaking pair
         questions[key] = (_noul(PAIR_QUESTION.format(pair=key), "The sentence describes what is being written.",
@@ -149,12 +204,12 @@ def _decide(state, questions):
     return values, data.get("usage", {}).get("cost") or 0
 
 
-def judge_script(segments, persona, topic):
+def judge_script(segments, persona, topic, figs=None):
     """Ask every applicable question. Returns the report (see blockers() and fix_message())."""
     report = {"model": config.JUDGE_MODEL, "findings": [], "cost": 0.0, "error": ""}
     jobs = [(None, script_state(segments, persona, topic), SCRIPT_QUESTIONS)]
     report["pairs"] = []
-    jobs += [(s["section"], s, _section_questions(s)) for s in section_states(segments)]
+    jobs += [(s["section"], s, _section_questions(s)) for s in section_states(segments, figs)]
     for section, state, questions in jobs:
         flags = state.pop("_flags", {}) if section else {}
         try:
@@ -180,6 +235,24 @@ def judge_script(segments, persona, topic):
     report["blockers"] = len(blockers(report))
     report["failed_minor"] = sum(1 for f in report["findings"] if not f["passed"] and f["severity"] == "minor")
     return report
+
+
+GRAPH_ALIGNMENT = _noul(
+    "For every move in moves, does teacher_says agree with graph_reports, which is what the interactive graph itself "
+    "reports it shows after that slider move?",
+    "Every sentence the teacher says after a slider move agrees with what the graph shows at that value.",
+    "At least one sentence describes something the graph does not show at that value (different numbers or shape).")
+
+
+def check_graph_alignment(title, plots, moves):
+    """Jev on one built graph: does the narration after each slider move match what the graph reports?
+    Returns (P(yes), cost), or (None, 0) if Jev can't be reached (the graph is kept)."""
+    try:
+        values, cost = _decide({"graph": title, "plots": plots, "moves": moves}, {"aligned": (GRAPH_ALIGNMENT, 1, "blocker", "")})
+        return values.get("aligned"), cost
+    except Exception as e:
+        print(f"[visual] Jev could not check the graph: {type(e).__name__}: {str(e)[:120]}")
+        return None, 0
 
 
 def blockers(report):

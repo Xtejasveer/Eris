@@ -9,6 +9,7 @@ arrives whole. Code (script_writer.py) then validates it and asks this same writ
 """
 
 import sys
+import time
 
 from langchain.agents import create_agent
 from langchain.chat_models import init_chat_model
@@ -75,10 +76,16 @@ def run_research(system_prompt, thread_id):
                          tools=[search_material, read_outline, dry_run_python],
                          system_prompt=system_prompt, checkpointer=InMemorySaver(), name="script_researcher")
     cfg = {"configurable": {"thread_id": thread_id}, "recursion_limit": 100}
-    try:
-        result = agent.invoke({"messages": [{"role": "user", "content": RESEARCH_KICKOFF}]}, cfg)
-    except Exception as e:
-        _fail("research", e)
+    for attempt in (1, 2):  # one retry: OpenRouter sometimes fails a request briefly ("retry shortly")
+        try:
+            result = agent.invoke({"messages": [{"role": "user", "content": RESEARCH_KICKOFF}]},
+                                  {**cfg, "configurable": {"thread_id": f"{thread_id}_{attempt}"}})
+            break
+        except Exception as e:
+            if attempt == 2:
+                _fail("research", e)
+            print(f"[generate] the research call failed ({str(e)[:120]}); retrying once in 5 s")
+            time.sleep(5)
     return research_notes(result["messages"])
 
 
@@ -91,10 +98,15 @@ class ScriptWriter:
 
     def ask(self, content):
         self.messages.append(HumanMessage(content))
-        try:
-            reply = self.model.invoke(self.messages)
-        except Exception as e:
-            _fail("writing", e)
+        for attempt in (1, 2):  # one retry for a brief OpenRouter failure
+            try:
+                reply = self.model.invoke(self.messages)
+                break
+            except Exception as e:
+                if attempt == 2:
+                    _fail("writing", e)
+                print(f"[generate] the writing call failed ({str(e)[:120]}); retrying once in 5 s")
+                time.sleep(5)
         self.messages.append(reply)
         return _text(reply)
 

@@ -12,6 +12,7 @@ import actions
 import class_board
 import config
 import doubt_agent
+import figures
 from main import LECTURE_ID_RE
 from recovery import recovery_line
 from script_writer import count_slides
@@ -97,13 +98,32 @@ def visual_page(lecture_id: str, key: str):
         "X-Content-Type-Options": "nosniff", "Cache-Control": "no-cache"})
 
 
+def _check_answer_flows(lecture_id, turn):
+    """A new diagram in an answer must draw a process from the material; otherwise it is left out."""
+    figs = figures.load(lecture_id)
+    for seg in [x for x in turn.get("reply_segments", []) if x.get("name") == "FLOW"]:
+        if not figures.matches(seg["args"].get("from"), figs, kind="flow"):
+            print(f"[doubts] left out the diagram '{seg['args']['id']}': no matching diagram or step list in the material")
+            turn["reply_segments"] = visual_builder.drop_visual_segments(turn["reply_segments"], [seg["args"]["id"]])
+            turn["reply"] = drop_visual(turn.get("reply", ""), seg["args"]["id"], block="FLOW")
+
+
 def _build_answer_visuals(lecture_id, turn):
     """A doubt answer may draw a new visual: build it now (the student waits), or leave it out."""
+    _check_answer_flows(lecture_id, turn)
     segments = turn.get("reply_segments", [])
     if not any(s.get("name") == "VISUAL" for s in segments):
         return
     topic = (manifest_or_none(lecture_id) or {}).get("topic", "")
-    failed = visual_builder.ensure_visuals(segments, lecture_id, topic, config.MAX_ANSWER_VISUALS)
+    figs = figures.load(lecture_id)
+    for seg in [x for x in segments if x.get("name") == "VISUAL"]:  # only graphs from the material
+        if not figures.matches(seg["args"].get("from"), figs):
+            print(f"[doubts] left out the visual '{seg['args']['id']}': no matching graph in the material")
+            segments = visual_builder.drop_visual_segments(segments, [seg["args"]["id"]])
+            turn["reply"] = drop_visual(turn.get("reply", ""), seg["args"]["id"])
+    turn["reply_segments"] = segments
+    failed = visual_builder.ensure_visuals(segments, lecture_id, topic, config.MAX_ANSWER_VISUALS,
+                                           board_files=turn.get("_board_files"))
     for vid, reason in failed:
         print(f"[doubts] left out the visual '{vid}': {reason[:200]}")
     if failed:
@@ -195,6 +215,10 @@ def _board_at(lecture_id, cursor):
         extras = _answer_extras[lecture_id] = {"cursor": cursor, "segments": []}
     extras["cursor"] = cursor
     board = class_board.rebuild(segments, cursor)
+    board["figures"] = figures.load(lecture_id)  # the material's graphs: the only ones an answer may build
+    # Doubts use only what this class used: notebook and slides always, code and graphs if the lecture had them.
+    used = figures.env_from_segments(segments)
+    board["environments"] = {**used, "notebook": True, "slides": bool(_slides_for(lecture_id))}
     return class_board.add_segments(board, extras["segments"])
 
 
@@ -235,7 +259,9 @@ def doubts_start(lecture_id: str, body: DoubtStart):
         else:
             turn = doubt_agent.turn_start(agent, thread_id, body.context + "\n\nNow ask the class for doubts.")
         turn = doubt_agent.with_segments(turn, count_slides(lecture_id), board)
+        turn["_board_files"] = board.get("files", {})
         _build_answer_visuals(lecture_id, turn)
+        turn.pop("_board_files", None)
     except Exception as e:
         raise HTTPException(502, f"Doubt agent failed: {e}")
     _remember_answer(lecture_id, board, turn)
@@ -305,12 +331,15 @@ def doubts_ask(lecture_id: str, body: DoubtAsk):
         thread["notes"] = []
     if board.get("latest_file"):  # "run this code" = this one (models otherwise guess an older program)
         parts.append(f"The most recent program on the class screen is {board['latest_file']}.")
+    parts.append("Environments in this class: " + figures.describe_environments(board["environments"]))
     if body.visuals.strip():  # students may have moved the controls themselves
-        parts.append("What the visuals on the class screen show right now:\n" + body.visuals.strip()[:1500])
+        parts.append("What the graphs and diagrams on the class screen show right now:\n" + body.visuals.strip()[:1500])
     try:
         turn = doubt_agent.turn_ask(agent, thread_id, question, log_path, body.section, "\n\n".join(parts))
         turn = doubt_agent.with_segments(turn, count_slides(lecture_id), board)
+        turn["_board_files"] = board.get("files", {})
         _build_answer_visuals(lecture_id, turn)
+        turn.pop("_board_files", None)
     except Exception as e:
         raise HTTPException(502, f"Doubt agent failed: {e}")
     _show_slide_if_asked(question, board, turn, _slides_for(lecture_id))
@@ -336,7 +365,9 @@ def doubts_reply(lecture_id: str, body: DoubtReply):
         turn = doubt_agent.with_segments(
             doubt_agent.turn_reply(agent, body.thread_id, answer, log_path, count["section"]),
             count_slides(lecture_id), count["board"])
+        turn["_board_files"] = count["board"].get("files", {})
         _build_answer_visuals(lecture_id, turn)
+        turn.pop("_board_files", None)
     except Exception as e:
         raise HTTPException(502, f"Doubt agent failed: {e}")
     _remember_answer(lecture_id, count["board"], turn)
