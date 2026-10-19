@@ -303,3 +303,5 @@ code, pre, .mono { font-family: var(--mono); }
   .page, .page-header { padding-left: 16px; padding-right: 16px; }
   .pipeline { grid-template-columns: 1fr 1fr; }
 }
+.new-lecture-fields { display: flex; flex-direction: column; gap: 14px; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

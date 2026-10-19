@@ -3,6 +3,8 @@
 // right side; a skip forward (or to the end) runs down the left side. Questions are diamonds with labelled
 // branches. An arrow is drawn once both of its blocks are on the board.
 
+import { drawPen } from "./pen.js";
+
 const NS = "http://www.w3.org/2000/svg";
 const W = 800;              // picture width; the height grows with the number of blocks
 const TOP = 34, GAP = 46;   // space above the first block, and between blocks
@@ -135,6 +137,10 @@ export class FlowBoard {
     if (!g) return false;
     for (const other of this.blockEls.values()) other.classList.remove("hl");
     g.classList.remove("hl"); void g.getBBox?.(); g.classList.add("hl");
+    // and the teacher's pen circles it
+    this.svg.querySelectorAll(".flow-pen").forEach(p => p.remove());
+    const p = this.pos[id];
+    drawPen(this.svg, p.cx, p.cy, p.w / 2 + 22, p.h / 2 + 16, { cls: "flow-pen", seed: this.order.indexOf(id) + 3, ms: 600 });
     return true;
   }
 

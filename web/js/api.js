@@ -26,6 +26,8 @@ export const api = {
   personaTemplate: () => request("GET", "/api/persona/template"),
   lectures: () => request("GET", "/api/lectures"),
   lecture: (lid) => request("GET", `/api/lectures/${id(lid)}`),
+  saveSetup: (lid, body) => request("PUT", `/api/lectures/${id(lid)}/setup`, body),
+  createLecture: (lid, body) => request("POST", `/api/lectures/${id(lid)}`, body),
   upload(lid, files) {
     const form = new FormData();
     for (const f of files) form.append("files", f, f.name);
@@ -41,6 +43,7 @@ export const api = {
   classData: (lid) => request("GET", `/api/lectures/${id(lid)}/class`),
   complete: (lid) => request("POST", `/api/lectures/${id(lid)}/complete`),
   tts: (lid, text) => request("POST", "/api/tts", { lecture_id: lid, text }, { raw: true }),
+  ttsTiming: (lid, text) => request("POST", "/api/tts/timing", { lecture_id: lid, text }, { raw: true }),
   run: (lid, file, code) => request("POST", `/api/lectures/${id(lid)}/run`, { file, code }),
   recovery: (lid, segment, error, stateText) =>
     request("POST", `/api/lectures/${id(lid)}/recovery`, { segment, error, state_text: stateText }),

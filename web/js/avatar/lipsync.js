@@ -1,5 +1,5 @@
 // Pure lip-sync logic: audio features → visemes, smoothing, clamping, and word timings → visemes.
-// No DOM and no Web Audio objects here, so it is unit tested in Node (tests/avatar/).
+// No DOM and no Web Audio objects here, so it can run in Node too.
 
 /** The Oculus viseme set, in the usual order. `sil` is "mouth at rest" (no blend shape needed). */
 export const VISEMES = ["sil", "PP", "FF", "TH", "DD", "kk", "CH", "SS", "nn", "RR", "aa", "E", "I", "O", "U"];
@@ -15,7 +15,7 @@ export const DEFAULT_TUNING = {
   maxWeight: 0.85,   // no single viseme above this
   caps: { viseme_aa: 0.75 },  // tighter limits for the widest shapes
   maxTotal: 1.1,     // sum of all viseme weights above this is scaled down
-  jawFromOpen: 0.25, // extra jawOpen (ARKit) added in proportion to loudness
+  jawFromOpen: 0.3,  // extra jawOpen (ARKit) added per viseme (see JAW): open vowels drop the jaw, closures don't
 };
 
 const BANDS = { low: [100, 700], mid: [700, 2000], high: [2000, 4000], air: [4000, 9000] };
@@ -130,6 +130,7 @@ function spread(viseme, group, open) {
 export class EnvelopeSmoother {
   constructor({ attackMs = DEFAULT_TUNING.attackMs, releaseMs = DEFAULT_TUNING.releaseMs } = {}) {
     this.attackMs = attackMs; this.releaseMs = releaseMs;
+    this.fastKeys = new Set([...CLOSURES].map(v => `viseme_${v}`));  // closures snap shut (~20 ms)
     this.values = {};
   }
 
@@ -137,7 +138,7 @@ export class EnvelopeSmoother {
     const keys = new Set([...Object.keys(this.values), ...Object.keys(targets)]);
     for (const k of keys) {
       const cur = this.values[k] || 0, target = targets[k] || 0;
-      const tau = target > cur ? this.attackMs : this.releaseMs;
+      const tau = target > cur ? (this.fastKeys.has(k) ? Math.min(20, this.attackMs) : this.attackMs) : this.releaseMs;
       const next = cur + (target - cur) * (1 - Math.exp(-dtMs / tau));
       if (next < 1e-4 && target === 0) delete this.values[k]; else this.values[k] = next;
     }
@@ -162,9 +163,10 @@ export function clampWeights(values, { maxWeight = DEFAULT_TUNING.maxWeight, max
  * lipsync: an object with wordsToVisemes(word) → { visemes, times, durations } (TalkingHead's LipsyncEn).
  * times/durations are in seconds, relative to the same clock as the returned schedule.
  */
-export function wordsToSchedule(words, times, durations, lipsync) {
+export function wordsToSchedule(words, times, durations, lipsync, levels = null) {
   const out = [];
   words.forEach((word, i) => {
+    const level = levels ? levels[i] : null;
     const clean = String(word).replace(/[^\p{L}\p{N}']/gu, "");
     if (!clean) return;
     const v = lipsync.wordsToVisemes(lipsync.preProcessText ? lipsync.preProcessText(clean) : clean);
@@ -172,27 +174,44 @@ export function wordsToSchedule(words, times, durations, lipsync) {
     const last = v.visemes.length - 1;
     const units = v.times[last] + v.durations[last];
     const scale = durations[i] / (units || 1);
-    v.visemes.forEach((vis, j) => out.push({ viseme: vis, start: times[i] + v.times[j] * scale, end: times[i] + (v.times[j] + v.durations[j]) * scale }));
+    v.visemes.forEach((vis, j) => out.push({ viseme: vis, start: times[i] + v.times[j] * scale, end: times[i] + (v.times[j] + v.durations[j]) * scale, level }));
   });
   return out;
 }
 
+/** Lip closures and lip-teeth contact: brief but they must fully show, or "b", "m", "f" look mumbled. */
+export const CLOSURES = new Set(["PP", "FF"]);
+
 /**
  * Viseme targets at clock time t from a schedule: each viseme ramps in and out over `blendS` seconds,
- * so neighbouring visemes overlap instead of snapping.
+ * so neighbouring visemes overlap instead of snapping. An item's `level` (0-1, the word's loudness) scales
+ * vowels between 0.5 and 0.9 of `weight`; closures always show fully and blend in faster.
  */
 export function scheduleTargets(schedule, t, blendS = 0.06, weight = 0.75) {
   const targets = {};
   for (const item of schedule) {
-    if (t < item.start - blendS || t > item.end + blendS) continue;
-    const rampIn = Math.min(1, (t - (item.start - blendS)) / (2 * blendS));
-    const rampOut = Math.min(1, (item.end + blendS - t) / (2 * blendS));
-    const w = weight * Math.max(0, Math.min(rampIn, rampOut));
+    const closure = CLOSURES.has(item.viseme);
+    const blend = closure ? blendS * 0.6 : blendS;
+    if (t < item.start - blend || t > item.end + blend) continue;
+    const rampIn = Math.min(1, (t - (item.start - blend)) / (2 * blend));
+    const rampOut = Math.min(1, (item.end + blend - t) / (2 * blend));
+    const loud = closure ? 1.25 : item.level == null ? 1 : (0.5 + 0.4 * item.level) / 0.75;
+    const w = Math.min(1, weight * loud) * Math.max(0, Math.min(rampIn, rampOut));
     if (item.viseme === "sil" || w <= 0) continue;
     const key = `viseme_${item.viseme}`;
     targets[key] = Math.max(targets[key] || 0, w);
   }
   return targets;
+}
+
+/** How much each viseme opens the jaw (0-1): only open sounds drop it; "p", "m", "f" keep it shut. */
+export const JAW = { aa: 1, O: 0.7, E: 0.5, kk: 0.4, I: 0.35, DD: 0.35, U: 0.3, RR: 0.3, CH: 0.25, TH: 0.25, nn: 0.2, SS: 0.15, FF: 0.05, PP: 0 };
+
+/** Jaw opening (0-1) from viseme weights. */
+export function jawFrom(weights) {
+  let jaw = 0;
+  for (const [k, w] of Object.entries(weights)) jaw += w * (JAW[k.replace("viseme_", "")] ?? 0.3);
+  return Math.min(1, jaw);
 }
 
 /** ARKit fallback for models without Oculus visemes: rough mouth shapes from ARKit blend shapes. */

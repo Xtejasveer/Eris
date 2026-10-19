@@ -15,8 +15,11 @@ import { LipsyncEn } from "../../vendor/talkinghead/lipsync-en.mjs";
 import { AvatarAudio, getAudioContext, unlockOnGesture } from "./audio-engine.js";
 import {
   AdaptiveLevel, DEFAULT_TUNING, VISEMES, classify, clampWeights, computeFeatures, dominant, EnvelopeSmoother,
-  openness, scheduleTargets, visemesToArkit, wordsToSchedule,
+  jawFrom, openness, scheduleTargets, visemesToArkit, wordsToSchedule,
 } from "./lipsync.js";
+
+// Lips move a little before the sound they make, so timed visemes are shown this much ahead of the audio.
+const LIP_LEAD_S = 0.04;
 import { Life } from "./life.js";
 
 export const DEFAULT_MODEL_URL = new URL("../../assets/avatars/mpfb.glb", import.meta.url).href;
@@ -193,29 +196,57 @@ class Avatar extends EventTarget {
    * Timings for the speech that is (about to be) heard. Accepts
    *   { words, times, durations }            times/durations in ms
    *   { visemes, vtimes, vdurations }        Oculus viseme names without the "viseme_" prefix
+   * Optional `levels` (0-1 per word) make louder words open wider.
    * opts.start: when time 0 is — an AudioContext time (seconds, default: now on the audio clock);
-   * opts.clock: "audio" (AudioContext.currentTime) or "perf" (performance.now(), for speech we can't route).
+   * opts.clock: "audio" (AudioContext.currentTime), "perf" (performance.now(), for speech we can't route) or
+   *   "media": times are positions in `opts.media` (an <audio> element), which keeps pause/resume in sync.
    */
-  setTimestamps(data, { start, clock = "audio" } = {}) {
-    const now = clock === "audio" ? this.ctx.currentTime : performance.now() / 1000;
-    const t0 = start ?? now;
+  setTimestamps(data, { start, clock = "audio", media = null } = {}) {
+    if (clock === "media") { this.media = media; this.mediaClock = null; }
+    const now = this.clockTime(clock, performance.now());
+    const t0 = start ?? (clock === "media" ? 0 : now);
     let schedule;
     if (data.visemes) {
       schedule = data.visemes.map((v, i) => ({ viseme: v, start: t0 + data.vtimes[i] / 1000, end: t0 + (data.vtimes[i] + data.vdurations[i]) / 1000 }));
     } else {
-      schedule = wordsToSchedule(data.words, data.times.map(t => t0 + t / 1000), data.durations.map(d => d / 1000), this.lipsync);
+      schedule = wordsToSchedule(data.words, data.times.map(t => t0 + t / 1000), data.durations.map(d => d / 1000), this.lipsync, data.levels);
     }
-    if (clock !== this.scheduleClock) this.schedule = [];
+    if (clock !== this.scheduleClock || clock === "media") this.schedule = [];  // a media schedule is one whole clip
     this.scheduleClock = clock;
     const cutoff = now - 1;
     this.schedule = this.schedule.filter(s => s.end > cutoff).concat(schedule);
     return schedule.length;
   }
 
+  /**
+   * Now, on a schedule clock, in seconds. "media": what is being HEARD of the clip: the element's position
+   * (smoothed between its coarse updates) minus our audio delay and the device's output latency (large on
+   * Bluetooth), plus the lip lead.
+   */
+  clockTime(clock, nowMs) {
+    if (clock === "audio") return this.ctx.currentTime;
+    if (clock === "perf") return nowMs / 1000;
+    const m = this.media;
+    if (!m) return -1;
+    const pos = m.currentTime;
+    let c = this.mediaClock;
+    if (!c || pos !== c.pos || m.paused) c = this.mediaClock = { pos, at: nowMs };
+    const est = m.paused ? pos : Math.min(pos + 0.25, c.pos + ((nowMs - c.at) / 1000) * (m.playbackRate || 1));
+    // Output latency is ~10-40 ms on speakers, up to ~300 ms on Bluetooth; browsers can report nonsense for a
+    // moment while audio starts, so it is capped.
+    const device = Math.min(0.4, Math.max(0, (this.ctx.outputLatency || 0) + (this.ctx.baseLatency || 0)));
+    const latency = device + Math.max(0, this.audio.delayMs) / 1000;
+    return est - latency + LIP_LEAD_S;
+  }
+
+  /** Forget timed visemes (a new clip starts): lips follow the audio itself until new timings arrive. */
+  clearTimestamps() { this.schedule = []; this.media = null; }
+
   /** Interrupt: stop queued audio (fade ~30 ms), drop timings, mouth back to rest in ~150 ms. */
   stop() {
     this.audio.stop(30);
     this.schedule = [];
+    this.media = null;
     this.lagFrames = [];
     this.fastRelease = 200;
     this.setSpeaking(false);
@@ -269,22 +300,24 @@ class Avatar extends EventTarget {
     const fullDb = this.levelTracker.step(f.db, dtMs);
     const level = openness(f.db, this.tuning, fullDb);
     f.level = level;
-    const clockNow = this.scheduleClock === "audio" ? this.ctx.currentTime : nowMs / 1000;
+    const clockNow = this.clockTime(this.scheduleClock, nowMs);
     const timed = this.schedule.length && this.schedule.some(s => clockNow >= s.start - 0.1 && clockNow <= s.end + 0.1);
     let targets = {}, mode = "idle";
     if (timed) {
       mode = "timestamps";
       targets = scheduleTargets(this.schedule, clockNow);
-      // If real audio flows through us, its silences still close the mouth (timings can be a little off).
-      if (this.audio.attached.size || this.audio.queueActive) {
+      // Rough timings (live word events) are gated by the audio's own silences. Clip timings are measured on
+      // the audio itself, and the analyser runs ahead of what is heard by the output latency, so they aren't.
+      if (this.scheduleClock !== "media" && (this.audio.attached.size || this.audio.queueActive)) {
         const gate = level > 0 ? 1 : 0.15;
         for (const k of Object.keys(targets)) targets[k] *= gate;
       }
-    } else if (level > 0) {
+    } else if (level > 0 && !(this.scheduleClock === "media" && this.media && this.schedule.length)) {
+      // (A clip with measured timings stays closed between its words: what the analyser hears there is breath.)
       mode = "audio";
       targets = classify(f, this.tuning).targets;
     }
-    if (this.schedule.length && this.schedule[this.schedule.length - 1].end < clockNow - 1) this.schedule = [];
+    if (this.scheduleClock !== "media" && this.schedule.length && this.schedule[this.schedule.length - 1].end < clockNow - 1) this.schedule = [];
 
     // Negative delay compensation: show lip targets |delay| ms later than we compute them.
     const lag = Math.max(0, -this.audio.delayMs);
@@ -315,7 +348,7 @@ class Avatar extends EventTarget {
     const weights = { ...life.morphs };
     const mouth = this.hasVisemes ? lips : visemesToArkit(lips);
     for (const [k, v] of Object.entries(mouth)) weights[k] = (weights[k] || 0) + v;
-    if (this.hasVisemes && this.morphs.has("jawOpen")) weights.jawOpen = (weights.jawOpen || 0) + lipLevel * this.tuning.jawFromOpen;
+    if (this.hasVisemes && this.morphs.has("jawOpen")) weights.jawOpen = (weights.jawOpen || 0) + jawFrom(lips) * this.tuning.jawFromOpen;
     this.applyMorphs(weights);
     this.applyBones(life);
 

@@ -59,26 +59,50 @@ export function setLectureStatus(id, status) {
 }
 
 export async function newLecture() {
+  // The teacher names the topic and length once, here at the start; the id is suggested from the topic.
+  const topic = h("input", { class: "input", placeholder: "e.g. Introduction to recursion", autocomplete: "off" });
+  const defaults = await api.personaTemplate().catch(() => ({}));  // the configured total and speaking time
+  const duration = h("input", { class: "input", type: "number", min: 5, max: 120, step: 5, value: defaults.duration_min || 15 });
+  const speaking = h("input", { class: "input", type: "number", min: 1, max: 120, step: 1, value: defaults.speaking_min || 5 });
   const input = h("input", { class: "input mono", placeholder: "intro_topic_week1", autocomplete: "off", spellcheck: "false" });
   const hint = h("small", {}, "3–63 characters: letters, digits, _ or -. It names the folder in data/.");
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter") e.target.closest(".modal").querySelector(".btn.primary").click(); });
-  const id = await modal({
+  let idEdited = false;
+  const slug = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+  topic.addEventListener("input", () => { if (!idEdited) input.value = slug(topic.value); });
+  input.addEventListener("input", () => { idEdited = true; });
+  for (const el of [topic, duration, speaking, input]) {
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter") e.target.closest(".modal").querySelector(".btn.primary").click(); });
+  }
+  const bad = (el) => { el.classList.add("invalid"); el.focus(); return undefined; };
+  const made = await modal({
     title: "New lecture",
-    text: "Give the lecture an id. Next, you'll upload the study material and describe the teacher.",
-    body: h("label", { class: "field" }, h("span", {}, "Lecture id"), input, hint),
+    text: "What will this lecture teach? Next, you'll upload the study material and describe the teacher.",
+    body: h("div", { class: "new-lecture-fields" },
+      h("label", { class: "field" }, h("span", {}, "Topic"), topic),
+      h("div", { class: "field-row" },
+        h("label", { class: "field" }, h("span", {}, "Total lecture time (min)"), duration),
+        h("label", { class: "field" }, h("span", {}, "Speaking time (min)"), speaking)),
+      h("small", { class: "muted" }, "The script is written for the speaking time; doubts, notes and code fill the rest. "
+        + "The class warns when 10% and 5% of the total time are left."),
+      h("label", { class: "field" }, h("span", {}, "Lecture id"), input, hint)),
     actions: [
       { label: "Cancel", value: null },
       { label: "Create lecture", kind: "primary", value: () => {
-        const v = input.value.trim();
-        if (!LECTURE_ID_RE.test(v)) { input.classList.add("invalid"); hint.style.color = "var(--danger)"; return undefined; }
-        return v;
+        const t = topic.value.trim(), d = +duration.value, sp = +speaking.value, v = input.value.trim();
+        if (!t) return bad(topic);
+        if (!(d >= 5 && d <= 120)) return bad(duration);
+        if (!(sp >= 1 && sp <= d)) return bad(speaking);
+        if (!LECTURE_ID_RE.test(v)) { hint.style.color = "var(--danger)"; return bad(input); }
+        return { id: v, topic: t, duration_min: d, speaking_min: sp };
       } },
     ],
   });
-  if (!id) return;
-  if (!lectures.some(l => l.id === id)) setPending([...pending(), id]);
+  if (!made) return;
+  try {
+    await api.createLecture(made.id, { topic: made.topic, duration_min: made.duration_min, speaking_min: made.speaking_min });
+  } catch (e) { return toast(e.message, "error", 6000); }
   await refreshLectures();
-  location.hash = `#/lecture/${encodeURIComponent(id)}/studio`;
+  location.hash = `#/lecture/${encodeURIComponent(made.id)}/studio`;
 }
 
 // ---------- overview ----------

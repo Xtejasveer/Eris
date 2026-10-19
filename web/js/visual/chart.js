@@ -3,6 +3,7 @@
 // computes values and calls these. Plot marks are clipped to the plot area; labels and readouts never are.
 //
 //   const c = Visual.chart({ x: [0, 10], y: [0, 100], xLabel: "x", yLabel: "y" });
+//   Named categories: Visual.chart({ xLabels: ["Asia", "Europe", ...], y: [...] }) and bars at x = 0, 1, 2...
 //   c.clear();  c.fn(x => x * x);  c.line(points);  c.dots(points);  c.bars(points);  c.area(points);
 //   c.vline(x, "label");  c.hline(y, "label");  c.label(x, y, "text");  c.readout(["mean = 2.0", ...]);
 //   c.setRange({ x: [lo, hi], y: [lo, hi] });  c.x(v) / c.y(v): data -> picture coordinates.
@@ -43,7 +44,8 @@
 
   V.chart = function (opts = {}) {
     const m = Object.assign({ left: 72, right: 28, top: 56, bottom: 62 }, opts.margin || {});
-    let xr = (opts.x || [0, 10]).slice(), yr = (opts.y || [0, 10]).slice();
+    // xLabels: named categories; the x range then fits them (bar k is at x = k)
+    let xr = (opts.x || (opts.xLabels ? [-0.6, opts.xLabels.length - 0.4] : [0, 10])).slice(), yr = (opts.y || [0, 10]).slice();
     let svg = opts.svg || (V.stage && V.stage.querySelector("svg"));
     if (!svg || String(svg.tagName).toLowerCase() !== "svg") svg = V.svg("svg", { viewBox: `0 0 ${W} ${H}` }, V.stage);
     const id = `plot-clip-${++clipCount}`;
@@ -61,9 +63,12 @@
 
     function drawAxes() {
       axes.replaceChildren();
-      for (const t of niceTicks(xr[0], xr[1])) {
+      // Named categories (countries, regions...): one tick per bar at x = 0, 1, 2... with its name
+      const xTicks = opts.xLabels ? opts.xLabels.map((_, k) => k) : niceTicks(xr[0], xr[1]);
+      const xText = (t) => opts.xLabels ? String(opts.xLabels[t]) : fmt(t);
+      for (const t of xTicks) {
         V.svg("line", { x1: sx(t), x2: sx(t), y1: m.top, y2: H - m.bottom, stroke: "var(--line)", "stroke-width": 1 }, axes);
-        V.svg("text", { x: sx(t), y: H - m.bottom + 22, "text-anchor": "middle", "font-size": 14, fill: "var(--muted)", text: fmt(t) }, axes);
+        V.svg("text", { x: sx(t), y: H - m.bottom + 22, "text-anchor": "middle", "font-size": 14, fill: "var(--muted)", text: xText(t) }, axes);
       }
       for (const t of niceTicks(yr[0], yr[1], 5)) {
         V.svg("line", { x1: m.left, x2: W - m.right, y1: sy(t), y2: sy(t), stroke: "var(--line)", "stroke-width": 1 }, axes);
@@ -76,6 +81,8 @@
         transform: `rotate(-90 18 ${(m.top + H - m.bottom) / 2})`, text: opts.yLabel }, axes);
     }
     drawAxes();
+
+    let barW = null;  // the width of the last full set of bars
 
     // Labels placed since the last clear(): a new one that would overlap them moves down a row.
     const placed = [];
@@ -136,7 +143,13 @@
       },
       bars(points, a = {}) {
         offscale(points);
-        const w = a.width ?? (points.length > 1 ? Math.abs(points[1][0] - points[0][0]) * 0.8 : (xr[1] - xr[0]) / 10);
+        // Each bar is as wide as the CLOSEST pair of bars allows, so bars never overlap, even for uneven years
+        // (1990, 2000, 2007, 2010...): the first gap alone would make every bar 8 years wide.
+        const xs = [...new Set(points.map(p => p[0]).filter(Number.isFinite))].sort((p, q) => p - q);
+        let gap = Infinity;
+        for (let k = 1; k < xs.length; k++) gap = Math.min(gap, xs[k] - xs[k - 1]);
+        // a single bar drawn again to point at it (a highlight) keeps the width of the full set
+        const w = a.width ?? (Number.isFinite(gap) ? (barW = gap * 0.7) : barW ?? (xr[1] - xr[0]) / 10);
         const base = Math.max(yr[0], Math.min(yr[1], 0));
         for (const [xv, yv] of points) {
           if (!Number.isFinite(xv) || !Number.isFinite(yv)) continue;

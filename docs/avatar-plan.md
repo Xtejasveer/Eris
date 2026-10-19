@@ -4,7 +4,7 @@
 
 | Question | Finding |
 |---|---|
-| TTS | **Gnani Timbre v2.5** (`voice.py`), called by the backend. A browser fallback (`speechSynthesis`) is used when there is no Gnani key or a clip fails. |
+| TTS | **Gnani Timbre v2.5** (`eris/classroom/voice.py`), called by the backend. A browser fallback (`speechSynthesis`) is used when there is no Gnani key or a clip fails. |
 | How audio reaches the client | **One full WAV file per spoken line**, over plain HTTP: `POST /api/tts` → `FileResponse(audio/wav)`. No WebSocket, no streaming. Clips are cached on disk per line. |
 | Format | **PCM16, mono, 48 000 Hz** WAV (checked on a real clip: 1 channel, 2-byte samples, 48 kHz). Our backend joins sentences into one clip with short silences between them. |
 | Timestamps | **None.** Gnani's API and docs give no phoneme, viseme or word timings (no SSML either). The browser fallback voice *does* fire `boundary` events per word (Chrome, Safari, Edge; Firefox with some voices). |
@@ -75,3 +75,18 @@ avatar it goes to the speakers. With the avatar, the avatar takes that node as i
   the classroom), and the class then runs exactly as before (audio only).
 - Firefox and Safari can't be run in this environment; the code uses only standard Web Audio / WebGL APIs and the iOS
   unlock pattern (resume on the first touch), but those browsers must be checked by hand.
+
+## 5. Measured word timings (Gnani clips)
+
+Gnani returns no timings, so they are measured: `eris/classroom/lip_timing.py` runs faster-whisper (`base.en`,
+CPU, under a second per clip) for word times, matches them to the script's words, tightens each word to the voiced
+audio and adds a per-word loudness. Without faster-whisper, or when too few words match, an energy aligner spreads
+the words over the voiced frames. The result is cached as `<clip>.timing.json` (made by `render`, or on first use)
+and served by `POST /api/tts/timing`.
+
+The browser passes it to `avatar.setTimestamps(timing, { clock: "media", media: audioElement })`: the lips follow
+the element's playback position minus the device's output latency (capped at 400 ms) plus a 40 ms lip lead, so
+pause, resume and Bluetooth stay in sync. With clip timings the mouth stays shut between words (no analyser
+gating, which runs ahead of what is heard), louder words open wider, "p/b/m" and "f/v" close fully and fast, and
+the jaw opens per viseme (`JAW` in lipsync.js), never on closures. Before a clip's timings arrive, the audio-only
+mode drives the lips as before. The demo page's "Play file with word timings" shows the same path.

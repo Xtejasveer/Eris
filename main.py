@@ -1,18 +1,17 @@
-"""CLI entry point: serve (website) / index / generate / approve / render / session (+ doubts, status)."""
+"""CLI entry point: serve (website) / index / generate / approve / render / video / session (+ doubts, status)."""
 
 import argparse
 import json
 import re
 import sys
 
-import config
-
+from eris import config
 # Chroma collection names: 3-63 chars, letters/digits/_/-, start and end with a letter or digit.
 LECTURE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{1,61}[A-Za-z0-9]$")
 
 
 def run_approve(lecture_id):
-    from script_writer import approve_script
+    from eris.generate.script_writer import approve_script
 
     errors = approve_script(lecture_id)
     if errors:
@@ -25,8 +24,8 @@ def run_approve(lecture_id):
 
 def run_doubts_test(lecture_id):
     """One checkpoint with the whole topic as context (for testing the doubt agent)."""
-    from doubt_agent import run_checkpoint
-    from session import start_doubts
+    from eris.classroom.doubt_agent import run_checkpoint
+    from eris.classroom.session import start_doubts
 
     manifest = config.load_manifest(lecture_id)
     agent, log_path = start_doubts(lecture_id, manifest)
@@ -40,8 +39,7 @@ def run_doubts_test(lecture_id):
 def run_render(lecture_id):
     """Pre-render narration audio with Gnani TTS and record the real lecture length."""
     config.check_voice_env()
-    import voice
-
+    from eris.classroom import voice
     manifest = config.load_manifest(lecture_id)
     script_json = config.lecture_dir(lecture_id) / "script.json"
     if not script_json.exists():
@@ -74,6 +72,13 @@ def build_parser():
                        ("status", "print lecture.json")]:
         sub.add_parser(name, help=text).add_argument("--lecture", required=True)
 
+    p = sub.add_parser("video", help="pre-render photorealistic teacher video (MuseTalk on Modal)")
+    p.add_argument("--lecture", required=True)
+    p.add_argument("--teacher", required=True, help="short MP4 of the teacher's face, mouth mostly closed")
+    p.add_argument("--limit", type=int, help="only render this many clips (for a quick look)")
+
+    sub.add_parser("measure-voice", help="measure the class voice's real speed and save it as SPEAKING_WPM in .env")
+
     p = sub.add_parser("serve", help="start the website (home + class)")
     p.add_argument("--port", type=int, default=8000)
 
@@ -92,7 +97,11 @@ def main():
         config.check_env()
         import uvicorn
         print(f"Open http://127.0.0.1:{args.port}")
-        uvicorn.run("server:app", host="127.0.0.1", port=args.port)
+        uvicorn.run("eris.api.server:app", host="127.0.0.1", port=args.port)
+        return
+    if args.command == "measure-voice":
+        from eris.classroom.voice_speed import run
+        run()
         return
     if not LECTURE_ID_RE.match(args.lecture):
         print(f"Bad lecture id '{args.lecture}'. Use 3-63 letters, digits, _ or -, e.g. py_listcomp_2026_10_17")
@@ -105,22 +114,25 @@ def main():
     config.check_env()
     # Imports happen here so `status` and bad-argument errors stay fast.
     if args.command == "index":
-        from indexer import run_index, test_query
+        from eris.material.indexer import run_index, test_query
         if args.query:
             test_query(args.lecture, args.query)
         else:
             run_index(args.lecture, reset=not args.no_reset)
     elif args.command == "generate":
-        from script_writer import run_generate
+        from eris.generate.script_writer import run_generate
         run_generate(args.lecture)
     elif args.command == "approve":
         run_approve(args.lecture)
     elif args.command == "session":
-        from session import run_session
+        from eris.classroom.session import run_session
         run_session(args.lecture, force=args.force, use_voice=args.voice,
                     use_mic=args.mic, resume=args.resume)
     elif args.command == "render":
         run_render(args.lecture)
+    elif args.command == "video":
+        from talking_video import render_lecture_video
+        render_lecture_video(args.lecture, args.teacher, limit=args.limit)
     elif args.command == "doubts":
         run_doubts_test(args.lecture)
 

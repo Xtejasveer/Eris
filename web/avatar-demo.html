@@ -41,6 +41,7 @@
       <div>viseme <b id="d-viseme">–</b></div>
       <div>RMS <b id="d-rms">–</b> <span id="d-db"></span></div>
       <div id="meter"><i></i></div>
+      <div>word <b id="d-word">–</b></div>
       <div>speaking <b id="d-speaking">no</b></div>
       <div>audio nodes alive <b id="d-nodes">0</b></div>
     </div>
@@ -49,12 +50,14 @@
     <div class="card">
       <h2>Play</h2>
       <div class="row">
-        <button class="primary" id="play-file">Play file</button>
+        <button class="primary" id="play-timed">Play file with word timings</button>
+        <button id="play-file">Play file (audio only)</button>
         <button id="play-stream">Stream 100 ms chunks</button>
         <button id="play-words">Speak with word timings</button>
       </div>
       <button class="stop" id="stop">Stop (interrupt)</button>
-      <small>“Play file” taps an &lt;audio&gt; element (how the classroom plays TTS). “Stream” splits the same WAV into 100 ms PCM chunks over a fake, jittery async stream. “Speak with word timings” uses the browser voice and its word boundaries (timestamp mode).</small>
+      <small>“With word timings” is how the classroom plays Gnani clips: the words' times were measured on the clip
+        (eris/classroom/lip_timing.py) and the lips follow the clip's playback position. “Play file” taps an &lt;audio&gt; element (how the classroom plays TTS). “Stream” splits the same WAV into 100 ms PCM chunks over a fake, jittery async stream. “Speak with word timings” uses the browser voice and its word boundaries (timestamp mode).</small>
     </div>
     <div class="card">
       <h2>Mood</h2>
@@ -94,7 +97,17 @@
   const audioEl = new Audio(sampleUrl);
   window.demoAudio = audioEl;  // for debugging and the sync measurement
   avatar.attachAudioStream(audioEl);
-  $("play-file").onclick = async () => { await avatar.ctx.resume(); audioEl.currentTime = 0; audioEl.play(); };
+  $("play-file").onclick = async () => { await avatar.ctx.resume(); avatar.clearTimestamps(); audioEl.currentTime = 0; audioEl.play(); };
+
+  // 1b) The same element with measured word timings, on the element's own clock (the classroom's path).
+  const timing = await (await fetch("./assets/avatar-demo/sample.timing.json")).json();
+  $("play-timed").onclick = async () => {
+    await avatar.ctx.resume();
+    audioEl.currentTime = 0;
+    avatar.setTimestamps(timing, { clock: "media", media: audioEl });
+    audioEl.play();
+  };
+  const wordAt = (t) => { const i = timing.times.findIndex((s, k) => t * 1000 >= s && t * 1000 <= s + timing.durations[k]); return i < 0 ? "–" : timing.words[i]; };
 
   // 2) The same WAV as 100 ms PCM chunks over a fake async stream with network jitter.
   let streamRun = 0;
@@ -164,6 +177,7 @@
     $("d-rms").textContent = d.rms.toFixed(3); $("d-db").textContent = `(${d.db.toFixed(0)} dB)`;
     document.querySelector("#meter i").style.width = `${Math.round(d.level * 100)}%`;
     $("d-nodes").textContent = avatar.audio.sources.size;
+    $("d-word").textContent = audioEl.paused ? "–" : wordAt(audioEl.currentTime);
   }, 100);
 </script>
 </body>

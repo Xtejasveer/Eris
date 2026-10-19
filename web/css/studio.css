@@ -169,6 +169,7 @@ code.ic { font-size: .88em; padding: 1px 5px; border-radius: 5px; background: va
 .judge-checks li svg { width: 15px; height: 15px; flex: none; margin-top: 2px; }
 .judge-checks li.ok svg { color: var(--success); }
 .judge-checks li.bad svg { color: var(--warning); }
+.judge-checks li.tip svg { color: var(--muted); }
 .judge-checks li > div { display: flex; flex-direction: column; gap: 2px; }
 .judge-checks small { color: var(--muted); font-size: 12px; }
 .judge-hint { margin: 0; padding: 0 12px 10px; color: var(--muted); font-size: 12px; }

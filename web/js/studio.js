@@ -75,8 +75,21 @@ export async function mountStudio(lectureId, ctx) {
   }
 
   const persona = structuredClone(data.persona || template.values);
-  const topicInput = h("input", { class: "input", value: data.manifest?.topic || template.topic || "", placeholder: "e.g. Introduction to recursion" });
-  const durationInput = h("input", { class: "input", type: "number", min: 5, max: 120, step: 5, value: data.manifest?.duration_min || template.duration_min || 30 });
+  const topicInput = h("input", { class: "input", value: data.manifest?.topic || "", placeholder: "e.g. Introduction to recursion" });
+  const durationInput = h("input", { class: "input", type: "number", min: 5, max: 120, step: 5, value: data.manifest?.duration_min || template.duration_min || 15 });
+  const speakingInput = h("input", { class: "input", type: "number", min: 1, max: 120, step: 1,
+    value: Math.min(data.manifest?.speaking_min || template.speaking_min || 5, +durationInput.value) });
+
+  // The teacher's fields are saved as they are typed, so they are kept without generating a script.
+  let setupTimer = null;
+  function saveSetupSoon() {
+    clearTimeout(setupTimer);
+    setupTimer = setTimeout(() => api.saveSetup(lectureId, { persona, topic: topicInput.value.trim(),
+      duration_min: +durationInput.value || 15, speaking_min: +speakingInput.value || 5 }).catch(e => toast(`Could not save: ${e.message}`, "error")), 700);
+  }
+  topicInput.addEventListener("input", saveSetupSoon);
+  durationInput.addEventListener("input", saveSetupSoon);
+  speakingInput.addEventListener("input", saveSetupSoon);
 
   const personaBody = h("div", { class: "persona" });
   function renderPersona() {
@@ -88,6 +101,7 @@ export async function mountStudio(lectureId, ctx) {
         const attrs = { class: LONG_FIELDS.has(key) ? "textarea" : "input", placeholder: key,
           oninput: (e) => {
             persona[section][key] = e.target.value;
+            saveSetupSoon();
             const n = keys.filter(k => String(persona[section][k] || "").trim()).length;
             count.textContent = `${n}/${keys.length}`; count.classList.toggle("ok", n === keys.length);
           } };
@@ -144,7 +158,8 @@ export async function mountStudio(lectureId, ctx) {
       h("div", { class: "card-header" }, h("span", { class: "step-num" }, "2"), h("h3", {}, "Lecture")),
       h("div", { class: "card-body grid-2" },
         h("label", { class: "field span-2" }, h("span", {}, "Topic"), topicInput),
-        h("label", { class: "field" }, h("span", {}, "Duration (minutes)"), durationInput),
+        h("label", { class: "field" }, h("span", {}, "Total lecture time (min)"), durationInput),
+        h("label", { class: "field" }, h("span", {}, "Speaking time (min)"), speakingInput),
         h("div", { class: "field" }, h("span", {}, "Voice"), h("div", { class: "pill-note" }, icon("volume"), "Set in .env (Gnani or browser)")))),
     h("section", { class: "card" },
       h("div", { class: "card-header" }, h("span", { class: "step-num" }, "3"), h("h3", {}, "Teacher persona"),
@@ -163,7 +178,7 @@ export async function mountStudio(lectureId, ctx) {
     summaryBody.replaceChildren(...[
       row("file", files.length ? `${files.length} file${files.length > 1 ? "s" : ""}: ${files.join(", ")}` : "No material yet"),
       row("user", persona.Teacher?.Name || "No teacher yet"),
-      row("clock", `${topicInput.value || "No topic"} · ${durationInput.value} min`),
+      row("clock", `${topicInput.value || "No topic"} · ${durationInput.value} min lecture, ${speakingInput.value} min speaking`),
       data.manifest?.environments ? envChips(data.manifest.environments) : null].filter(Boolean));
   }
 
@@ -248,12 +263,20 @@ export async function mountStudio(lectureId, ctx) {
   function qualitySummary() {
     const j = data.judge;
     if (!j || state.dirty || j.error || !j.findings?.length) return null;
+    // A failed blocker must be fixed; a failed minor check is only a suggestion.
     const byCheck = new Map();
-    for (const f of j.findings) if (PLAIN_CHECKS[f.check]) byCheck.set(f.check, (byCheck.get(f.check) ?? true) && f.passed);
-    const total = byCheck.size, failed = [...byCheck.values()].filter(v => !v).length;
+    for (const f of j.findings) {
+      if (!PLAIN_CHECKS[f.check]) continue;
+      const was = byCheck.get(f.check) || "pass";
+      const now = f.passed ? "pass" : f.severity === "blocker" ? "fail" : "tip";
+      byCheck.set(f.check, was === "fail" || now === "fail" ? "fail" : was === "tip" || now === "tip" ? "tip" : "pass");
+    }
+    const total = byCheck.size, failed = [...byCheck.values()].filter(v => v === "fail").length;
+    const tips = [...byCheck.values()].filter(v => v === "tip").length;
+    const tipText = tips ? ` (${tips} suggestion${tips > 1 ? "s" : ""})` : "";
     return { ok: !failed, failed, total,
-      text: failed ? `Quality check: ${failed} thing${failed > 1 ? "s" : ""} to look at` : `Quality check: all ${total} passed`,
-      badge: failed ? `${failed} to fix` : `✓ ${total}/${total}` };
+      text: failed ? `Quality check: ${failed} thing${failed > 1 ? "s" : ""} to fix${tipText}` : `Quality check: passed${tipText}`,
+      badge: failed ? `${failed} to fix` : tips ? `✓ ${tips} tip${tips > 1 ? "s" : ""}` : `✓ ${total}/${total}` };
   }
 
   function renderQuality() {
@@ -281,6 +304,10 @@ export async function mountStudio(lectureId, ctx) {
     graph_matches_material: ["Graphs match the ones in your slides", "A graph shows something different from your slide's graph."],
     flow_matches_material: ["Diagrams follow the steps in your material", "A diagram's steps differ from your material."],
     has_worked_example: ["Each topic has a worked example with real numbers", "A topic has no worked example yet."],
+    pictures_explained: ["Every picture shown is explained correctly", "A picture is shown but not explained, or explained wrongly."],
+    explains_clearly: ["Each idea is explained so the class can understand it", "An idea may be hard for the class to follow."],
+    highlights_fit: ["Highlights light up what the teacher is talking about", "A highlight lights up something the teacher isn't talking about."],
+    stays_true: ["Dates, numbers and names match your material", "A date, number, name or event doesn't match your material."],
   };
   const CHECK_ORDER = Object.keys(PLAIN_CHECKS);
   // While-speaking pairs are checked too (is the sentence about what appears?) but they adjust timing, not quality.
@@ -291,24 +318,33 @@ export async function mountStudio(lectureId, ctx) {
     if (j.error) return h("div", { class: "judge-card" }, h("div", { class: "judge-head" }, icon("info"),
       h("span", {}, "The quality check couldn't run this time. The script was still checked for mistakes; you can review it below.")));
     // One line per check, however many sections it was asked for; a check passes only if it passed everywhere.
+    // A failed blocker is something to fix; a failed minor check (style, polish) is shown as a suggestion.
     const byCheck = new Map();
     for (const f of j.findings || []) {
       if (!PLAIN_CHECKS[f.check]) continue;
-      const c = byCheck.get(f.check) || { passed: true, sections: [] };
-      if (!f.passed) { c.passed = false; if (f.section) c.sections.push(f.section); }
+      const c = byCheck.get(f.check) || { passed: true, tip: false, sections: [] };
+      if (!f.passed) {
+        if (f.severity === "blocker") c.passed = false; else c.tip = true;
+        if (f.section) c.sections.push(f.section);
+      }
       byCheck.set(f.check, c);
     }
     const checks = CHECK_ORDER.filter(k => byCheck.has(k)).map(k => ({ key: k, ...byCheck.get(k) }));
     const failed = checks.filter(c => !c.passed);
-    const summary = failed.length ? `${checks.length - failed.length} of ${checks.length} checks passed` : `All ${checks.length} checks passed`;
+    const tips = checks.filter(c => c.passed && c.tip).length;
+    const summary = (failed.length ? `${checks.length - failed.length} of ${checks.length} checks passed` : `All ${checks.length} checks passed`)
+      + (tips ? `, ${tips} suggestion${tips > 1 ? "s" : ""}` : "");
     return h("details", { class: `judge-card ${failed.length ? "bad" : "ok"}`, open: true },
       h("summary", {}, icon(failed.length ? "alert" : "checkCircle"), h("strong", {}, "Quality check"),
         h("span", { class: "judge-meta" }, summary)),
-      h("ul", { class: "judge-checks" }, checks.map(c => h("li", { class: c.passed ? "ok" : "bad" },
-        icon(c.passed ? "check" : "alert"),
-        h("div", {}, h("span", {}, PLAIN_CHECKS[c.key][0]),
-          c.passed ? null : h("small", {}, PLAIN_CHECKS[c.key][1]
-            + (c.sections.length ? ` Look at: ${[...new Set(c.sections)].join(", ")}.` : "")))))),
+      h("ul", { class: "judge-checks" }, checks.map(c => {
+        const tip = c.passed && c.tip;
+        return h("li", { class: !c.passed ? "bad" : tip ? "tip" : "ok" },
+          icon(!c.passed ? "alert" : tip ? "info" : "check"),
+          h("div", {}, h("span", {}, PLAIN_CHECKS[c.key][0]),
+            c.passed && !tip ? null : h("small", {}, (tip ? "Suggestion: " : "") + PLAIN_CHECKS[c.key][1]
+              + (c.sections.length ? ` Look at: ${[...new Set(c.sections)].join(", ")}.` : ""))));
+      })),
       failed.length ? h("p", { class: "judge-hint" }, "Fix these in Edit, or click Generate script again.") : null);
   }
 
@@ -435,11 +471,14 @@ export async function mountStudio(lectureId, ctx) {
       personaBody.querySelectorAll("details").forEach(d => d.open = true);
       return toast(`Persona is missing: ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? "…" : ""}`, "error", 6000);
     }
+    if (!topicInput.value.trim()) return toast("Enter this lecture's topic.", "error");
     const duration = +durationInput.value;
-    if (!(duration >= 5 && duration <= 120)) return toast("Duration must be 5 to 120 minutes.", "error");
+    if (!(duration >= 5 && duration <= 120)) return toast("Total lecture time must be 5 to 120 minutes.", "error");
+    const speaking = +speakingInput.value;
+    if (!(speaking >= 1 && speaking <= duration)) return toast("Speaking time must be 1 minute up to the total lecture time.", "error");
     if (state.segments.length && !await confirmDialog("Regenerate the script?", "This replaces the current script, including any edits.", "Regenerate")) return;
     try {
-      await api.generate(lectureId, { persona, topic: topicInput.value.trim(), duration_min: duration });
+      await api.generate(lectureId, { persona, topic: topicInput.value.trim(), duration_min: duration, speaking_min: speaking });
       data.job = { status: "running", steps: [], error: "" };
       data.judge = null;  // the old quality result belongs to the old script
       renderQuality(); renderLog(); renderActions(); setTab("log");

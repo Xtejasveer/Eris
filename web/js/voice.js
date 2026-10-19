@@ -42,6 +42,8 @@ export class Voice {
   constructor(lectureId) {
     this.lectureId = lectureId;
     this.clips = new Map();      // text -> Promise<objectURL | null>
+    this.timings = new Map();    // text -> Promise<{ words, times, durations } | null>: word timings for lip sync
+    this._timing = null;         // timings of the clip playing now (re-sent after a pause or an avatar switch)
     this.audio = new Audio();
     this.audio.preload = "auto";
     this.mode = "unknown";       // "gnani" once a clip plays, "browser" when /tts returns 204
@@ -76,6 +78,12 @@ export class Voice {
     if (this.avatar && this._out) this.avatar.detachAudioStream(this._out);
     this.avatar = avatar;
     if (this._out) this._route();
+    this._timingToAvatar();
+  }
+
+  // The avatar follows the clip's own playback position, so pausing, resuming or late timings stay in sync.
+  _timingToAvatar() {
+    if (this.avatar && this._timing && this.mode === "gnani") this.avatar.setTimestamps(this._timing, { clock: "media", media: this.audio });
   }
 
   _route() {
@@ -103,10 +111,20 @@ export class Voice {
     if (!this.clips.has(text)) {
       this.clips.set(text, api.tts(this.lectureId, text).then(async (res) => {
         if (res.status === 204 || !res.ok) return null;
-        return URL.createObjectURL(await res.blob());
+        const url = URL.createObjectURL(await res.blob());
+        this.timing(text);  // the clip exists now, so its word timings can be made
+        return url;
       }).catch(() => null));
     }
     return this.clips.get(text);
+  }
+
+  timing(text) {
+    if (!this.timings.has(text)) {
+      this.timings.set(text, api.ttsTiming(this.lectureId, text)
+        .then(res => (res.ok && res.status !== 204 ? res.json() : null)).catch(() => null));
+    }
+    return this.timings.get(text);
   }
 
   // Length of the spoken line in seconds: the real clip when there is one, else an estimate.
@@ -143,9 +161,16 @@ export class Voice {
     this.speaking = true;
     try {
       const url = await this.clip(text);
-      if (url) { this.mode = "gnani"; await this._playUrl(url); }
+      if (url) {
+        this.mode = "gnani";
+        this._timing = null;
+        this.avatar?.clearTimestamps();  // the last clip's timings must not drive this one
+        const token = (this._token = {});
+        this.timing(text).then((t) => { if (t && this._token === token) { this._timing = t; this._timingToAvatar(); } });
+        await this._playUrl(url);
+      }
       else { if (this.mode !== "gnani") this.mode = "browser"; await this._speakBrowser(text); }
-    } finally { this.speaking = false; }
+    } finally { this.speaking = false; this._token = null; this._timing = null; }
   }
 
   _playUrl(url) {
@@ -202,11 +227,13 @@ export class Voice {
   resume() {
     this.paused = false;
     if (this.audio.src && this.audio.paused && !this.audio.ended && this._cancel) this.audio.play().catch(() => {});
+    this._timingToAvatar();  // pause() cleared the avatar's schedule
     if ("speechSynthesis" in window) speechSynthesis.resume();
   }
 
   stop() {
     this.paused = false;
+    this._token = null; this._timing = null;
     this.avatar?.stop();  // interruption: the avatar flushes its audio and closes the mouth
     if (this._cancel) this._cancel();
     if ("speechSynthesis" in window) speechSynthesis.cancel();

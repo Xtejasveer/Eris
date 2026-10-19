@@ -19,7 +19,7 @@ const NO_DOUBT_WORDS = new Set(["", "no", "none", "no doubts", "nope", "n"]);  /
 const BREATH_MS = 500;          // a short breath after each spoken line, before the next step
 const SECTION_BREATH_MS = 1100; // a longer one when a new part of the lesson starts
 const SLIDE_DWELL_MS = 3000;    // a slide nobody talks about stays this long before the next workspace opens
-const SLIDE_MARKERS = new Set(["SLIDE", "SLIDE_HIGHLIGHT"]);
+const SLIDE_MARKERS = new Set(["SLIDE", "SLIDE_HIGHLIGHT", "SLIDE_CIRCLE"]);
 const DOUBT_WAIT_S = 10;    // how long the class has to start asking before the lesson goes on
 const ANSWER_WAIT_S = 25;   // when the teacher asked the student something back, they get longer to reply
 const BREAK_MAX_QUESTIONS = 4;   // a mid-lecture break takes at most this many questions…
@@ -41,9 +41,37 @@ const asksStudent = (text) => {
 };
 const FINAL_CLOSING_LINE = "Thank you for your questions. See you in the next class.";
 
+// The class clock: the lecture's total time (the teacher sets it; the script was written for its shorter speaking
+// time). When 10% of the lecture is left the teacher says so and mid-lecture question breaks wait for the end;
+// at 5% left the teacher skips to the recap; at the end the class stops. Paused time doesn't count.
+const MIN = 60000;
+const NOTICE_SHARE = 0.10;  // "we have about N minutes left"
+const WRAP_SHARE = 0.05;    // "...let's go straight to the recap"
+// Time left as a teacher says it: "about 3 minutes", "about a minute", "about 40 seconds".
+const spokenLeft = (ms) => {
+  const s = Math.max(10, Math.round(ms / 1000));
+  if (s >= 90) return `about ${Math.round(s / 60)} minutes`;
+  if (s >= 50) return "about a minute";
+  return `about ${Math.round(s / 10) * 10} seconds`;
+};
+const NOTICE_LINE = (left) => `Just a quick note: we have ${spokenLeft(left)} left, so I'll keep your questions for the very end.`;
+const WRAP_LINE = (left) => `We have ${spokenLeft(left)} left, so let's go straight to the recap.`;
+const WRAP_LINE_NO_RECAP = (left) => `We have ${spokenLeft(left)} left, so let's wrap up.`;
+const END_LINE = "That's our time for today. Thank you, and see you in the next class.";
+const RECAP_RE = /\b(recap|summary|summing up|wrap(?:ping)?[- ]?up|conclusion|closing|review)\b/i;
+
+export class ClassClock {
+  constructor(totalMin) { this.totalMs = (totalMin || 0) * MIN; this.usedMs = 0; this.from = null; this.warned = new Set(); }
+  run() { if (this.from == null) this.from = performance.now(); }
+  hold() { if (this.from != null) { this.usedMs += performance.now() - this.from; this.from = null; } }
+  elapsed() { return this.usedMs + (this.from != null ? performance.now() - this.from : 0); }
+  left() { return this.totalMs ? this.totalMs - this.elapsed() : Infinity; }
+}
+
 export class Player {
-  constructor({ lectureId, segments, teacher, stage, voice, ui }) {
+  constructor({ lectureId, segments, teacher, stage, voice, ui, clock = null }) {
     Object.assign(this, { lectureId, segments, teacher, stage, voice, ui });
+    this.clock = clock || new ClassClock(0);  // shared across jumps, so a jump doesn't reset the lecture time
     this.doubtThread = null;     // ONE doubt-agent conversation for the whole class: it remembers every answer
     this.deferredDoubts = false; // a break ran out of time: the final break opens with "as promised…"
     this.paused = false;
@@ -70,9 +98,43 @@ export class Player {
 
   async tick(ms) { await sleep(ms); await this.gate(); }
 
-  pause() { this.paused = true; this.voice.pause(); }
-  resume() { this.paused = false; this.voice.resume(); this._resume?.(); }
-  stop() { this.stopped = true; this.paused = false; this.voice.stop(); this._resume?.(); this.ui.cancelAsk?.(); }
+  pause() { this.paused = true; this.clock.hold(); this.voice.pause(); }
+  resume() { this.paused = false; this.clock.run(); this.voice.resume(); this._resume?.(); }
+  stop() { this.stopped = true; this.paused = false; this.clock.hold(); this.voice.stop(); this._resume?.(); this.ui.cancelAsk?.(); }
+
+  // Where a 2-minute wrap-up jumps to: the next recap-like section, else the final question break.
+  wrapUpIndex(from) {
+    if (RECAP_RE.test(this.state.section)) return null;  // already wrapping up
+    for (let j = from; j < this.segments.length; j++) {
+      const s = this.segments[j];
+      if (s.name === "SECTION" && RECAP_RE.test(s.args?.title || "")) return j;
+    }
+    const last = this.segments.length - 1;
+    return this.segments[last]?.name === "DOUBT_CHECK" && last > from ? last : null;
+  }
+
+  // Before each step: the time warnings. Returns the index to play next, or -1 when the class is over.
+  async checkClock(i) {
+    const c = this.clock, left = c.left();
+    if (left <= 0 && !c.warned.has("end")) {
+      c.warned.add("end");
+      await this.say(END_LINE);
+      return -1;
+    }
+    if (left <= c.totalMs * WRAP_SHARE && !c.warned.has("wrap")) {
+      c.warned.add("wrap"); c.warned.add("notice");
+      const j = this.wrapUpIndex(i);
+      await this.say(j == null ? WRAP_LINE_NO_RECAP(left) : WRAP_LINE(left));
+      if (j != null && j > i) {
+        this.deferredDoubts = this.deferredDoubts || this.segments.slice(i, j).some(s => s.name === "DOUBT_CHECK");
+        return j;
+      }
+    } else if (left <= c.totalMs * NOTICE_SHARE && !c.warned.has("notice")) {
+      c.warned.add("notice");
+      await this.say(NOTICE_LINE(left));
+    }
+    return i;
+  }
 
   snapshot() {
     const b = this.board, s = this.state;
@@ -118,7 +180,12 @@ export class Player {
   async play(from = 0) {
     this.stopped = false;
     await this.restore(from);
+    this.clock.run();
     for (let i = from; i < this.segments.length; i++) {
+      await this.gate();
+      const go = await this.checkClock(i);
+      if (go < 0) break;
+      if (go !== i) { i = go; await this.restoreSection(i); }
       this.cursor = i;
       this.ui.onProgress?.(i, this.segments.length);
       await this.gate();
@@ -136,8 +203,17 @@ export class Player {
       }
       if (pair) { this.log(i + 1, next, "done"); i += 1; }  // its narration played together with it
     }
+    this.clock.hold();
     this.cursor = this.segments.length;
     this.ui.onProgress?.(this.segments.length, this.segments.length);
+  }
+
+  // After a wrap-up jump: the section label follows (the skipped steps never ran, so nothing else to rebuild).
+  async restoreSection(i) {
+    for (let j = i; j >= 0; j--) {
+      if (this.segments[j].name === "SECTION") { this.state.section = this.segments[j].args.title; break; }
+    }
+    this.ui.onSection?.(this.state.section);
   }
 
   log(index, seg, status, detail = "") {
@@ -234,7 +310,12 @@ export class Player {
         b.currentSlide = a.n; await this.tick(150);
         return st.showSlide(a.n) ? "" : `slide ${a.n} not found`;
       case "SLIDE_HIGHLIGHT":
+        if (String(b.currentSlide) !== String(a.n)) { st.showSlide(a.n); b.currentSlide = a.n; }  // its slide first
         st.slideHighlight(a.text); await this.tick(400); return "";
+      case "SLIDE_CIRCLE":
+        b.currentSlide = a.n;
+        if (!st.slideCircle(a.n)) { st.showSlide(a.n); return ""; }  // no picture on it: just show the slide
+        await this.tick(750); return "";
       case "WRITE_CODE":
         b.files[a.file] = a.code; await st.writeCode(a.file, a.code, ctl); return "";
       case "HIGHLIGHT":
@@ -310,6 +391,7 @@ export class Player {
   // BREAK_BUDGET_S, but never in the middle of an exchange: if the teacher just asked the student something
   // back ("which code?"), the student may answer first. Questions that didn't fit move to the final break.
   async doubtCheck(final) {
+    if (!final && this.clock.warned.has("notice")) { this.deferredDoubts = true; return; }  // questions wait for the end
     const ui = this.ui;
     const chk = ui.openCheckpoint(this.state.section, final);
     const view = this.stage.view();  // answers may turn pages or open files; come back afterwards
@@ -321,7 +403,8 @@ export class Player {
     let closing = final ? FINAL_CLOSING_LINE : CLOSING_LINE;
     try {
       while (true) {
-        const outOfTime = !final && (performance.now() - started) / 1000 > BREAK_BUDGET_S;
+        const outOfTime = final ? this.clock.left() <= 0
+          : (performance.now() - started) / 1000 > BREAK_BUDGET_S || this.clock.left() <= this.clock.totalMs * NOTICE_SHARE;
         if (!followUp && (asked >= maxQuestions || outOfTime)) {
           if (final) closing = LIMIT_LINE;
           else { closing = DEFER_LINE; this.deferredDoubts = true; }

@@ -7,6 +7,7 @@
 import { h, icon, esc } from "./ui.js";
 import { highlightLine } from "./highlight.js";
 import { FlowBoard } from "./flow.js";
+import { drawPen, svgLayer } from "./pen.js";
 
 const ENVS = [["notebook", "Notebook", "book"], ["slides", "Slides", "slides"], ["code", "Code", "code"],
   ["visual", "Visual", "sparkle"]];
@@ -19,8 +20,10 @@ export const CODE_MS = 14;   // per character, "typing"
 
 export class Stage {
   // used: environment keys this class uses (from its script); null = show all.
-  constructor(slides, used = null) {
+  // pictures: {slide number: [{url, kind, description}]}, the real pictures on each slide.
+  constructor(slides, used = null, pictures = {}) {
     this.slides = slides || {};
+    this.pictures = pictures || {};
     this.envs = ENVS.filter(([key]) => !used || key === "notebook" || used.includes(key));
     this.files = {};          // name -> { lines, tab, body }
     this.current = null;
@@ -170,15 +173,71 @@ export class Stage {
     const text = this.slides[n] ?? this.slides[String(n)];
     if (text == null) return false;
     const [title, ...rest] = text.split("\n").map(s => s.trim()).filter(Boolean);
-    this.slideBox.replaceChildren(h("h2", { class: "slide-title" }, title || `Slide ${n}`),
-      h("ul", { class: "slide-points" }, rest.map(r => h("li", {}, r.replace(/^[•\-*]\s*/, "")))));
+    const pics = this.pictures[n] || this.pictures[String(n)] || [];
+    const points = h("ul", { class: "slide-points" }, rest.map(r => h("li", {}, r.replace(/^[•\-*]\s*/, ""))));
+    // A slide with pictures shows them beside its points (or alone, full size, if it has no points).
+    const body = pics.length
+      ? h("div", { class: `slide-body with-pictures${rest.length ? "" : " only-pictures"}` }, rest.length ? points : null,
+          h("div", { class: "slide-pictures" }, pics.map(p => h("img", { src: p.url, alt: p.description || "", title: p.description || "" }))))
+      : points;
+    this.slideBox.replaceChildren(h("h2", { class: "slide-title" }, title || `Slide ${n}`), body);  // also clears pen circles
+    this.currentSlideNo = n;
     this.slideBox.classList.remove("enter"); void this.slideBox.offsetWidth; this.slideBox.classList.add("enter");
     this.slideNum.textContent = `${n} / ${Object.keys(this.slides).length}`;
+    this.fitSlide();
+    for (const img of this.slideBox.querySelectorAll("img")) if (!img.complete) img.addEventListener("load", () => this.fitSlide(), { once: true });
+    if (!this.slideResize) {  // the panel can be resized or the slides tab shown later: fit again then
+      this.slideResize = new ResizeObserver(() => this.fitSlide());
+      this.slideResize.observe(this.slideBox);
+    }
+    return true;
+  }
+
+  /** Shrink the slide's text (--fit) until its points fit under the title; a long slide never spills over it. */
+  fitSlide() {
+    const box = this.slideBox, points = box.querySelector(".slide-points");
+    if (!points || !box.clientHeight) return;
+    let fit = 1;
+    box.style.setProperty("--fit", fit);
+    while (fit > 0.55 && points.scrollHeight > points.clientHeight + 1) {
+      fit = Math.round((fit - 0.05) * 100) / 100;
+      box.style.setProperty("--fit", fit);
+    }
+  }
+
+  // Circle the picture(s) on slide n with a pen, as a teacher would while talking about it.
+  slideCircle(n) {
+    if (String(this.currentSlideNo) !== String(n) && !this.showSlide(n)) return false;
+    this.setEnv("slides");
+    const imgs = [...this.slideBox.querySelectorAll(".slide-pictures img")];
+    if (!imgs.length) return false;
+    const draw = () => {
+      this.slideBox.querySelector(".pen-layer")?.remove();
+      const box = this.slideBox.getBoundingClientRect();
+      const layer = svgLayer("pen-layer");
+      layer.setAttribute("viewBox", `0 0 ${box.width} ${box.height}`);
+      this.slideBox.appendChild(layer);
+      imgs.forEach((img, k) => {
+        const r = img.getBoundingClientRect();
+        // object-fit: contain: the picture itself may be smaller than its box
+        const scale = Math.min(r.width / (img.naturalWidth || r.width), r.height / (img.naturalHeight || r.height));
+        const w = (img.naturalWidth || r.width) * scale, hgt = (img.naturalHeight || r.height) * scale;
+        const cx = r.left - box.left + r.width / 2, cy = r.top - box.top + r.height / 2;
+        // loosely around the picture, but never off the slide (the stroke drifts out ~4% at its end)
+        const rx = Math.min(w / 2 * 1.1 + 6, cx - 6, box.width - cx - 6) / 1.05;
+        const ry = Math.min(hgt / 2 * 1.1 + 6, cy - 6, box.height - cy - 6) / 1.05;
+        drawPen(layer, cx, cy, rx, ry, { seed: n * 7 + k, ms: 750 });
+      });
+    };
+    const pending = imgs.filter(img => !img.complete);
+    if (pending.length) pending.forEach(img => img.addEventListener("load", draw, { once: true }));
+    draw();
     return true;
   }
 
   slideHighlight(text) {
     this.setEnv("slides");
+    text = String(text).replace(/^\s*[•\-*]\s*/, "");  // the slide shows its points without bullet marks
     return [...this.slideBox.querySelectorAll("h2, li")].some(el => markText(el, text));
   }
 

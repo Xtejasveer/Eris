@@ -184,14 +184,23 @@
 
 /* slides */
 .env-slides { background: radial-gradient(circle at 50% 0, var(--surface-2), var(--surface-3)); display: grid; place-items: center; padding: 28px; }
-.slide-frame { position: relative; width: min(100%, calc((100vh - 220px) * 16 / 9)); aspect-ratio: 16 / 9; }
-.slide { position: absolute; inset: 0; background: #fff; color: #1b1c21; border-radius: 10px; box-shadow: 0 10px 40px rgba(20, 20, 40, .18); padding: 6% 7%; overflow: hidden; display: flex; flex-direction: column; }
+.slide-frame { position: relative; width: min(100%, calc((100vh - 220px) * 16 / 9)); aspect-ratio: 16 / 9; container-type: size; }
+/* Sizes follow the slide (cq units), not the window, so a slide in a narrow panel keeps its proportions.
+   --fit (set by Stage.fitSlide) shrinks the text further when a slide still has too much on it. */
+.slide { --fit: 1; position: absolute; inset: 0; background: #fff; color: #1b1c21; border-radius: 10px; box-shadow: 0 10px 40px rgba(20, 20, 40, .18); padding: 5.5cqh 6.5cqw; overflow: hidden; display: flex; flex-direction: column; }
 .slide::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 8px; background: linear-gradient(var(--primary), var(--violet)); }
 .slide.enter { animation: slide-in .45s ease; }
 @keyframes slide-in { from { opacity: 0; transform: translateX(16px); } }
-.slide-title { font-size: clamp(20px, 3.2vw, 38px); font-weight: 700; letter-spacing: -.02em; margin-bottom: 4%; color: #14181f; }
-.slide-points { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: .55em; font-size: clamp(14px, 1.8vw, 22px); line-height: 1.4; color: #343844; overflow: auto; }
+.slide-title { flex: none; font-size: calc(clamp(15px, 4.2cqw, 40px) * var(--fit)); line-height: 1.15; font-weight: 700; letter-spacing: -.02em; margin: 0 0 3.5cqh; color: #14181f; }
+.slide-points { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: .5em; font-size: calc(clamp(11px, 2.3cqw, 22px) * var(--fit)); line-height: 1.35; color: #343844; min-height: 0; }
+.slide > .slide-points { flex: 1; overflow: hidden; }
 .slide-points li::marker { color: var(--primary); }
+/* the real pictures from the slide, beside its points; the body only ever uses the space under the title */
+.slide-body.with-pictures { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); grid-template-rows: minmax(0, 1fr); gap: 4cqw; }
+.slide-body.with-pictures .slide-points { align-self: center; max-height: 100%; overflow: hidden; }
+.slide-body.only-pictures { grid-template-columns: 1fr; }
+.slide-pictures { min-height: 0; height: 100%; display: flex; flex-direction: column; gap: 10px; align-items: center; justify-content: center; }
+.slide-pictures img { max-width: 100%; max-height: 100%; min-height: 0; object-fit: contain; border-radius: 6px; flex: 1 1 0; }
 .slide-empty { margin: auto; display: flex; flex-direction: column; align-items: center; gap: 8px; color: #8b8d96; }
 .slide-empty svg { width: 28px; height: 28px; }
 .slide-num { position: absolute; right: 14px; bottom: 10px; font-size: 12px; color: #8b8d96; font-variant-numeric: tabular-nums; }
@@ -253,3 +262,8 @@
   .side-panel { min-height: 360px; }
   .env-indicator { --pill-w: 78px; }
 }
+.chip.warn { color: var(--danger); border-color: var(--danger); }
+/* The teacher's pen: a hand-drawn circle around a slide picture or a diagram block */
+.pen-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 2; }
+.pen-stroke { fill: none; stroke: #e5484d; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; opacity: .9; }
+.flow-pen { fill: none; stroke: #e5484d; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }

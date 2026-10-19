@@ -23,3 +23,6 @@ npm-debug.log*
 
 # Lectures moved out of the platform (kept, not shown)
 archive/
+
+# Teacher face videos for the talking-video renders (large, local only)
+media/

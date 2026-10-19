@@ -6,7 +6,7 @@ import { lectureHeader } from "./header.js";
 import { inlineCode } from "./script-view.js";
 import { Stage } from "./stage.js";
 import { Voice, createDictation } from "./voice.js";
-import { Player, Stopped } from "./player.js";
+import { Player, Stopped, ClassClock } from "./player.js";
 
 const cursorKey = (id) => `eris-cursor-${id}`;
 const store = {
@@ -37,11 +37,11 @@ export async function mountClassroom(lectureId, ctx) {
   const sections = segments.map((s, i) => ({ s, i })).filter(x => x.s.name === "SECTION").map(x => ({ title: x.s.args.title, index: x.i }));
   const voice = new Voice(lectureId);
   // Only the environments this class uses get a pill (notebook always).
-  const ENV_OF = { SLIDE: "slides", SLIDE_HIGHLIGHT: "slides", WRITE_CODE: "code", RUN: "code", OPEN_FILE: "code",
+  const ENV_OF = { SLIDE: "slides", SLIDE_HIGHLIGHT: "slides", SLIDE_CIRCLE: "slides", WRITE_CODE: "code", RUN: "code", OPEN_FILE: "code",
     FLOW: "visual", VISUAL: "visual" };
   const used = [...new Set(info.segments.map(s => ENV_OF[s.name]).filter(Boolean))];
   if (Object.keys(info.slides || {}).length) used.push("slides");  // doubt answers may always show slides
-  const stage = new Stage(info.slides, used);
+  const stage = new Stage(info.slides, used, info.slide_pictures);
   let player = null;
   let running = false;
 
@@ -96,8 +96,18 @@ export async function mountClassroom(lectureId, ctx) {
     h("div", { class: "stage-body" }, stage.el, overlay));
 
   const voiceChip = h("span", { class: "chip" }, icon("volume"), info.voice ? "Gnani voice" : "Browser voice");
+  // The class clock: lecture time used out of the total (paused time doesn't count; a jump keeps it).
+  const clock = new ClassClock(info.duration_min);
+  const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+  const clockText = h("span", {}, `0:00 / ${mmss(clock.totalMs)}`);
+  const clockChip = h("span", { class: "chip", title: "Lecture time used / total lecture time" }, icon("clock"), clockText);
+  const clockTimer = setInterval(() => {
+    if (!clockChip.isConnected) return clearInterval(clockTimer);
+    clockText.textContent = `${mmss(clock.elapsed())} / ${mmss(clock.totalMs)}`;
+    clockChip.classList.toggle("warn", clock.left() <= clock.totalMs * 0.10);
+  }, 1000);
   const header = lectureHeader(lectureId, "class", info.status,
-    h("span", { class: "chip" }, icon("clock"), formatDuration(info.estimated_min)), voiceChip);
+    clockChip, voiceChip);
   main.replaceChildren(header, h("div", { class: "classroom" }, side, stageCard));
 
   // ---------- panel + overlay ----------
@@ -266,7 +276,7 @@ export async function mountClassroom(lectureId, ctx) {
   async function start(from) {
     voice.unlock();
     if (player) player.stop();
-    const p = new Player({ lectureId, segments, teacher: info.teacher, stage, voice, ui });
+    const p = new Player({ lectureId, segments, teacher: info.teacher, stage, voice, ui, clock });
     player = p;
     showOverlay(null);
     setRunning(true);

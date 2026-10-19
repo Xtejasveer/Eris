@@ -8,15 +8,44 @@ index ──► generate (draft) ──► approve ──► render (audio) ─�
 ```
 
 **How a class runs.** The LLM writes the script once and the teacher approves it. In class,
-a plain-code *player* (`session.py`) walks the approved `script.json` one segment at a time:
+a plain-code *player* (`eris/classroom/session.py`) walks the approved `script.json` one segment at a time:
 narration plays (Gnani TTS), then the next action runs on the board, then the next narration.
 Each step finishes before the next starts, so speech and actions can't drift apart.
-LLMs are used only for student doubts (`doubt_agent.py`) and for a one-line recovery when an
-action fails (`recovery.py`). They get a read-only snapshot of the class; only the player
+LLMs are used only for student doubts (`eris/classroom/doubt_agent.py`) and for a one-line recovery when an
+action fails (`eris/classroom/recovery.py`). They get a read-only snapshot of the class; only the player
 moves forward.
 
 Each command is a separate run. They share state only through files in
 `workspace/lectures/<id>/` and the Chroma collection named `<id>`.
+
+## Project layout
+
+```
+main.py                 command line: serve / index / generate / approve / render / video / session
+eris/                   the Python package
+  config.py             settings (.env), paths and the lecture manifest
+  persona.py            reads persona.md
+  prompts.py            every agent's system prompt
+  tools.py              the agents' tools (search the material, run code, read the board, ask the class)
+  material/             reading the teacher's files: indexer.py (knowledge base), figures.py (diagrams,
+                        step lists, charts and which environments the material unlocks)
+  generate/             making the script: research + writer (script_agent.py), the generate command
+                        (script_writer.py), checks and repairs (script_pipeline.py, script_checks.py,
+                        script_fixes.py, format_fixes.py), the parser (script_parser.py) and the judge
+                        (script_judge.py, quality_loop.py)
+  visuals/              the Visual board: flow diagrams (flow_diagram.py) and interactive graphs
+                        (visual_builder.py, visual_controls.py, visual_smoke.mjs)
+  classroom/            running a class: doubt_agent.py, class_board.py, session.py (terminal class),
+                        actions.py, recovery.py, voice.py
+  api/                  the website backend: server.py, server_class.py, jobs.py
+web/                    the website (plain HTML/CSS/JS, no build step)
+templates/persona.md    the example persona
+docs/                   design notes
+talking_video.py, musetalk_modal.py   photorealistic teacher video (MuseTalk on Modal)
+data/, workspace/       lecture material and generated files (local, not in git)
+```
+
+A module's own command runs with `python -m`, e.g. `python -m eris.generate.script_parser script.md`.
 
 ## 1. Setup (about 5 minutes)
 
@@ -36,12 +65,12 @@ Edit `.env`:
 | `OPENROUTER_API_KEY` | required |
 | `LLM_MODEL` | required: an OpenRouter model that supports **tool calling**, e.g. `openai/gpt-4o-mini` |
 | `EMBED_MODEL` | embedding model (default `baai/bge-m3`) |
-| `TOPIC_NAME` | the lecture topic |
-| `LECTURE_DURATION_MIN` | lecture length in minutes (default 30) |
-| `SPEAKING_WPM` | speaking speed used for time estimates (default 130) |
+| `LECTURE_DURATION_MIN` | default total lecture time in minutes (15): runs the class clock; each lecture can set its own |
+| `SPEAKING_MIN` | default speaking time in minutes (5): the only time the script writer is given |
+| `SPEAKING_WPM` | speaking speed: speaking time x this = the script's word budget (default 115). Measure your voice with `python main.py measure-voice`, which saves it here |
 | `GNANI_API_KEY` | needed only for voice (`render`, `session --voice/--mic`). Get one at app.gnani.ai/voice |
 | `TTS_VOICE` / `TTS_LANGUAGE` | Gnani Timbre v2.5 voice and language (default `Kaveri`, `en-IN`) |
-| `TTS_SPEED` | 0.85 to 1.15 (default 1.0) |
+| `TTS_SPEED` | 0.85 to 1.15 (default 0.85, the slowest Gnani allows) |
 | `STT_LANGUAGE` | language for spoken doubts (default `en-IN`) |
 
 ## 2. The website (easiest way)
@@ -67,7 +96,7 @@ python main.py serve        # then open http://127.0.0.1:8000
   Without it, the browser's built-in voice is used, so the site works with no voice key.
 
 How it fits together: the browser runs the player (it's where the audio plays, so it keeps
-narration and actions in order). The backend (`server.py`, `server_class.py`, `jobs.py`)
+narration and actions in order). The backend (`eris/api/server.py`, `eris/api/server_class.py`, `eris/api/jobs.py`)
 only generates, approves, makes audio, runs code, writes recovery lines and runs doubt-agent turns.
 
 ## 3. Add a lecture from the command line
@@ -81,12 +110,6 @@ data/<id>/
 ├── lecture.pptx    # at least one PPTX, PDF or DOCX
 ├── notes.pdf
 └── lab.docx        # code in Courier/Consolas font is kept as code
-```
-
-To try it without real material, create sample files:
-
-```bash
-python tests/make_example_data.py example
 ```
 
 ### Filling in `persona.md`
@@ -105,7 +128,7 @@ everything that is missing at once. A value can continue on the next lines.
 ## 4. Run it from the command line
 
 ```bash
-python main.py index    --lecture example    # build the knowledge base
+python main.py index    --lecture example    # build the knowledge base (set the topic and length in Studio)
 python main.py generate --lecture example    # write the script -> status: draft
 python main.py approve  --lecture example    # validate script.md -> status: approved
 python main.py render   --lecture example    # optional: pre-render narration audio, real duration
@@ -168,7 +191,7 @@ chroma_db/            # the vector store
 ## 6. Script markers
 
 Every marker sits on its own line, e.g. `[RUN cmd="python demo.py"]`. Code goes between
-`[WRITE_CODE file="demo.py"]` and `[/WRITE_CODE]`. See `prompts.py` for the full table.
+`[WRITE_CODE file="demo.py"]` and `[/WRITE_CODE]`. See `eris/prompts.py` for the full table.
 
 The **notebook** is the teacher's blackboard, a ruled page on the Class screen:
 
@@ -219,15 +242,13 @@ Code highlights quote the code instead of counting lines, so they can't point at
 The quote must match exactly one line (spacing is ignored). `lines="3-5"` still works for
 hand-written scripts, but `generate` rejects it.
 
-`generate` requires a `[NOTE]` block in every section that has code. `tests/notebook_script.md`
-is a short hand-written example.
+`generate` requires a `[NOTE]` block in every section that has code.
 Check a script by hand with:
 
 ```bash
-python script_parser.py workspace/lectures/example/script.md
+python -m eris.generate.script_parser workspace/lectures/example/script.md
 ```
 
-Parser tests: `tests/sample_script.md` must pass, and `tests/bad_script.md` must list every error.
 
 ### Doubt answers
 
@@ -256,11 +277,25 @@ for a history class or a picture the material doesn't have:
 | Visual: diagrams (`FLOW`, ...) | the slides, PDF or DOCX have a diagram, or a written list of steps (1. 2. 3., Step 1/2/3, or A → B → C) |
 | Visual: graphs (`VISUAL`, ...) | the slides contain a chart (`VISUALS_ENABLED=true`, the default); otherwise it is explained on its slide |
 
-`index` finds them (`figures.py`) and saves them in `lecture.json` (`environments`) and `figures.json` (each diagram,
+`index` finds them (`eris/material/figures.py`) and saves them in `lecture.json` (`environments`) and `figures.json` (each diagram,
 step list and chart with where it is). The writer is told which environments it has and which processes exist; a
 script that uses another environment goes back to the writer, and as a last resort code removes those markers
 (listed in the Log). In doubts, the agent may use only the environments the class itself used (notebook and slides
 always). Studio shows a note about this and which environments the material unlocks.
+
+### Pictures in the material (vision)
+
+Slides and documents often teach through pictures: a painting, a map, a photo, a diagram or a chart saved as an
+image. Text extraction can't see those, so `index` sends every picture (bigger than an icon) once to a vision
+model (`VISION_MODEL`, default `LLM_MODEL`; it must accept images) with the slide's text as context
+(`eris/material/images.py`). The model returns what kind of picture it is, what it shows and what to notice, every
+word written in it (OCR), a diagram's steps and a chart's data. Results are cached by the picture's content.
+
+- The descriptions join the knowledge base, so search and the agents find them ("Picture on slide 3: …").
+- A diagram picture with steps can be drawn as a flow, a chart picture recreated as a graph, and any other picture
+  is listed for the writer as something to show and explain.
+- The doubt agent's board says what the picture on each slide shows.
+- In class, the Slides view shows the slide's real pictures beside its text.
 
 ### Flow diagrams, drawn block by block
 
@@ -307,11 +342,11 @@ Let me show you this on a graph you can play with.
 Controls: `name (slider 1-10)` (optional `step 0.5`); `name (choice a/b/c)` and `name (toggle)` when needed.
 The parser checks every `VISUAL_SET` against them. A visual without a slider is sent back to the writer.
 
-- **Building** (`visual_builder.py`, prompt `visual_prompt`): during `generate` (and on approve, if a
+- **Building** (`eris/visuals/visual_builder.py`, prompt `visual_prompt`): during `generate` (and on approve, if a
   description changed), `VISUAL_MODEL` writes one script that draws with the graph helper `Visual.chart`
   (`web/js/visual/chart.js`: axes, `fn`, `line`, `dots`, `bars`, `area`, reference lines, labels, a readout row).
   The builder also sees the programs on the screen and what the teacher says after each `VISUAL_SET`.
-  Code checks it (handlers, `Visual.state`, no network or storage, JS syntax), then `visual_smoke.mjs`
+  Code checks it (handlers, `Visual.state`, no network or storage, JS syntax), then `eris/visuals/visual_smoke.mjs`
   test-runs it in node: every slider is dragged across its range and must change the result, and text or
   shapes on top of each other are reported. Problems go back to the builder (up to 3 tries). A visual that
   still fails is removed and listed under auto-fixes in Studio. Built graphs are saved in
@@ -411,7 +446,6 @@ Put a GLB in `web/assets/avatars/` and set `AVATAR_MODEL_URL=/assets/avatars/you
 | `options.lifeIntensity` | 1 | 0 = still, >1 = livelier idle motion |
 | `options.maxPixelRatio` | 2 | lower it on weak phones |
 
-**Tests:** `node --test "tests/avatar/*.test.mjs"` (viseme mapping, smoothing, chunk scheduling, WAV/PCM, noise, life).
 
 ### Licenses (everything the avatar ships)
 
@@ -452,7 +486,7 @@ Not used, on purpose: TalkingHead's other sample avatars (non-commercial license
   If speaking fails, the prompt falls back to typing.
 - **Gnani `400 ... supported models are "timbre-v2.5"`.** The code always sends `timbre-v2.5`;
   update `gnani-vachana` if you still see this.
-- **Gnani `429 RATE_LIMITED`.** Gnani allows one request at a time per key. `voice.py` queues
+- **Gnani `429 RATE_LIMITED`.** Gnani allows one request at a time per key. `eris/classroom/voice.py` queues
   calls and retries automatically; if a clip still fails, the browser voice is used for that line.
 - **The website shows "Approve the script on the Home page first".** Class needs status `approved`
   (or `completed` to re-run). Saving an edit resets it to `draft`.
