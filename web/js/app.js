@@ -46,7 +46,7 @@ function renderSidebar() {
   const list = $("#lecture-list");
   list.replaceChildren(...lectures.map(l => h("li", {},
     h("a", { class: `lecture-link ${route.id === l.id ? "active" : ""}`, href: `#/lecture/${encodeURIComponent(l.id)}/studio`, title: `${l.id} · ${l.status}` },
-      h("span", { class: "lecture-avatar" }, initials(l.id)),
+      h("span", { class: "lecture-avatar", style: avatarTint(l.id) }, initials(l.id)),
       h("span", { class: "name" }, l.id),
       h("span", { class: `dot ${l.status}` })))));
   if (!lectures.length) list.append(h("li", { class: "muted", style: "padding:6px 11px;font-size:12.5px" }, "No lectures yet"));
@@ -124,30 +124,51 @@ function renderOverview() {
   const card = (l) => {
     const step = STATUS_ORDER.indexOf(l.status);
     return h("a", { class: "card lecture-card", href: `#/lecture/${encodeURIComponent(l.id)}/${l.status === "approved" ? "class" : "studio"}` },
-      h("div", { class: "top" }, h("span", { class: "lecture-avatar" }, initials(l.id)),
+      h("div", { class: "top" }, h("span", { class: "lecture-avatar", style: avatarTint(l.id) }, initials(l.id)),
         h("div", { style: "min-width:0;flex:1" }, h("h3", {}, l.id)), badge(l.status)),
       h("div", { class: "progress" }, STATUS_ORDER.slice(1).map((_, i) => h("i", { class: i < step ? "on" : "" }))),
       h("div", { class: "foot" }, h("span", {}, nextStep(l.status)), icon("arrowRight")));
   };
   const page = h("div", { class: "page" },
     h("section", { class: "hero" },
-      h("div", { class: "hero-art", html: '<svg viewBox="0 0 24 24"><path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c3 2.5 9 2.5 12 0v-5"/></svg>' }),
-      h("h1", {}, "Your class, taught while you're away."),
-      h("p", {}, "Eris turns a teacher's material into an approved lecture script, then runs the class: it speaks in your style, writes on the notebook, runs real code and answers student doubts."),
-      h("div", { style: "display:flex;gap:10px;flex-wrap:wrap" },
-        h("button", { class: "btn lg", onclick: newLecture }, icon("plus"), "New lecture"),
-        lectures.length ? h("a", { class: "btn lg outline", href: `#/lecture/${encodeURIComponent((lectures.find(l => l.status === "approved") || lectures[0]).id)}/studio` }, "Open a lecture") : null)),
+      h("div", { class: "hero-copy" },
+        h("div", { class: "hero-kicker" }, "Your AI substitute teacher"),
+        h("h1", {}, "Your class, taught ", h("span", { class: "mark" }, "while you're away"), "."),
+        h("p", {}, "Eris turns your material into a lecture you approve, then teaches it in your style: it talks the class through, "
+          + "writes on the board, runs real code and answers every doubt."),
+        h("div", { class: "hero-actions" },
+          h("button", { class: "btn primary lg", onclick: newLecture }, icon("plus"), "New lecture"),
+          lectures.length ? h("a", { class: "btn lg outline", href: `#/lecture/${encodeURIComponent((lectures.find(l => l.status === "approved") || lectures[0]).id)}/studio` }, "Open a lecture") : null)),
+      heroTutor()),
     h("div", { class: "stat-row" },
       stat("Lectures", lectures.length), stat("Drafts to review", counts.draft),
       stat("Ready for class", ready), stat("Classes taught", counts.completed)),
     h("div", { class: "section-title" }, h("h2", {}, "How it works")),
     h("div", { class: "pipeline" }, PIPE.map(([ic, t, d], i) => h("div", { class: "card pipe-step" },
-      h("div", { class: "pipe-icon" }, icon(ic)), h("h4", {}, `${i + 1}. ${t}`), h("p", {}, d)))),
+      h("span", { class: "pipe-num" }, i + 1), h("div", { class: "pipe-icon" }, icon(ic)), h("h4", {}, t), h("p", {}, d)))),
     h("div", { class: "section-title" }, h("h2", {}, "Lectures"),
       h("button", { class: "btn sm", onclick: newLecture }, icon("plus"), "New")),
     h("div", { class: "lecture-grid" }, lectures.map(card),
       h("button", { class: "card lecture-card new-card", onclick: newLecture }, icon("plus"), "Create a lecture")));
   main.replaceChildren(page);
+}
+
+// The tutor, looping quietly (the same character the class sees), with a handwritten hello.
+function heroTutor() {
+  const v = h("video", { src: "assets/tutor/tutor-idle.mp4", poster: "assets/tutor/tutor-idle-poster.webp", loop: true,
+    playsinline: true, autoplay: true, "aria-hidden": "true", disablepictureinpicture: true });
+  v.muted = true;
+  v.addEventListener("error", () => v.replaceWith(h("img", { src: "assets/tutor/tutor-idle-poster.webp", alt: "" })));
+  return h("div", { class: "hero-tutor" }, h("span", { class: "hero-bubble" }, "Ready when you are!"), v);
+}
+
+// A warm tint per lecture, the same every time (sage, terracotta, honey, plum, teal).
+const TINTS = ["primary", "accent", "warning", "violet", "sky"];
+export function avatarTint(name) {
+  let n = 0;
+  for (const ch of String(name)) n = (n * 31 + ch.charCodeAt(0)) >>> 0;
+  const t = TINTS[n % TINTS.length];
+  return `background: var(--${t}-soft); color: var(--${t})`;
 }
 
 function stat(label, value) {
