@@ -65,6 +65,7 @@ const PATHS = {
   captions: '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 13h3M13 13h4M7 16h6"/>',
   back: '<path d="M15 6l-6 6 6 6"/>',
   menu: '<path d="M5 9h14M5 15h14"/>',
+  panel: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M9 4v16"/>',
 };
 
 export function icon(name, cls = "") {

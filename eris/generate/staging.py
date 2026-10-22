@@ -27,6 +27,7 @@ STAGE_TASK = """Stage this lesson now: return the whole class script, from [SECT
 {context}"""
 SLIDE_ADVICE = ("move each [SLIDE] (and its [SLIDE_HIGHLIGHT]) right before the lesson sentence that talks about "
                 "that slide, with no other marker between them, in: {where}")
+AVOID = "\n\n# An earlier staging had these problems. Avoid all of them:\n"
 DRIFT_TOLERANCE = 0.03  # share of the lesson's sentences the stager may lose before it is a problem
 
 
@@ -36,7 +37,7 @@ class Stager(ScriptWriter):
     def write(self, context, budget, avoid=""):
         task = STAGE_TASK.format(context=context)
         if avoid:
-            task += "\n\n# An earlier staging had these problems. Avoid all of them:\n" + avoid
+            task += AVOID + avoid
         reply = self._invoke(self.messages + [HumanMessage(task)])
         text = reply.content if isinstance(reply.content, str) else "".join(
             b.get("text", "") if isinstance(b, dict) else str(b) for b in reply.content)

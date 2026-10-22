@@ -65,6 +65,10 @@ def build_parser():
     p.add_argument("--query", help="only run a test search")
     p.add_argument("--no-reset", action="store_true", help="keep the existing collection")
 
+    p = sub.add_parser("stage", help="stage the saved lesson.md again (step 3 only) and report how it went; saves nothing")
+    p.add_argument("--lecture", required=True)
+    p.add_argument("--runs", type=int, default=1, help="stage it this many times (the stager is not deterministic)")
+
     for name, text in [("generate", "write the script (status: draft)"),
                        ("approve", "validate script.md and approve it"),
                        ("doubts", "test one doubt checkpoint"),
@@ -78,6 +82,10 @@ def build_parser():
     p.add_argument("--limit", type=int, help="only render this many clips (for a quick look)")
 
     sub.add_parser("measure-voice", help="measure the class voice's real speed and save it as SPEAKING_WPM in .env")
+
+    p = sub.add_parser("tutor-video", help="make the classroom's video tutor from an idle clip and a talking clip")
+    p.add_argument("--idle", required=True, help="video of the character listening (mouth closed)")
+    p.add_argument("--talking", required=True, help="video of the same character talking")
 
     p = sub.add_parser("serve", help="start the website (home + class)")
     p.add_argument("--port", type=int, default=8000)
@@ -99,6 +107,10 @@ def main():
         print(f"Open http://127.0.0.1:{args.port}")
         uvicorn.run("eris.api.server:app", host="127.0.0.1", port=args.port)
         return
+    if args.command == "tutor-video":
+        from eris.classroom.tutor_video import prepare
+        prepare(args.idle, args.talking)
+        return
     if args.command == "measure-voice":
         from eris.classroom.voice_speed import run
         run()
@@ -119,6 +131,12 @@ def main():
             test_query(args.lecture, args.query)
         else:
             run_index(args.lecture, reset=not args.no_reset)
+    elif args.command == "stage":
+        from eris.generate.stage_only import run_stage_only
+        for n in range(args.runs):
+            result = run_stage_only(args.lecture)
+            result.pop("script")
+            print(f"[stage] run {n + 1}/{args.runs}: " + json.dumps(result, ensure_ascii=False))
     elif args.command == "generate":
         from eris.generate.script_writer import run_generate
         run_generate(args.lecture)

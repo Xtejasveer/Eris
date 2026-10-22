@@ -41,8 +41,9 @@ SECTION_QUESTIONS = {
         "Every graph agrees with the lesson, and every sentence after a slider move matches what the graph shows.",
         "A graph plots something the lesson doesn't teach, or a sentence after a slider move describes something "
         "the graph does not show at that value."),
-        2, "blocker", 'In section "{section}", make each graph and what you say after each slider move agree: say what '
-                      "the graph really shows at that value, consistent with the notes and code."),
+        2, "blocker", 'In section "{section}", make the [VISUAL] plot what the lesson teaches. Set each [VISUAL_SET] '
+                      "to the value that the next sentence is about. Move a [VISUAL_SET] if it is before the wrong "
+                      "sentence. Do not change the sentences."),
     "graph_matches_material": (_noul(
         "Does each graph in graphs show the same quantity, axes and kind of graph as its material_graph?",
         "Each graph recreates the graph from the teacher's material.",

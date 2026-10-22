@@ -53,9 +53,11 @@ export async function mountClassroom(lectureId, ctx) {
   const sectionText = h("span", { class: "ls-section" }, info.topic);
   const stateText = h("span", { class: "ls-state" }, "Ready");
   const topLeft = h("div", { class: "ls-top-left" },
-    h("a", { class: "ls-back", href: studio, title: "Back to Studio" }, icon("back")),
-    h("div", { class: "ls-where" }, h("strong", {}, info.topic), h("small", {}, stateText, " · ", sectionText)),
-    used.length ? stage.indicator : null);
+    h("button", { class: "ls-panel-btn", title: "Outline and questions", "aria-label": "Outline and questions",
+      onclick: () => toggleDrawer() }, icon("panel")),
+    h("div", { class: "ls-where" }, h("strong", {}, info.topic), h("small", {}, stateText, " · ", sectionText)));
+  // The board tabs (Notebook, Slides, Code, Visual) sit at the top centre of the page.
+  const topCenter = h("div", { class: "ls-top-center" }, used.length ? stage.indicator : null);
 
   const clock = new ClassClock(info.duration_min);
   const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
@@ -63,20 +65,9 @@ export async function mountClassroom(lectureId, ctx) {
   const clockChip = h("span", { class: "ls-clock", title: "Lecture time used / total lecture time" }, icon("clock"), clockText);
 
   // The teacher and the playback controls, together at the top right.
-  const avatarView = h("div", { class: "ls-avatar-3d hidden" });
-  const orb = h("span", { class: "ls-orb" }, initials(info.teacher.replace(/^(prof|dr|mr|mrs|ms)\.?\s+/i, "")));
-  const avatarBtn = h("button", { class: "ls-avatar", title: info.avatar?.enabled ? `${info.teacher} · click to show or hide the 3D teacher` : info.teacher,
-    onclick: () => info.avatar?.enabled && toggleAvatar() }, orb, avatarView, h("span", { class: "ls-ring" }));
-  let captionsOn = pref.get("captions", "1") !== "0";
-  const captionBtn = h("button", { class: "ls-ctl", title: "Show or hide captions", onclick: () => {
-    captionsOn = !captionsOn; pref.set("captions", captionsOn ? 1 : 0); renderCaptions();
-  } }, icon("captions"));
   const playBtn = h("button", { class: "ls-ctl ls-play", title: "Start (space)", onclick: () => togglePlay() }, icon("play"));
-  const muteBtn = h("button", { class: "ls-ctl", title: "Mute", onclick: () => { voice.setMuted(!voice.muted); renderMute(); } }, icon("volume"));
-  const penBtn = h("button", { class: "ls-ctl ls-pen", title: "Draw on the board", onclick: () => togglePen() }, icon("pen"));
-  const clearInkBtn = h("button", { class: "ls-mini hidden", title: "Clear your drawing", onclick: () => stage.clearInk() }, "Clear");
   const topRight = h("div", { class: "ls-top-right" },
-    h("div", { class: "ls-controls" }, avatarBtn, h("span", { class: "ls-sep" }), playBtn, muteBtn, captionBtn, penBtn, clearInkBtn),
+    h("div", { class: "ls-controls" }, playBtn),
     clockChip,
     h("button", { class: "ls-end", title: "End the lesson", onclick: () => endLesson() }, h("span", { class: "ls-end-dot" }), "End"));
   const followBtn = h("button", { class: "ls-follow hidden", onclick: () => stage.followNow() }, icon("focus"), "Follow tutor");
@@ -88,7 +79,22 @@ export async function mountClassroom(lectureId, ctx) {
 
   // ---------- bottom: the live caption, and asking a doubt ----------
   const captionText = h("p", { class: "ls-caption-text" });
-  const caption = h("div", { class: "ls-caption" }, captionText);
+  // The tutor beside the caption: two looping videos of the same character (web/assets/tutor, made with
+  // `main.py tutor-video`): the talking loop while the voice speaks, the idle loop otherwise. If they can't load, the
+  // 3D teacher takes their place, and if that can't either, the teacher's initials.
+  const tutorClip = (name) => {
+    const v = h("video", { class: `ls-tutor-video ${name === "idle" ? "on" : ""}`, src: `assets/tutor/tutor-${name}.mp4`,
+      poster: `assets/tutor/tutor-${name}-poster.webp`, loop: true, playsinline: true, preload: "auto", "aria-hidden": "true",
+      disablepictureinpicture: true, disableremoteplayback: true });
+    v.muted = true;  // silent, so the browser lets it play on its own
+    return v;
+  };
+  const tutorIdle = tutorClip("idle"), tutorTalking = tutorClip("talking");
+  const tutor3d = h("div", { class: "ls-tutor-3d hidden" });
+  const tutor = h("div", { class: "ls-tutor with-video", title: info.teacher },
+    h("span", { class: "ls-tutor-orb" }, initials(info.teacher.replace(/^(prof|dr|mr|mrs|ms)\.?\s+/i, ""))),
+    tutorIdle, tutorTalking, tutor3d, h("span", { class: "ls-tutor-ring" }));
+  const caption = h("div", { class: "ls-caption" }, tutor, captionText);
 
   const askInput = h("textarea", { class: "ls-input", rows: 1, placeholder: "Ask a doubt…" });
   const sendBtn = h("button", { class: "ls-send hidden", title: "Send (Enter)" }, icon("arrowRight"));
@@ -113,13 +119,15 @@ export async function mountClassroom(lectureId, ctx) {
     h("button", { onclick: () => jump(sec.index), title: `Jump to ${sec.title}` }, h("span", { class: "o-num" }, n + 1), h("span", { class: "o-title" }, sec.title)))));
   const history = h("div", { class: "chat" }, h("div", { class: "chat-empty" }, icon("chat"), h("p", {}, "Questions and answers show up here.")));
   const drawer = h("aside", { class: "ls-drawer" },
-    h("div", { class: "ls-drawer-head" }, h("strong", {}, "Lesson"), h("button", { class: "icon-btn sm", title: "Close", onclick: () => toggleDrawer(false) }, icon("plus", "x"))),
+    h("div", { class: "ls-drawer-head" }, h("strong", {}, "Lesson")),  // the panel button at the top left closes it
     h("div", { class: "ls-drawer-label" }, "Outline"), outline,
     h("div", { class: "ls-drawer-label" }, "Questions"), history);
-  const handle = h("button", { class: "ls-handle", title: "Outline and questions", onclick: () => toggleDrawer() });
-  const toggleDrawer = (on) => lesson.classList.toggle("drawer-open", on);
+  const toggleDrawer = (on) => {
+    lesson.classList.toggle("drawer-open", on);
+    topLeft.querySelector(".ls-panel-btn").classList.toggle("active", lesson.classList.contains("drawer-open"));
+  };
 
-  const lesson = h("div", { class: "lesson" }, board, topLeft, topRight, followBtn, bar, handle, drawer);
+  const lesson = h("div", { class: "lesson" }, board, topLeft, topCenter, topRight, followBtn, bar, drawer);
   main.replaceChildren(lesson);
 
   const clockTimer = setInterval(() => {
@@ -178,14 +186,13 @@ export async function mountClassroom(lectureId, ctx) {
       setState("Question break");
       const add = (cls, text, extra) => { thread.append(h("div", { class: `msg ${cls}` }, h("div", { class: "bubble" }, text), extra)); scroll(); };
       return {
-        thinking(on) { typing.classList.toggle("hidden", !on); setState(on ? "Thinking…" : "Question break"); avatar?.setMood(on ? "thinking" : "happy"); scroll(); },
+        thinking(on) { typing.classList.toggle("hidden", !on); setState(on ? "Thinking…" : "Question break"); scroll(); },
         setLimit() {},
         setCount() {},
         teacher(text, opts = {}) { add(`teacher ${opts.prompt ? "prompt" : ""}`, text, opts.passed ? h("span", { class: "msg-tag" }, `Passed to ${info.teacher}`) : null); },
         student(text) { add("student", text); },
         note(text) { add("system", text); },
         ask(seconds) {
-          avatar?.setMood("happy");
           setState("Listening for questions");
           askInput.placeholder = "Ask your doubt, or say “no”…";
           askBox.classList.add("active");
@@ -196,7 +203,6 @@ export async function mountClassroom(lectureId, ctx) {
           });
         },
         close() {
-          avatar?.setMood("neutral");
           typing.classList.add("hidden");
           askBox.classList.remove("active");
           history.append(block);  // into the drawer's history; the live card fades out
@@ -207,7 +213,7 @@ export async function mountClassroom(lectureId, ctx) {
     },
   };
 
-  // ---------- live caption: each word lights up as it is spoken ----------
+  // ---------- live caption: a word appears only once it has been spoken, like live subtitles ----------
   let capWords = [], capSeq = 0, capShown = -1, capLive = false;
   function setCaption(text, live = true) {
     capWords = text.replace(/`/g, "").split(/\s+/).filter(Boolean).map(w => h("span", { class: "w" }, `${w} `));
@@ -284,8 +290,7 @@ export async function mountClassroom(lectureId, ctx) {
     const item = (label, ic, fn, disabled) => h("button", { class: "ls-menu-item", disabled, onclick: () => { closeMenu(); fn(); } }, icon(ic), label);
     plusMenu.replaceChildren(
       item("No questions, continue", "skip", () => submit(""), !pendingAsk),
-      item("Outline and questions", "layers", () => toggleDrawer(true)),
-      item(captionsOn ? "Hide captions" : "Show captions", "captions", () => captionBtn.click()));
+      item("Outline and questions", "layers", () => toggleDrawer(true)));
     plusMenu.classList.remove("hidden");
     setTimeout(() => document.addEventListener("click", closeMenu, { once: true }));
   }
@@ -310,8 +315,6 @@ export async function mountClassroom(lectureId, ctx) {
 
   // ---------- controls ----------
   function setState(text) { stateText.textContent = text; }
-  function renderCaptions() { caption.classList.toggle("off", !captionsOn); captionBtn.classList.toggle("active", captionsOn); }
-  function renderMute() { muteBtn.replaceChildren(icon(voice.muted ? "volumeOff" : "volume")); muteBtn.title = voice.muted ? "Unmute" : "Mute"; }
   function renderPlay() {
     const playing = running && !player?.paused;
     playBtn.replaceChildren(icon(playing ? "pause" : "play"));
@@ -319,20 +322,12 @@ export async function mountClassroom(lectureId, ctx) {
     lesson.classList.toggle("paused", running && !!player?.paused);
     if (running) setState(player.paused ? "Paused" : stateText.textContent === "Paused" || stateText.textContent === "Ready" ? "Teaching" : stateText.textContent);
   }
-  function togglePen() {
-    const on = !stage.penActive;
-    if (on && stage.env !== "notebook") stage.setEnv("notebook");
-    stage.setPen(on);
-    penBtn.classList.toggle("on", on);
-    clearInkBtn.classList.toggle("hidden", !on);
-    penBtn.title = on ? "Stop drawing" : "Draw on the board";
-  }
   function togglePlay() {
     if (!running) return start(0);
     if (player.paused) player.resume(); else player.pause();
     renderPlay();
   }
-  renderCaptions(); renderMute(); renderPlay();
+  renderPlay();
 
   async function start(from) {
     voice.unlock();
@@ -404,12 +399,20 @@ export async function mountClassroom(lectureId, ctx) {
         h("a", { class: "btn", href: studio }, "Back to Studio"))));
   }
 
-  // ---------- live visual: the teacher's ring moves with the voice ----------
-  let raf = 0, smooth = 0;
+  // ---------- the live caption follows the voice ----------
+  let raf = 0, smooth = 0, lastSound = 0, talking = false;
+  const TALK_HOLD_MS = 350;  // the talking loop stays through the short gaps between words
   const loop = () => {
-    smooth = smooth * 0.7 + voice.level() * 0.3;
-    avatarBtn.style.setProperty("--level", smooth.toFixed(3));
-    avatarBtn.classList.toggle("speaking", smooth > 0.04);
+    smooth = smooth * 0.7 + voice.level() * 0.3;  // the ring around the tutor moves with the voice
+    tutor.style.setProperty("--level", smooth.toFixed(3));
+    const now = performance.now();
+    if (smooth > 0.05) lastSound = now;
+    const nowTalking = now - lastSound < TALK_HOLD_MS && !player?.paused;
+    if (nowTalking !== talking) {
+      talking = nowTalking;
+      tutorTalking.classList.toggle("on", talking);
+      tutorIdle.classList.toggle("on", !talking);
+    }
     updateCaption();
     raf = requestAnimationFrame(loop);
   };
@@ -421,23 +424,19 @@ export async function mountClassroom(lectureId, ctx) {
   };
   document.addEventListener("keydown", onKey);
 
-  // ---------- talking avatar (optional): the 3D teacher in the round portrait ----------
+  // ---------- the 3D tutor (optional): plays and lip-syncs the same voice ----------
   let avatar = null, avatarLoading = false;
-  const AVATAR_PREF = "eris-avatar";
-  const avatarWanted = () => { try { return localStorage.getItem(AVATAR_PREF) !== "0"; } catch { return true; } };
   const webgl = () => { try { return !!document.createElement("canvas").getContext("webgl2"); } catch { return false; } };
-
   async function enableAvatar() {
     if (avatar || avatarLoading || !info.avatar?.enabled || !webgl()) return;
     avatarLoading = true;
-    avatarView.classList.remove("hidden");
-    avatarBtn.classList.add("with-3d");
+    tutor3d.classList.remove("hidden");
+    tutor.classList.add("with-3d");
     try {
-      const { createAvatar } = await import("./avatar/avatar.js");  // three.js loads only when the avatar is used
-      const created = await createAvatar({ container: avatarView, modelUrl: info.avatar.model_url || undefined });
+      const { createAvatar } = await import("./avatar/avatar.js");  // three.js loads only when the tutor is shown
+      const created = await createAvatar({ container: tutor3d, modelUrl: info.avatar.model_url || undefined });
       if (!avatarLoading) { created.dispose(); return; }
       avatar = created;
-      window.erisAvatar = avatar;
       voice.setAvatar(avatar);
     } catch (e) {
       console.warn("[avatar] could not load, audio only:", e);
@@ -449,20 +448,27 @@ export async function mountClassroom(lectureId, ctx) {
     voice.setAvatar(null);
     avatar?.dispose();
     avatar = null;
-    window.erisAvatar = undefined;
-    avatarView.replaceChildren();
-    avatarView.classList.add("hidden");
-    avatarBtn.classList.remove("with-3d");
+    tutor3d.replaceChildren();
+    tutor3d.classList.add("hidden");
+    tutor.classList.remove("with-3d");
   }
-  function toggleAvatar() {
-    const on = !(avatar || avatarLoading);
-    try { localStorage.setItem(AVATAR_PREF, on ? "1" : "0"); } catch {}
-    on ? enableAvatar() : disableAvatar();
+  // Both loops play all the time (only their visibility switches), so a switch is instant.
+  let videoFailed = false;
+  const onVideoError = () => {
+    if (videoFailed) return;
+    videoFailed = true;
+    console.warn("[tutor] the tutor videos could not load; using the 3D teacher");
+    tutor.classList.remove("with-video");
+    enableAvatar();
+  };
+  for (const v of [tutorIdle, tutorTalking]) {
+    v.addEventListener("error", onVideoError);
+    v.play().catch(() => {});
   }
-  if (avatarWanted()) enableAvatar();
 
   return () => {
     disableAvatar();
+    for (const v of [tutorIdle, tutorTalking]) { v.pause(); v.removeAttribute("src"); v.load(); }
     cancelAnimationFrame(raf);
     clearInterval(clockTimer);
     document.removeEventListener("keydown", onKey);
