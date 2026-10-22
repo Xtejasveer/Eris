@@ -43,6 +43,16 @@ try:
 except ValueError:
     print("[config] TTS_SPEED must be a number between 0.85 and 1.15. Fix it in .env.")
     sys.exit(1)
+# Teaching languages (each lecture picks one in Studio): the script is written in it, Gnani says it and hears the
+# students in it. Code, program output and the material's own terms may stay in English. One Timbre v2.5 voice
+# per language; override one with TTS_VOICE_<CODE> in .env (TTS_VOICE_TE_IN=Lavanya). English uses TTS_VOICE.
+LANGUAGES = {
+    "en-IN": ("English", "Kaveri"), "hi-IN": ("Hindi", "Nalini"), "ta-IN": ("Tamil", "Asmita"),
+    "te-IN": ("Telugu", "Suhana"), "kn-IN": ("Kannada", "Saanvi"), "ml-IN": ("Malayalam", "Reshma"),
+    "mr-IN": ("Marathi", "Zahira"), "bn-IN": ("Bengali", "Kirra"), "gu-IN": ("Gujarati", "Falak"),
+    "pa-IN": ("Punjabi", "Mehuli"),
+}
+DEFAULT_LANGUAGE = TTS_LANGUAGE if TTS_LANGUAGE in LANGUAGES else "en-IN"
 if not 0.85 <= TTS_SPEED <= 1.15:  # Gnani refuses anything else, and the class would fall silent
     print(f"[config] TTS_SPEED {TTS_SPEED} is outside Gnani's 0.85-1.15; using {min(max(TTS_SPEED, 0.85), 1.15)}")
     TTS_SPEED = min(max(TTS_SPEED, 0.85), 1.15)
@@ -184,6 +194,24 @@ def status_at_least(manifest, status):
 
 def default_speaking_min(total_min):
     return max(1, min(SPEAKING_MIN, total_min))
+
+
+def lecture_language(manifest):
+    """The lecture's teaching language code (en-IN, te-IN, ...)."""
+    code = (manifest or {}).get("language") or DEFAULT_LANGUAGE
+    return code if code in LANGUAGES else DEFAULT_LANGUAGE
+
+
+def language_name(code):
+    return LANGUAGES.get(code, LANGUAGES[DEFAULT_LANGUAGE])[0]
+
+
+def language_voice(code):
+    """The Gnani voice for a language: TTS_VOICE_<CODE> in .env, else TTS_VOICE for English, else the default."""
+    custom = os.getenv("TTS_VOICE_" + code.replace("-", "_").upper(), "").strip()
+    if custom:
+        return custom
+    return TTS_VOICE if code == "en-IN" else LANGUAGES.get(code, LANGUAGES["en-IN"])[1]
 
 
 def lecture_times(manifest):

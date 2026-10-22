@@ -57,6 +57,14 @@ const PATHS = {
   log: '<path d="M8 6h12M8 12h12M8 18h12M4 6v.01M4 12v.01M4 18v.01"/>',
   skip: '<path d="M6 5l9 7-9 7z" fill="currentColor"/><path d="M18 5v14"/>',
   question: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6M12 17v.01"/>',
+  volumeOff: '<path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 9l5 6M22 9l-5 6"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
+  pen: '<path d="M4 20l1-5L16 4l4 4L9 19z"/><path d="M14 6l4 4"/>',
+  micOff: '<path d="M9 5a3 3 0 0 1 6 0v5M15 13.5A3 3 0 0 1 9 11V9"/><path d="M5 11a7 7 0 0 0 11.5 5.4M19 11a7 7 0 0 1-.4 2.3M12 18v3M3 3l18 18"/>',
+  focus: '<path d="M4 9V5h4M20 9V5h-4M4 15v4h4M20 15v4h-4"/>',
+  captions: '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 13h3M13 13h4M7 16h6"/>',
+  back: '<path d="M15 6l-6 6 6 6"/>',
+  menu: '<path d="M5 9h14M5 15h14"/>',
 };
 
 export function icon(name, cls = "") {
@@ -118,3 +126,14 @@ export function initials(name) {
 }
 
 export const STATUS_ORDER = ["new", "indexed", "draft", "approved", "completed"];
+
+// The lecture's teaching language: the script is written in it, the voice says it and hears students in it.
+export const LANGUAGES = [["en-IN", "English"], ["hi-IN", "Hindi"], ["ta-IN", "Tamil"], ["te-IN", "Telugu"],
+  ["kn-IN", "Kannada"], ["ml-IN", "Malayalam"], ["mr-IN", "Marathi"], ["bn-IN", "Bengali"], ["gu-IN", "Gujarati"],
+  ["pa-IN", "Punjabi"]];
+
+export function languageSelect(value, languages) {
+  const list = languages?.length ? languages.map(l => [l.code, l.name]) : LANGUAGES;
+  return h("select", { class: "select" },
+    list.map(([code, name]) => h("option", { value: code, selected: code === (value || "en-IN") }, name)));
+}

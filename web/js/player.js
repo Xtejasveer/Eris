@@ -78,6 +78,8 @@ export class Player {
     this.stopped = false;
     this.cursor = 0;
     this._resume = null;
+    this.rate = 1;               // playback speed: writing and pauses follow it, like the voice
+    this.raised = [];            // questions typed mid-lesson: answered right after the current step
     this.resetState();
     // ctl is what animations use to wait: it honours pause and stop.
     this.ctl = { tick: (ms) => this.tick(ms) };
@@ -96,7 +98,10 @@ export class Player {
     }
   }
 
-  async tick(ms) { await sleep(ms); await this.gate(); }
+  async tick(ms) { await sleep(ms / this.rate); await this.gate(); }
+
+  // A student asked something while the teacher was teaching: answer it after the current step.
+  raiseHand(question) { this.raised.push(question); }
 
   pause() { this.paused = true; this.clock.hold(); this.voice.pause(); }
   resume() { this.paused = false; this.clock.run(); this.voice.resume(); this._resume?.(); }
@@ -202,6 +207,7 @@ export class Player {
         console.warn(`[class] segment ${i + 1} failed:`, e);
       }
       if (pair) { this.log(i + 1, next, "done"); i += 1; }  // its narration played together with it
+      while (this.raised.length && !this.stopped) await this.doubtCheck(false, this.raised.shift());
     }
     this.clock.hold();
     this.cursor = this.segments.length;
@@ -390,8 +396,9 @@ export class Player {
   // always on the class's one conversation. A mid-lecture break ends after BREAK_MAX_QUESTIONS or
   // BREAK_BUDGET_S, but never in the middle of an exchange: if the teacher just asked the student something
   // back ("which code?"), the student may answer first. Questions that didn't fit move to the final break.
-  async doubtCheck(final) {
-    if (!final && this.clock.warned.has("notice")) { this.deferredDoubts = true; return; }  // questions wait for the end
+  // first: a question a student raised mid-lesson; it is answered at once (no "any doubts?" first), even late.
+  async doubtCheck(final, first = null) {
+    if (!final && !first && this.clock.warned.has("notice")) { this.deferredDoubts = true; return; }  // questions wait for the end
     const ui = this.ui;
     const chk = ui.openCheckpoint(this.state.section, final);
     const view = this.stage.view();  // answers may turn pages or open files; come back afterwards
@@ -399,7 +406,7 @@ export class Player {
     const started = performance.now();
     const maxQuestions = final ? FINAL_MAX_QUESTIONS : BREAK_MAX_QUESTIONS;
     let asked = 0, followUp = false;  // followUp: the student is answering the teacher's question back
-    let prompt = final ? (this.deferredDoubts ? FINAL_DEFERRED_PROMPT : FINAL_PROMPT) : FIRST_PROMPT;
+    let prompt = first ? null : final ? (this.deferredDoubts ? FINAL_DEFERRED_PROMPT : FINAL_PROMPT) : FIRST_PROMPT;
     let closing = final ? FINAL_CLOSING_LINE : CLOSING_LINE;
     try {
       while (true) {
@@ -411,7 +418,8 @@ export class Player {
           break;
         }
         if (prompt) { chk.teacher(prompt, { prompt: true }); await this.say(prompt); }
-        const question = (await chk.ask(followUp ? ANSWER_WAIT_S : DOUBT_WAIT_S)).trim();
+        const question = first != null ? first.trim() : (await chk.ask(followUp ? ANSWER_WAIT_S : DOUBT_WAIT_S)).trim();
+        first = null;
         await this.gate();
         if (NO_DOUBT_WORDS.has(question.toLowerCase())) break;  // nobody asked in time, or "no questions"
         chk.student(question);

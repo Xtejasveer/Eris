@@ -61,7 +61,9 @@ def word_timings(clip, text):
     voiced = _voiced_frames(audio)
     timed = None
     if words and voiced.any():
-        heard = _whisper_words(audio)
+        # The whisper model is English-only: lines in another script go to the energy aligner.
+        latin = sum(bool(re.search(r"[A-Za-z]", w)) for w in words) >= len(words) / 2
+        heard = _whisper_words(audio) if latin else []
         if heard:
             timed = _match(words, heard)
     source = "whisper"

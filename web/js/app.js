@@ -1,7 +1,7 @@
 // App shell: hash router, sidebar lecture list, overview page and "new lecture".
 
 import { api, LECTURE_ID_RE } from "./api.js";
-import { h, $, icon, toast, modal, badge, initials, STATUS_ORDER } from "./ui.js";
+import { h, $, icon, toast, modal, badge, initials, STATUS_ORDER, languageSelect } from "./ui.js";
 import { mountStudio } from "./studio.js";
 import { mountClassroom } from "./classroom.js";
 
@@ -64,6 +64,7 @@ export async function newLecture() {
   const defaults = await api.personaTemplate().catch(() => ({}));  // the configured total and speaking time
   const duration = h("input", { class: "input", type: "number", min: 5, max: 120, step: 5, value: defaults.duration_min || 15 });
   const speaking = h("input", { class: "input", type: "number", min: 1, max: 120, step: 1, value: defaults.speaking_min || 5 });
+  const language = languageSelect(defaults.language, defaults.languages);
   const input = h("input", { class: "input mono", placeholder: "intro_topic_week1", autocomplete: "off", spellcheck: "false" });
   const hint = h("small", {}, "3–63 characters: letters, digits, _ or -. It names the folder in data/.");
   let idEdited = false;
@@ -82,6 +83,7 @@ export async function newLecture() {
       h("div", { class: "field-row" },
         h("label", { class: "field" }, h("span", {}, "Total lecture time (min)"), duration),
         h("label", { class: "field" }, h("span", {}, "Speaking time (min)"), speaking)),
+      h("label", { class: "field" }, h("span", {}, "Teaching language"), language),
       h("small", { class: "muted" }, "The script is written for the speaking time; doubts, notes and code fill the rest. "
         + "The class warns when 10% and 5% of the total time are left."),
       h("label", { class: "field" }, h("span", {}, "Lecture id"), input, hint)),
@@ -93,13 +95,14 @@ export async function newLecture() {
         if (!(d >= 5 && d <= 120)) return bad(duration);
         if (!(sp >= 1 && sp <= d)) return bad(speaking);
         if (!LECTURE_ID_RE.test(v)) { hint.style.color = "var(--danger)"; return bad(input); }
-        return { id: v, topic: t, duration_min: d, speaking_min: sp };
+        return { id: v, topic: t, duration_min: d, speaking_min: sp, language: language.value };
       } },
     ],
   });
   if (!made) return;
   try {
-    await api.createLecture(made.id, { topic: made.topic, duration_min: made.duration_min, speaking_min: made.speaking_min });
+    await api.createLecture(made.id, { topic: made.topic, duration_min: made.duration_min, speaking_min: made.speaking_min,
+      language: made.language });
   } catch (e) { return toast(e.message, "error", 6000); }
   await refreshLectures();
   location.hash = `#/lecture/${encodeURIComponent(made.id)}/studio`;
@@ -183,6 +186,7 @@ const PIN_KEY = "eris-sidebar-pinned";
 const pinned = () => { try { return localStorage.getItem(PIN_KEY) === "1"; } catch { return false; } };
 function applySidebar(r = currentRoute()) {
   appEl.classList.toggle("collapsed", r.page !== "home" && !pinned());
+  appEl.classList.toggle("immersive", r.page === "class");  // the lesson takes the whole window
   appEl.classList.remove("peek");
   const btn = $("#collapse-btn");
   btn.querySelector("span").textContent = pinned() ? "Auto-hide" : "Keep open";

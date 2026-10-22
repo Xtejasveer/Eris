@@ -82,6 +82,7 @@ def class_data(lecture_id: str):
             "slides": actions.new_board(lecture_id)["slides"], "slide_pictures": _slide_pictures(lecture_id),
             "teacher": manifest["persona"]["Teacher"]["Name"], "topic": manifest["topic"],
             "estimated_min": manifest.get("estimated_min"), "duration_min": config.lecture_times(manifest)[0], "voice": bool(config.GNANI_API_KEY),
+            "language": config.lecture_language(manifest),
             "avatar": {"enabled": config.AVATAR_ENABLED, "model_url": config.AVATAR_MODEL_URL or None}}
 
 

@@ -51,6 +51,15 @@ OPERATORS_IN_TEXT = [("<=", " less than or equal to "), (">=", " greater than or
                      ("==", " equals "), ("!=", " is not equal to ")]
 
 
+def lecture_speech(lecture_id):
+    """(language code, Gnani voice) this lecture is said and heard in. A lecture without lecture.json (the voice
+    check) uses the default language."""
+    path = config.manifest_path(lecture_id)
+    manifest = config.load_manifest(lecture_id) if path.exists() else {}
+    language = config.lecture_language(manifest)
+    return language, config.language_voice(language)
+
+
 def _say_code(code):
     code = re.sub(r"\b[fFrRbB](?=[\"'])", "", code)  # string prefixes: f"..." is said as "..."
     for symbol, words in CODE_WORDS:
@@ -87,7 +96,7 @@ def _chunks(text):
     """One piece per phrase, so we can put real pauses between them: after each sentence, and a short one at
     commas. Very short sentences join the next one; a sentence longer than TTS_CHUNK_CHARS is split at commas."""
     pieces, carry = [], ""
-    for sentence in re.split(r"(?<=[.!?])\s+", text):
+    for sentence in re.split(r"(?<=[.!?।॥])\s+", text):
         sentence = (carry + " " + sentence).strip()
         if len(sentence) < config.SHORT_SENTENCE_CHARS and sentence[-1:] not in "?!":
             carry = sentence
@@ -107,25 +116,26 @@ def _pause_after(piece):
     """Seconds of silence after a piece: longest after a question, a breath after a sentence, a short break at a comma."""
     if piece.endswith(("?", "!")):
         return config.QUESTION_PAUSE_S
-    return config.SENTENCE_PAUSE_S if piece.endswith((".", ":", ";")) else config.PHRASE_PAUSE_S
+    return config.SENTENCE_PAUSE_S if piece.endswith((".", ":", ";", "।", "॥")) else config.PHRASE_PAUSE_S
 
 
 def clip_path(lecture_id, text):
     """Cache file for this text + voice settings."""
     pacing = f"{config.SENTENCE_PAUSE_S}/{config.QUESTION_PAUSE_S}/{config.PHRASE_PAUSE_S}/{config.PHRASE_MIN_WORDS}"
-    key = f"{config.TTS_VOICE}|{config.TTS_LANGUAGE}|{config.TTS_SPEED}|{pacing}|{speech_text(text)}"  # new pacing = new clips
+    language, voice = lecture_speech(lecture_id)
+    key = f"{voice}|{language}|{config.TTS_SPEED}|{pacing}|{speech_text(text)}"  # new pacing or language = new clips
     folder = config.lecture_dir(lecture_id) / "audio"
     folder.mkdir(exist_ok=True)
     return folder / (hashlib.sha1(key.encode("utf-8")).hexdigest()[:16] + ".wav")
 
 
-def _synthesize_chunk(chunk):
+def _synthesize_chunk(chunk, voice, language):
     """One Gnani TTS call -> WAV bytes. Waits for our turn and retries on 429 (busy)."""
     for attempt in range(5):
         with _tts_lock:
             try:
-                return _tts_client().synthesize(chunk, voice=config.TTS_VOICE, model=TTS_MODEL,
-                                                language=config.TTS_LANGUAGE, speed=config.TTS_SPEED)
+                return _tts_client().synthesize(chunk, voice=voice, model=TTS_MODEL,
+                                                language=language, speed=config.TTS_SPEED)
             except Exception as e:
                 if getattr(e, "status_code", None) != 429 or attempt == 4:
                     raise
@@ -147,12 +157,13 @@ def _pcm_frames(wav_bytes, path_hint):
     return params, frames
 
 
-def synthesize(text, path):
+def synthesize(text, path, voice=None, language=None):
     """Synthesize `text` sentence by sentence and join the pieces, with pauses, into one clip."""
+    voice, language = voice or config.TTS_VOICE, language or config.TTS_LANGUAGE
     params, frames = None, []
     pieces = _chunks(speech_text(text))
     for n, piece in enumerate(pieces):
-        p, f = _pcm_frames(_synthesize_chunk(piece), path)
+        p, f = _pcm_frames(_synthesize_chunk(piece, voice, language), path)
         params = params or p
         frames.append(f)
         if n < len(pieces) - 1:  # a real pause between sentences, like a teacher taking a breath
@@ -176,7 +187,8 @@ def ensure_clip(lecture_id, text):
     """Return the cached clip for `text`, synthesizing it if needed."""
     path = clip_path(lecture_id, text)
     if not path.exists() or path.stat().st_size <= 44:  # 44 bytes = an empty WAV header
-        synthesize(text, path)
+        language, voice = lecture_speech(lecture_id)
+        synthesize(text, path, voice, language)
     return path
 
 
@@ -263,7 +275,8 @@ def listen(lecture_id):
         if seconds < 0.5:
             print("(nothing recorded)")
             return ""
-        text = _stt_client().transcribe(path, language_code=config.STT_LANGUAGE).get("transcript", "").strip()
+        language = lecture_speech(lecture_id)[0]  # students ask in the lecture's language
+        text = _stt_client().transcribe(path, language_code=language).get("transcript", "").strip()
     except Exception as e:
         print(f"[voice] could not hear that ({e}). Please type the doubt instead.")
         return input("Student doubt (Enter = none): ").strip()

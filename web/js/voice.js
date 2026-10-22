@@ -39,8 +39,9 @@ export function speechText(text) {
 }
 
 export class Voice {
-  constructor(lectureId) {
+  constructor(lectureId, language = "en-IN") {
     this.lectureId = lectureId;
+    this.language = language;    // the lecture's teaching language: used by the browser voice when Gnani is off
     this.clips = new Map();      // text -> Promise<objectURL | null>
     this.timings = new Map();    // text -> Promise<{ words, times, durations } | null>: word timings for lip sync
     this._timing = null;         // timings of the clip playing now (re-sent after a pause or an avatar switch)
@@ -54,6 +55,40 @@ export class Voice {
     this.avatar = null;          // a talking avatar (avatar/avatar.js) that plays and lip-syncs the voice, if any
     this._fake = 0;
     this._cancel = null;
+    this.rate = 1;               // playback speed (1 unless changed); the clip keeps its pitch
+    this.muted = false;
+    this.seq = 0;                // counts lines spoken, so a caption knows which line progress() is about
+    this._done = 0;              // progress of the last line once it ended (1) or before it starts (0)
+    this._browserFrac = 0;       // browser voice: how far through the line its word boundaries have got
+  }
+
+  // How far the line being spoken has got: {seq, frac 0-1}. Gnani clips follow their word timings (else the
+  // clip's position); the browser voice follows its word boundaries. Live captions use this.
+  progress() {
+    if (!this.speaking) return { seq: this.seq, frac: this._done };
+    if (this.mode === "gnani" && this.audio.src && this.audio.duration > 0) {
+      const t = this.audio.currentTime;
+      const times = this._timing?.times;
+      if (times?.length) {
+        const ms = t * 1000;
+        let k = 0;
+        while (k < times.length && times[k] <= ms) k++;
+        return { seq: this.seq, frac: k / times.length };
+      }
+      return { seq: this.seq, frac: Math.min(1, t / this.audio.duration) };
+    }
+    return { seq: this.seq, frac: this._browserFrac };
+  }
+
+  setRate(rate) {
+    this.rate = rate;
+    this.audio.defaultPlaybackRate = rate;
+    this.audio.playbackRate = rate;
+  }
+
+  setMuted(muted) {
+    this.muted = muted;
+    this.audio.muted = muted;
   }
 
   // Must be called from a click (browsers only start audio after a user gesture).
@@ -158,6 +193,9 @@ export class Voice {
   // Resolves when the line has been spoken (or stop() was called).
   async speak(text) {
     if (!text.trim()) return;
+    this.seq += 1;
+    this._done = 0;
+    this._browserFrac = 0;
     this.speaking = true;
     try {
       const url = await this.clip(text);
@@ -170,7 +208,7 @@ export class Voice {
         await this._playUrl(url);
       }
       else { if (this.mode !== "gnani") this.mode = "browser"; await this._speakBrowser(text); }
-    } finally { this.speaking = false; this._token = null; this._timing = null; }
+    } finally { this.speaking = false; this._done = 1; this._token = null; this._timing = null; }
   }
 
   _playUrl(url) {
@@ -180,6 +218,7 @@ export class Voice {
       this.audio.onended = done;
       this.audio.onerror = done;
       this.audio.src = url;
+      this.audio.playbackRate = this.rate;
       if (!this.paused) this.audio.play().catch(done);
     });
   }
@@ -188,21 +227,25 @@ export class Voice {
     if (!("speechSynthesis" in window)) { await new Promise(r => setTimeout(r, text.split(/\s+/).length * 380)); return; }
     // Chrome cuts long utterances off, so speak one sentence at a time, with a pause between sentences.
     text = speechText(text);
-    const sentences = text.match(/[^.!?]+[.!?]+["')\]]*|\S[^.!?]*$/g) || [text];
+    const sentences = text.match(/[^.!?।]+[.!?।]+["')\]]*|\S[^.!?।]*$/g) || [text];
     const parts = sentences.flatMap(sn => phrases(sn.trim()));
     let cancelled = false;
     this._cancel = () => { cancelled = true; speechSynthesis.cancel(); };
+    const total = parts.reduce((n, p) => n + p.length, 0) || 1;
+    let before = 0;  // characters of the line already spoken (for live captions)
     for (const part of parts) {
       if (cancelled) break;
       await new Promise((resolve) => {
         const u = new SpeechSynthesisUtterance(part.trim());
-        u.lang = "en-IN"; u.rate = BROWSER_RATE;
-        const voice = speechSynthesis.getVoices().find(v => v.lang === "en-IN") || speechSynthesis.getVoices().find(v => v.lang?.startsWith("en"));
+        u.lang = this.language; u.rate = BROWSER_RATE * this.rate; u.volume = this.muted ? 0 : 1;
+        const base = this.language.split("-")[0];
+        const voice = speechSynthesis.getVoices().find(v => v.lang === this.language) || speechSynthesis.getVoices().find(v => v.lang?.startsWith(base));
         if (voice) u.voice = voice;
         u.onend = u.onerror = () => { clearTimeout(fallback); resolve(); };
         let boundaries = false;
         u.onboundary = (e) => {
           if (e.name && e.name !== "word") return;
+          this._browserFrac = Math.min(1, (before + e.charIndex) / total);
           boundaries = true;
           this._wordToAvatar(u.text.slice(e.charIndex).split(/\s/)[0]);
         };
@@ -210,6 +253,8 @@ export class Voice {
         speechSynthesis.speak(u);
         if (this.paused) speechSynthesis.pause();
       });
+      before += part.length;
+      this._browserFrac = Math.min(1, before / total);
       if (!cancelled && part !== parts[parts.length - 1])
         await new Promise(r => setTimeout(r, /[?!]["')\]]*\s*$/.test(part) ? QUESTION_PAUSE_MS
           : /,\s*$/.test(part) ? PHRASE_PAUSE_MS : SENTENCE_PAUSE_MS));
@@ -248,11 +293,11 @@ export class Voice {
 }
 
 // Browser dictation (Chrome, Safari). Returns null when unsupported.
-export function createDictation(onText, onEnd) {
+export function createDictation(language, onText, onEnd) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return null;
   const rec = new SR();
-  rec.lang = "en-IN"; rec.interimResults = true; rec.continuous = false;
+  rec.lang = language || "en-IN"; rec.interimResults = true; rec.continuous = false;
   rec.onresult = (e) => onText([...e.results].map(r => r[0].transcript).join(" "));
   rec.onend = onEnd; rec.onerror = onEnd;
   return rec;

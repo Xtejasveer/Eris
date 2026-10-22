@@ -131,7 +131,7 @@ def _said_after(segments, i):
     if i + 1 < len(segments) and segments[i + 1].get("name") == "VISUAL_SET":
         return "(another move follows straight away)"
     said = next((s["text"] for s in segments[i + 1:i + 4] if s["kind"] == "say"), "")
-    return " ".join(re.split(r"(?<=[.!?])\s+", said)[:2])
+    return " ".join(re.split(r"(?<=[.!?।॥])\s+", said)[:2])
 
 
 def _int(v):

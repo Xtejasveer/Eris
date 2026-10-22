@@ -314,7 +314,7 @@ def write_steps_first(text):
             is_speech = said and not COMMAND_RE.match(said) and not said.startswith("# ") and not said.startswith("- ")
             if end is not None and is_speech:
                 result = _results(lines[i + 1:end])  # the step's result: what its sentence must say
-                sentences = [x for x in re.split(r"(?<=[.!?])\s+", said) if x]
+                sentences = [x for x in re.split(r"(?<=[.!?।॥])\s+", said) if x]
                 k = next((k for k in range(len(sentences) - 1, -1, -1) if _calc_numbers(sentences[k]) & result), None) \
                     if result else None
                 if k is not None:
@@ -404,7 +404,7 @@ def unwritten_calculations(sections):
             elif it["kind"] in ("code", "output"):
                 noted |= _calc_numbers(it.get("code", "") + " " + it.get("text", ""))
             elif it["kind"] == "say":
-                for sentence in re.split(r"(?<=[.!?])\s+", it["text"]):
+                for sentence in re.split(r"(?<=[.!?।॥])\s+", it["text"]):
                     nums = _calc_numbers(sentence)
                     if len(nums) >= 2 and CALC_WORDS_RE.search(sentence) and not nums <= noted:
                         missing.append(sentence.strip())
@@ -440,7 +440,7 @@ def unexplained_steps(sections, figs):
                 if later["kind"] in ("figure", "code"):
                     break
                 if later["kind"] == "say":
-                    sentences += [x for x in re.split(r"(?<=[.!?])\s+", later["text"]) if x.strip()]
+                    sentences += [x for x in re.split(r"(?<=[.!?।॥])\s+", later["text"]) if x.strip()]
             found, j = 0, 0
             for step in steps:
                 words = _step_words(step)

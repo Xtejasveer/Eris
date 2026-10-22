@@ -375,7 +375,7 @@ def with_segments(turn, slide_count=None, board=None):
     turn["reply_segments"] = answer_segments(turn.get("reply", ""), slide_count, board)
     # The closing line only moves the class on; the script teaches the next part, so keep one sentence.
     closing = _strip_inline_markers(turn.get("final", ""))
-    closing = re.split(r"(?<=[.!?])\s", closing, maxsplit=1)[0] if closing else ""
+    closing = re.split(r"(?<=[.!?।॥])\s", closing, maxsplit=1)[0] if closing else ""
     turn["final"] = closing
     turn["final_segments"] = [{"kind": "say", "text": closing}] if closing else []
     turn["reply_text"] = plain_text(turn["reply_segments"]) or turn.get("reply", "")

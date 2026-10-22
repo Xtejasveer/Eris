@@ -12,6 +12,26 @@ Rules for editing:
 
 # ---------- shared blocks ----------
 
+def language_rule(language, task="lesson"):
+    """The lecture's teaching language. Empty for English, so English prompts stay exactly as they were."""
+    from eris import config
+    if not language or language == "en-IN":
+        return ""
+    name = config.language_name(language)
+    keep = ("Keep code, program output, file names, formulas and the technical terms teachers in a "
+            f"{name}-medium class say in English (e.g. loop, function, GDP) in English letters. Numbers as digits.")
+    if task == "stage":
+        return (f"\n\n# Language\nThe lesson is in {name}. Keep it in {name}; marker names and section titles stay "
+                "in English; quote note and slide text exactly as written.")
+    if task == "doubts":
+        return (f"\n\n# Language\nThis class is taught in {name}. Answer in {name}, in {name} script, even when the "
+                f"student asks in English or mixes languages. {keep}")
+    return (f"\n\n# Language\nTeach this lecture in {name}: every spoken line and every note in {name}, in {name} "
+            f"script, the way a good teacher speaks to a {name}-medium class (simple, everyday {name}, not bookish). "
+            f"The material may be in English: teach its content in {name}. {keep} The format words (NOTE:, END, CODE, "
+            "OUTPUT, FIGURE) and the \"# \" section titles stay in English, exactly as in the format.")
+
+
 # Numbered: script_checks.py names these numbers in its feedback ("formatting rule 2").
 FORMAT_RULES = """# Formatting (every non-marker line is spoken)
 1. Each marker alone on its own line, never inside a sentence.
@@ -119,7 +139,7 @@ Then ask: any prices left? If yes, go round again; if no, we are done.
 Takeaway: a running total grows one item at a time. Make sense?"""
 
 
-def lesson_prompt(persona, persona_text, topic, speaking_min, word_budget, length_plan=""):
+def lesson_prompt(persona, persona_text, topic, speaking_min, word_budget, length_plan="", language="en-IN"):
     name = _get(persona, "Teacher", "Name")
     klass = _get(persona, "Teacher", "Class")
     return f"""{_role(persona, persona_text)}
@@ -176,14 +196,14 @@ Speech: short sentences, plain words (explain any new term at once), "you/we/let
 say code in words but numbers as digits ("72.7", not "seventy-two point seven"); never say slide numbers ("this painting", not "slide 3"); no markdown, no brackets.
 
 # Example (format only)
-{LESSON_EXAMPLE}
+{LESSON_EXAMPLE}{language_rule(language)}
 
 Output only the lesson."""
 
 
 # ---------- script: step 3, staging (NO tools): markers around the finished lesson ----------
 
-def staging_prompt(persona, topic):
+def staging_prompt(persona, topic, language="en-IN"):
     name = _get(persona, "Teacher", "Name")
     return f"""You stage a lecture on "{topic}" that an AI teacher gives for {name}. You get the finished lesson (what
 the teacher says, and what goes on the board) and turn it into the class script by adding markers that drive the
@@ -223,14 +243,14 @@ class screen. You never change the teaching.
 {FORMAT_RULES}
 
 # Example of the markers (format only)
-{EXAMPLE_SCRIPT}
+{EXAMPLE_SCRIPT}{language_rule(language, "stage")}
 
 Output only the script."""
 
 
 # ---------- doubts (has tools) ----------
 
-def doubt_prompt(persona, persona_text, topic):
+def doubt_prompt(persona, persona_text, topic, language="en-IN"):
     name = _get(persona, "Teacher", "Name")
     return f"""{_role(persona, persona_text, skip=("Absence Note",))}
 
@@ -257,7 +277,7 @@ is empty or "no", end with one sentence that moves on.
   [/VISUAL].
 - Point at what you explain as you say it: [HIGHLIGHT file=".." text="<line>"] for a code line, [NOTE_HIGHLIGHT
   text=".."] for a word in a new note, [FLOW_HIGHLIGHT] for a block, [SLIDE_HIGHLIGHT n=.. text=".."] for a slide line.
-- Write or show it first, then explain it. Never claim a technical problem unless a run failed."""
+- Write or show it first, then explain it. Never claim a technical problem unless a run failed.""" + language_rule(language, "doubts")
 
 
 # ---------- visuals: the graph builder (no tools; code checks the result) ----------

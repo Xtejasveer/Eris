@@ -446,7 +446,7 @@ def split_spoken_while_writing(segments):
     for i, seg in enumerate(segments):
         prev = segments[i - 1] if i else None
         if seg["kind"] == "say" and prev and prev.get("args", {}).get("while_speaking"):
-            sentences = re.split(r"(?<=[.!?])\s+", seg["text"].strip())
+            sentences = re.split(r"(?<=[.!?।॥])\s+", seg["text"].strip())
             take = 1
             while take < len(sentences) and len(" ".join(sentences[:take]).split()) < SPOKEN_WHILE_WRITING_MIN_WORDS:
                 take += 1

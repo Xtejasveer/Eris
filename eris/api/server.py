@@ -51,7 +51,18 @@ def _manifest_or_none(lecture_id):
 def persona_template():
     values = parse_persona("templates/persona.md")  # the example persona, kept apart from any lecture
     return {"fields": REQUIRED, "values": values, "topic": "", "duration_min": config.LECTURE_DURATION_MIN,
-            "speaking_min": config.default_speaking_min(config.LECTURE_DURATION_MIN)}
+            "speaking_min": config.default_speaking_min(config.LECTURE_DURATION_MIN),
+            "language": config.DEFAULT_LANGUAGE, "languages": _languages()}
+
+
+def _languages():
+    return [{"code": code, "name": name} for code, (name, _) in config.LANGUAGES.items()]
+
+
+def _check_language(code):
+    if code not in config.LANGUAGES:
+        raise HTTPException(400, f"Unsupported language {code}")
+    return code
 
 
 def _check_times(total, speaking):
@@ -72,6 +83,7 @@ class NewLecture(BaseModel):
     topic: str
     duration_min: int = 30
     speaking_min: int = 20
+    language: str = config.DEFAULT_LANGUAGE
 
 
 @app.post("/api/lectures/{lecture_id}")
@@ -81,12 +93,13 @@ def create_lecture(lecture_id: str, body: NewLecture):
     if not body.topic.strip():
         raise HTTPException(400, "Enter the lecture topic")
     _check_times(body.duration_min, body.speaking_min)
+    _check_language(body.language)
     if _manifest_or_none(lecture_id) or config.data_dir(lecture_id).is_dir():
         raise HTTPException(409, f"A lecture called {lecture_id} already exists")
     config.data_dir(lecture_id).mkdir(parents=True)
     config.save_manifest(lecture_id, {"lecture_id": lecture_id, "topic": body.topic.strip(),
                                       "duration_min": body.duration_min, "speaking_min": body.speaking_min,
-                                      "status": "new"})
+                                      "language": body.language, "status": "new"})
     return {"id": lecture_id}
 
 
@@ -95,6 +108,7 @@ class LectureSetup(BaseModel):
     topic: str = ""
     duration_min: int = 30
     speaking_min: int = 20
+    language: str = ""
 
 
 @app.put("/api/lectures/{lecture_id}/setup")
@@ -108,6 +122,8 @@ def save_setup(lecture_id: str, body: LectureSetup):
         manifest["topic"] = body.topic.strip()
     if 5 <= body.duration_min <= 120 and 1 <= body.speaking_min <= body.duration_min:  # half-typed values wait
         manifest["duration_min"], manifest["speaking_min"] = body.duration_min, body.speaking_min
+    if body.language in config.LANGUAGES:
+        manifest["language"] = body.language
     config.save_manifest(lecture_id, manifest)
     return {"saved": True}
 
@@ -175,6 +191,7 @@ class GenerateRequest(BaseModel):
     topic: str
     duration_min: int = 30
     speaking_min: int = 20
+    language: str = ""
 
 
 @app.post("/api/lectures/{lecture_id}/generate")
@@ -184,6 +201,10 @@ def generate(lecture_id: str, body: GenerateRequest):
     if not body.topic.strip():
         raise HTTPException(400, "Enter the lecture topic")
     _check_times(body.duration_min, body.speaking_min)
+    if body.language:  # the script is written, said and heard in this language (kept through the re-index)
+        manifest = _manifest_or_none(lecture_id) or {"lecture_id": lecture_id, "status": "new"}
+        manifest["language"] = _check_language(body.language)
+        config.save_manifest(lecture_id, manifest)
     (folder / "persona.md").write_text(persona_to_markdown(body.persona), encoding="utf-8")
     try:
         parse_persona(folder / "persona.md")

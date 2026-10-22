@@ -32,15 +32,22 @@ export class Stage {
     this.indicator = h("div", { class: "env-indicator", role: "status", "aria-label": "Current environment",
       style: `grid-template-columns: repeat(${this.envs.length}, var(--pill-w, ${PILL_W}px))` },
       h("span", { class: "env-glider" }),
-      this.envs.map(([key, label, ic]) => h("span", { class: "env-pill", dataset: { env: key } }, icon(ic), label)));
+      this.envs.map(([key, label, ic]) => h("span", { class: "env-pill", dataset: { env: key }, title: `Look at the ${label.toLowerCase()}` }, icon(ic), label)));
+    this.indicator.addEventListener("click", (e) => { const pill = e.target.closest(".env-pill"); if (pill) this.peek(pill.dataset.env); });
 
-    // Notebook pages: "Lecture" plus one per [NEW_PAGE]. Like the environment pills, the page tabs
-    // only show where the teacher is; the script turns the pages.
-    this.pageBar = h("div", { class: "nb-pages", "aria-label": "Notebook pages" });
-    this.paper = h("div", { class: "nb-paper" });
+    // Notebook: one open canvas the teacher writes on in columns, left to right, like a whiteboard. Each
+    // [NEW_PAGE] starts a new column. The canvas follows the teacher's pen unless the student pans away
+    // (follow = false); "Follow tutor" brings it back.
+    this.pageBar = h("div", { class: "nb-pages hidden", "aria-label": "Notebook pages" });
+    this.topicEl = h("div", { class: "nb-topic" });
+    this.flow = h("div", { class: "nb-flow" }, this.topicEl);
+    this.paper = h("div", { class: "nb-paper" }, this.flow);
     this.notebook = h("div", { class: "env env-notebook" }, this.pageBar, this.paper);
     this.pages = [];
+    this.follow = true;
+    this.onFollowChange = null;
     this._addPage("Lecture");
+    this._panning();
 
     this.slideBox = h("div", { class: "slide" }, h("div", { class: "slide-empty" }, icon("slides"), "No slide shown yet"));
     this.slideNum = h("span", { class: "slide-num" });
@@ -71,9 +78,22 @@ export class Stage {
     this.setEnv("notebook");
   }
 
+  // The teacher's environment. While the student looks elsewhere (follow off) the screen stays where they are.
   setEnv(env) {
-    if (this.env === env) return;
+    if (this.env === env && this.shown === env) return;
     this.env = env;
+    if (this.follow !== false) this._show(env);
+  }
+
+  // The student opens another environment to look at (clicking its pill): stops following the teacher.
+  peek(env) {
+    if (!this.envs.some(e => e[0] === env)) return;
+    this.setFollow(env === this.env && this.follow);
+    this._show(env);
+  }
+
+  _show(env) {
+    this.shown = env;
     const i = Math.max(0, this.envs.findIndex(e => e[0] === env));
     this.indicator.style.setProperty("--i", i);
     this.indicator.querySelectorAll(".env-pill").forEach(p => p.classList.toggle("active", p.dataset.env === env));
@@ -85,26 +105,70 @@ export class Stage {
   // ---------- notebook ----------
   get notePage() { return this.pages[this.page].el; }
 
+  setTopic(text) { this.topicEl.textContent = text || ""; }
+
   _addPage(title) {
-    const el = h("div", { class: "nb-lines" });
+    const el = h("div", { class: `nb-lines ${this.pages.length ? "nb-break" : ""}` });
     const tab = h("span", { class: "nb-page-tab" }, title);
     this.pages.push({ title, el, tab });
-    this.paper.append(el);
+    this.flow.append(el);
     this.pageBar.append(tab);
-    this.pageBar.classList.toggle("hidden", this.pages.length < 2);
     this.showPage(this.pages.length - 1);
   }
 
+  // Every page stays on the canvas; the current one is where new lines go.
   showPage(i) {
     this.page = i;
-    this.pages.forEach((p, j) => { p.el.classList.toggle("hidden", j !== i); p.tab.classList.toggle("active", j === i); });
+    this.pages.forEach((p, j) => p.tab.classList.toggle("active", j === i));
   }
 
   async newPage(title, ctl) {
     this.setEnv("notebook");
     this._addPage(title);
-    this.paper.scrollTop = 0;
     await this.noteTitle(title, ctl);
+  }
+
+  // Bring a line into view, only while the canvas follows the teacher.
+  _reveal(el, smooth, block = "nearest") {
+    if (this.follow) el.scrollIntoView({ block, inline: "nearest", behavior: smooth ? "smooth" : "auto" });
+  }
+
+  setFollow(on) {
+    if (this.follow === on) return;
+    this.follow = on;
+    this.onFollowChange?.(on);
+  }
+
+  // "Follow tutor": back to the line the teacher wrote last.
+  followNow() {
+    this.setFollow(true);
+    this._show(this.env);
+    if (this.env !== "notebook") return;
+    const last = this.notePage.lastElementChild || this.notePage;
+    last.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+  }
+
+  // The student can pan the canvas (drag, wheel, touch); doing so stops it following the teacher.
+  _panning() {
+    const paper = this.paper;
+    let drag = null;
+    paper.addEventListener("wheel", () => this.setFollow(false), { passive: true });
+    paper.addEventListener("touchmove", () => this.setFollow(false), { passive: true });
+    paper.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || this.penActive || e.pointerType === "touch") return;
+      drag = { x: e.clientX, y: e.clientY, left: paper.scrollLeft, top: paper.scrollTop, moved: false };
+    });
+    window.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!drag.moved && Math.hypot(dx, dy) < 5) return;
+      drag.moved = true;
+      paper.classList.add("panning");
+      this.setFollow(false);
+      paper.scrollLeft = drag.left - dx;
+      paper.scrollTop = drag.top - dy;
+    });
+    window.addEventListener("pointerup", () => { drag = null; paper.classList.remove("panning"); });
   }
 
   // Pages to search for a quote: the current one first, then the others from newest to oldest.
@@ -119,7 +183,7 @@ export class Stage {
         .find(line => line.textContent.toLowerCase().includes(text.trim().toLowerCase()));
       if (!el) continue;
       this.showPage(i);
-      markText(el, text, "center");
+      markText(el, text, "center", this.follow);
       el.classList.remove("nb-focus"); void el.offsetWidth; el.classList.add("nb-focus");
       return true;
     }
@@ -143,7 +207,7 @@ export class Stage {
     this.setEnv("notebook");
     const el = h("div", { class: "nb-line nb-title" });
     this.notePage.append(el);
-    el.scrollIntoView({ block: "nearest", behavior: ctl ? "smooth" : "auto" });
+    this._reveal(el, !!ctl);
     await this._write(el, text, ctl, NOTE_MS);
   }
 
@@ -151,10 +215,11 @@ export class Stage {
     this.setEnv("notebook");
     for (const line of text.split("\n")) {
       const indent = line.match(/^\s*/)[0].length;
-      const el = h("div", { class: "nb-line", style: indent ? `padding-left:${indent * 0.55}em` : null });
+      const bullet = /^\s*[-•*]\s+/.test(line);  // "- point" is written as a bullet point
+      const el = h("div", { class: `nb-line ${bullet ? "nb-bullet" : ""}`, style: indent ? `padding-left:${indent * 0.55}em` : null });
       this.notePage.append(el);
-      el.scrollIntoView({ block: "nearest", behavior: ctl ? "smooth" : "auto" });
-      await this._write(el, line.trim() || " ", ctl, NOTE_MS);
+      this._reveal(el, !!ctl);
+      await this._write(el, line.replace(/^\s*[-•*]\s+/, "").trim() || " ", ctl, NOTE_MS);
     }
   }
 
@@ -162,10 +227,53 @@ export class Stage {
     this.setEnv("notebook");
     for (const i of this._pageOrder()) {
       const lines = [...this.pages[i].el.querySelectorAll(".nb-line")].reverse();
-      if (lines.some(el => markText(el, text))) { this.showPage(i); return true; }
+      if (lines.some(el => markText(el, text, "nearest", this.follow))) { this.showPage(i); return true; }
     }
     return false;
   }
+
+  // ---------- the student's pen: free drawing on the notebook canvas (kept until the class restarts) ----------
+  setPen(on) {
+    this.penActive = on;
+    this.paper.classList.toggle("pen-on", on);
+    if (on && !this.ink) {
+      this.ink = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      this.ink.classList.add("ink-layer");
+      this.paper.append(this.ink);
+      let path = null, points = [];
+      const at = (e) => {
+        const r = this.paper.getBoundingClientRect();
+        return [e.clientX - r.left + this.paper.scrollLeft, e.clientY - r.top + this.paper.scrollTop];
+      };
+      this.paper.addEventListener("pointerdown", (e) => {
+        if (!this.penActive || e.button !== 0) return;
+        e.preventDefault();
+        this._sizeInk();
+        points = [at(e)];
+        path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.classList.add("ink-stroke");
+        this.ink.append(path);
+        this.paper.setPointerCapture(e.pointerId);
+      });
+      this.paper.addEventListener("pointermove", (e) => {
+        if (!path) return;
+        points.push(at(e));
+        path.setAttribute("d", "M" + points.map(p => p.map(Math.round).join(" ")).join(" L"));
+      });
+      const end = () => { path = null; };
+      this.paper.addEventListener("pointerup", end);
+      this.paper.addEventListener("pointercancel", end);
+    }
+    if (on) this._sizeInk();
+  }
+
+  _sizeInk() {
+    if (!this.ink) return;
+    this.ink.style.width = `${this.paper.scrollWidth}px`;
+    this.ink.style.height = `${this.paper.scrollHeight}px`;
+  }
+
+  clearInk() { this.ink?.replaceChildren(); }
 
   // ---------- slides ----------
   showSlide(n) {
@@ -485,6 +593,8 @@ export class Stage {
     this.pages.forEach(p => { p.el.remove(); p.tab.remove(); });
     this.pages = [];
     this._addPage("Lecture");
+    this.follow = true; this.onFollowChange?.(true);
+    this.clearInk();
     this.files = {}; this.current = null;
     this.tabBar.replaceChildren();
     this.codeBody.replaceChildren(h("div", { class: "ed-empty" }, icon("code"), "No code yet"));
@@ -502,7 +612,7 @@ export class Stage {
 }
 
 // Wrap the first match of `text` (case-insensitive, spacing ignored) inside `el` with a highlighter mark.
-function markText(el, text, block = "nearest") {
+function markText(el, text, block = "nearest", scroll = true) {
   const want = text.trim().toLowerCase();
   if (!want) return false;
   const src = el.textContent;
@@ -510,6 +620,6 @@ function markText(el, text, block = "nearest") {
   if (idx < 0) return false;
   const mark = h("mark", { class: "hl-mark" }, src.slice(idx, idx + want.length));
   el.replaceChildren(src.slice(0, idx), mark, src.slice(idx + want.length));
-  el.scrollIntoView({ block, behavior: "smooth" });
+  if (scroll) el.scrollIntoView({ block, inline: "nearest", behavior: "smooth" });
   return true;
 }

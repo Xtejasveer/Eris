@@ -113,7 +113,7 @@ def _flow_errors(segments):
             blocks = flows[a["id"]][1]
             before = segments[i - 1] if i else {}
             after = segments[i + 1] if i + 1 < len(segments) else {}
-            said_before = _re.split(r"(?<=[.!?])\s+", before["text"].strip())[-1] if before.get("kind") == "say" else ""
+            said_before = _re.split(r"(?<=[.!?।॥])\s+", before["text"].strip())[-1] if before.get("kind") == "say" else ""
             said_after = after["text"].split(". ")[0] if after.get("kind") == "say" else ""
             if said_too_early(said_before, said_after, a.get("label", ""), blocks[k + 1] if k + 1 < len(blocks) else ""):
                 errors.append(f'the sentence about block "{a.get("label")}" comes before its [FLOW_NEXT id="{a["id"]}"]; '
@@ -293,6 +293,9 @@ def run_generate(lecture_id):
     total_min, speaking_min = config.lecture_times(manifest)
     budget = word_budget(speaking_min)  # only the speaking time reaches the prompts; the total runs the class clock
     args = (persona, persona_to_text(persona), manifest["topic"], speaking_min, budget)
+    language = config.lecture_language(manifest)  # the lesson is written in it; the voice says it
+    if language != "en-IN":
+        print(f"[generate] teaching language: {config.language_name(language)}")
     print(f"[generate] step 1/3: researching the material with {config.LLM_MODEL} ...")
     env = figures.lecture_environments(lecture_id, manifest, count_slides(lecture_id))
     env_text = "\n\n# Environments for this class\n" + figures.describe_environments(env)
@@ -321,7 +324,7 @@ def run_generate(lecture_id):
           f"{concepts} concept section(s)")
     print(f"[generate] step 2/3: writing the lesson (~{budget} words), teaching only ...")
     lesson_text, sections, lesson_report, problems = write_lesson(
-        lesson_prompt(*args, plan), notes, budget, persona, manifest["topic"], figs, env, len(slides), pictures, rounds,
+        lesson_prompt(*args, plan, language), notes, budget, persona, manifest["topic"], figs, env, len(slides), pictures, rounds,
         material_text(lecture_id))
     lesson_file = config.lecture_dir(lecture_id) / "lesson.md"
     lesson_file.write_text(lesson_text + "\n", encoding="utf-8")  # kept for review: what was taught before staging
@@ -331,7 +334,7 @@ def run_generate(lecture_id):
     # Step 3: staging (markers around the lesson's unchanged lines); code and Jev check the staging.
     print("[generate] step 3/3: staging the lesson for the class screen ...")
     text, segments, problems, stage_report, pipe = stage_lesson(
-        lesson_text, sections, staging_prompt(persona, manifest["topic"]), budget, slides, figs, env, pictures, rounds)
+        lesson_text, sections, staging_prompt(persona, manifest["topic"], language), budget, slides, figs, env, pictures, rounds)
     if problems:
         _give_up(lecture_id, text, problems, "script")
     if stage_report and not stage_report["error"]:

@@ -225,7 +225,7 @@ def visual_context(segments, board_files=None, figs=None):
             # Another move right after: the next sentence belongs to that one, not this one.
             said = "" if nxt.get("name") == "VISUAL_SET" else next(
                 (s["text"] for s in segments[i + 1:i + 3] if s["kind"] == "say"), "")
-            said = re.split(r"(?<=[.!?])\s+", said)
+            said = re.split(r"(?<=[.!?।॥])\s+", said)
             value = f" to {a['value']}" if "value" in a else ""
             context[a["id"]]["usage"].append(f"{a['control']}{value} -> \"{' '.join(said[:2])[:220]}\"")
             if "value" in a:

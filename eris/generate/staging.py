@@ -66,7 +66,7 @@ def _norm(sentence):
 def _sentences(texts):
     out = []
     for t in texts:
-        out += [n for s in re.split(r"(?<=[.!?])\s+", t) if (n := _norm(s))]
+        out += [n for s in re.split(r"(?<=[.!?।॥])\s+", t) if (n := _norm(s))]
     return out
 
 
@@ -100,7 +100,7 @@ def late_slider_moves(segments):
         value = str(seg["args"]["value"]).rstrip("0").rstrip(".") if "." in str(seg["args"]["value"]) else str(seg["args"]["value"])
         before = segments[i - 1] if i else {}
         after = next((s for s in segments[i + 1:] if s["kind"] == "say"), {})
-        said_before = re.split(r"(?<=[.!?])\s+", before.get("text", "").strip())[-1] if before.get("kind") == "say" else ""
+        said_before = re.split(r"(?<=[.!?।॥])\s+", before.get("text", "").strip())[-1] if before.get("kind") == "say" else ""
         if re.search(rf"\b{re.escape(value)}\b", said_before) and not re.search(rf"\b{re.escape(value)}\b", after.get("text", "")):
             problems.append(f'[VISUAL_SET id="{seg["args"]["id"]}" control="{seg["args"]["control"]}" value={seg["args"]["value"]}] '
                             f'comes after the sentence about {value} ("{said_before[:70]}"); move it right before that sentence')

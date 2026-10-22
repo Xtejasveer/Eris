@@ -1,9 +1,10 @@
-// Classroom: teacher panel, stage and question breaks around the browser player.
+// Classroom: a full-screen lesson canvas. The teacher writes on an open dotted board (slides, code and graphs
+// appear on it as cards); a floating bar at the bottom holds the teacher, playback, the live caption, the pen,
+// the question box and the mic. Students can ask at any time: a question typed mid-lesson is answered right
+// after the current sentence.
 
 import { api } from "./api.js";
 import { h, icon, toast, initials, formatDuration } from "./ui.js";
-import { lectureHeader } from "./header.js";
-import { inlineCode } from "./script-view.js";
 import { Stage } from "./stage.js";
 import { Voice, createDictation } from "./voice.js";
 import { Player, Stopped, ClassClock } from "./player.js";
@@ -13,113 +14,122 @@ const store = {
   get(id) { try { return +(localStorage.getItem(cursorKey(id)) || 0); } catch { return 0; } },
   set(id, v) { try { localStorage.setItem(cursorKey(id), String(v)); } catch {} },
 };
+const pref = {
+  get(k, d) { try { return localStorage.getItem(`eris-${k}`) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(`eris-${k}`, String(v)); } catch {} },
+};
 
 export async function mountClassroom(lectureId, ctx) {
   const { main } = ctx;
+  const studio = `#/lecture/${encodeURIComponent(lectureId)}/studio`;
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "empty" }, h("div", { class: "spinner" }), "Opening the classroom…")));
   let info;
   try { info = await api.classData(lectureId); }
   catch (e) {
-    main.replaceChildren(lectureHeader(lectureId, "class", "new"), h("div", { class: "page" }, h("div", { class: "callout error" }, icon("alert"), e.message)));
+    main.replaceChildren(h("div", { class: "page" }, h("div", { class: "callout error" }, icon("alert"), e.message)));
     return null;
   }
   if (!info.ready) {
-    main.replaceChildren(lectureHeader(lectureId, "class", info.status), h("div", { class: "page" },
+    main.replaceChildren(h("div", { class: "page" },
       h("div", { class: "card empty not-ready" }, h("div", { class: "empty-icon" }, icon("class")),
         h("h3", {}, "This class isn't ready yet"), h("p", {}, info.message),
-        h("a", { class: "btn primary", href: `#/lecture/${encodeURIComponent(lectureId)}/studio` }, icon("edit"), "Open Studio"))));
+        h("a", { class: "btn primary", href: studio }, icon("edit"), "Open Studio"))));
     return null;
   }
 
-  // The ready answer has no status; the lecture list does (approved or completed).
-  info.status = (await api.lectures().catch(() => [])).find(l => l.id === lectureId)?.status || "approved";
   const segments = info.segments;
   const sections = segments.map((s, i) => ({ s, i })).filter(x => x.s.name === "SECTION").map(x => ({ title: x.s.args.title, index: x.i }));
-  const voice = new Voice(lectureId);
-  // Only the environments this class uses get a pill (notebook always).
+  const voice = new Voice(lectureId, info.language);
   const ENV_OF = { SLIDE: "slides", SLIDE_HIGHLIGHT: "slides", SLIDE_CIRCLE: "slides", WRITE_CODE: "code", RUN: "code", OPEN_FILE: "code",
     FLOW: "visual", VISUAL: "visual" };
   const used = [...new Set(info.segments.map(s => ENV_OF[s.name]).filter(Boolean))];
   if (Object.keys(info.slides || {}).length) used.push("slides");  // doubt answers may always show slides
   const stage = new Stage(info.slides, used, info.slide_pictures);
+  stage.setTopic(info.topic);
   let player = null;
   let running = false;
 
-  // ---------- left panel ----------
-  const stateLabel = h("span", { class: "t-state" }, "Ready");
-  const bars = h("div", { class: "vbars" }, Array.from({ length: 5 }, () => h("i")));
-  const avatarToggle = h("button", { class: "icon-btn sm avatar-toggle", title: "Show or hide the 3D teacher", onclick: () => toggleAvatar() }, icon("user"));
-  const teacherCard = h("div", { class: "teacher-card" },
-    h("div", { class: "orb" }, h("span", { class: "orb-ring r1" }), h("span", { class: "orb-ring r2" }), h("span", { class: "orb-core" }, initials(info.teacher.replace(/^(prof|dr|mr|mrs|ms)\.?\s+/i, "")))),
-    h("div", { class: "t-meta" }, h("strong", {}, info.teacher), h("small", {}, "AI substitute teacher"), h("div", { class: "t-live" }, bars, stateLabel)),
-    info.avatar?.enabled ? avatarToggle : null);
-  const avatarView = h("div", { class: "avatar-view hidden" });
-  const caption = h("p", { class: "caption-text" }, "Press Start class when the students are ready.");
-  const sectionLabel = h("span", { class: "caption-section" }, info.topic);
-  const progressFill = h("i");
-  const progressText = h("span", {}, `0 / ${segments.length}`);
-  const playBtn = h("button", { class: "btn primary", onclick: () => togglePlay() }, icon("play"), "Start class");
-  const stopBtn = h("button", { class: "btn", onclick: () => stop(), disabled: true, title: "Stop the class" }, icon("stop"), "Stop");
+  // ---------- top: where we are, and the lesson controls ----------
+  const sectionText = h("span", { class: "ls-section" }, info.topic);
+  const stateText = h("span", { class: "ls-state" }, "Ready");
+  const topLeft = h("div", { class: "ls-top-left" },
+    h("a", { class: "ls-back", href: studio, title: "Back to Studio" }, icon("back")),
+    h("div", { class: "ls-where" }, h("strong", {}, info.topic), h("small", {}, stateText, " · ", sectionText)),
+    used.length ? stage.indicator : null);
 
-  const outline = h("ol", { class: "outline" }, sections.map((sec, n) => h("li", { dataset: { index: sec.index } },
-    h("button", { onclick: () => jump(sec.index), title: `Jump to ${sec.title}` }, h("span", { class: "o-num" }, n + 1), h("span", { class: "o-title" }, sec.title)))));
-  const chat = h("div", { class: "chat" }, h("div", { class: "chat-empty" }, icon("chat"), h("p", {}, "Students can ask doubts at each question break. The conversation shows up here.")));
-  const qCount = h("span", { class: "seg-count hidden" });
-  const segBtn = (key, label, extra) => h("button", { class: "seg", dataset: { key }, onclick: () => setPanel(key) }, label, extra);
-  const segs = h("div", { class: "segmented" }, segBtn("outline", "Outline"), segBtn("questions", "Questions", qCount));
-
-  const composerInput = h("textarea", { class: "composer-input", rows: 1, placeholder: "Type a student's question…", disabled: true });
-  const sendBtn = h("button", { class: "icon-btn send", title: "Ask", disabled: true }, icon("send"));
-  const micBtn = h("button", { class: "icon-btn", title: "Dictate", disabled: true }, icon("mic"));
-  const noDoubtBtn = h("button", { class: "btn sm", disabled: true }, "No questions, continue");
-  const limitLabel = h("small", { class: "muted" });
-  const waitBar = h("i");
-  const waitText = h("span");
-  const waitTimer = h("div", { class: "wait-timer hidden", role: "timer", "aria-live": "polite" },
-    h("div", { class: "wait-bar" }, waitBar), waitText);
-  const composer = h("div", { class: "composer" }, waitTimer, h("div", { class: "composer-box" }, composerInput, micBtn, sendBtn),
-    h("div", { class: "composer-foot" }, limitLabel, noDoubtBtn));
-
-  const side = h("aside", { class: "class-side" },
-    avatarView,
-    teacherCard,
-    h("div", { class: "caption-card" }, sectionLabel, caption),
-    h("div", { class: "controls" }, playBtn, stopBtn,
-      h("div", { class: "progress-wrap" }, h("div", { class: "progress-bar" }, progressFill), progressText)),
-    h("div", { class: "side-panel" }, segs, h("div", { class: "panel-body" }, outline, chat), composer));
-
-  // ---------- stage ----------
-  const stageSection = h("span", { class: "stage-section" }, info.topic);
-  const overlay = h("div", { class: "stage-overlay" });
-  const stageCard = h("section", { class: "stage-card" },
-    h("div", { class: "stage-head" }, stage.indicator, h("div", { class: "spacer" }), stageSection),
-    h("div", { class: "stage-body" }, stage.el, overlay));
-
-  const voiceChip = h("span", { class: "chip" }, icon("volume"), info.voice ? "Gnani voice" : "Browser voice");
-  // The class clock: lecture time used out of the total (paused time doesn't count; a jump keeps it).
   const clock = new ClassClock(info.duration_min);
   const mmss = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
   const clockText = h("span", {}, `0:00 / ${mmss(clock.totalMs)}`);
-  const clockChip = h("span", { class: "chip", title: "Lecture time used / total lecture time" }, icon("clock"), clockText);
+  const clockChip = h("span", { class: "ls-clock", title: "Lecture time used / total lecture time" }, icon("clock"), clockText);
+
+  // The teacher and the playback controls, together at the top right.
+  const avatarView = h("div", { class: "ls-avatar-3d hidden" });
+  const orb = h("span", { class: "ls-orb" }, initials(info.teacher.replace(/^(prof|dr|mr|mrs|ms)\.?\s+/i, "")));
+  const avatarBtn = h("button", { class: "ls-avatar", title: info.avatar?.enabled ? `${info.teacher} · click to show or hide the 3D teacher` : info.teacher,
+    onclick: () => info.avatar?.enabled && toggleAvatar() }, orb, avatarView, h("span", { class: "ls-ring" }));
+  let captionsOn = pref.get("captions", "1") !== "0";
+  const captionBtn = h("button", { class: "ls-ctl", title: "Show or hide captions", onclick: () => {
+    captionsOn = !captionsOn; pref.set("captions", captionsOn ? 1 : 0); renderCaptions();
+  } }, icon("captions"));
+  const playBtn = h("button", { class: "ls-ctl ls-play", title: "Start (space)", onclick: () => togglePlay() }, icon("play"));
+  const muteBtn = h("button", { class: "ls-ctl", title: "Mute", onclick: () => { voice.setMuted(!voice.muted); renderMute(); } }, icon("volume"));
+  const penBtn = h("button", { class: "ls-ctl ls-pen", title: "Draw on the board", onclick: () => togglePen() }, icon("pen"));
+  const clearInkBtn = h("button", { class: "ls-mini hidden", title: "Clear your drawing", onclick: () => stage.clearInk() }, "Clear");
+  const topRight = h("div", { class: "ls-top-right" },
+    h("div", { class: "ls-controls" }, avatarBtn, h("span", { class: "ls-sep" }), playBtn, muteBtn, captionBtn, penBtn, clearInkBtn),
+    clockChip,
+    h("button", { class: "ls-end", title: "End the lesson", onclick: () => endLesson() }, h("span", { class: "ls-end-dot" }), "End"));
+  const followBtn = h("button", { class: "ls-follow hidden", onclick: () => stage.followNow() }, icon("focus"), "Follow tutor");
+  stage.onFollowChange = (on) => followBtn.classList.toggle("hidden", on || !running);
+
+  // ---------- the board ----------
+  const overlay = h("div", { class: "stage-overlay" });
+  const board = h("div", { class: "ls-board" }, stage.el, overlay);
+
+  // ---------- bottom: the live caption, and asking a doubt ----------
+  const captionText = h("p", { class: "ls-caption-text" });
+  const caption = h("div", { class: "ls-caption" }, captionText);
+
+  const askInput = h("textarea", { class: "ls-input", rows: 1, placeholder: "Ask a doubt…" });
+  const sendBtn = h("button", { class: "ls-send hidden", title: "Send (Enter)" }, icon("arrowRight"));
+  const plusMenu = h("div", { class: "ls-menu hidden" });
+  const plusBtn = h("button", { class: "ls-plus", title: "More", onclick: (e) => { e.stopPropagation(); openMenu(); } }, icon("plus"));
+  const micBtn = h("button", { class: "ls-mic", title: "Speak your doubt" }, icon("mic"));
+  const askBox = h("div", { class: "ls-ask" }, plusBtn, askInput, sendBtn, micBtn, plusMenu);
+
+  const waitBar = h("i");
+  const waitText = h("span");
+  const waitTimer = h("div", { class: "wait-timer hidden", role: "timer", "aria-live": "polite" }, h("div", { class: "wait-bar" }, waitBar), waitText);
+  const liveThread = h("div", { class: "ls-live-thread" });
+  const liveCard = h("div", { class: "ls-live hidden" },
+    h("div", { class: "ls-live-head" }, icon("question"), h("strong", { class: "ls-live-title" }, "Questions"),
+      h("button", { class: "ls-mini", title: "Hide", onclick: () => liveCard.classList.add("hidden") }, "Hide")),
+    liveThread, waitTimer);
+
+  const bar = h("div", { class: "ls-bar" }, caption, h("div", { class: "ls-ask-wrap" }, liveCard, askBox));
+
+  // ---------- drawer: outline and every question so far ----------
+  const outline = h("ol", { class: "outline" }, sections.map((sec, n) => h("li", { dataset: { index: sec.index } },
+    h("button", { onclick: () => jump(sec.index), title: `Jump to ${sec.title}` }, h("span", { class: "o-num" }, n + 1), h("span", { class: "o-title" }, sec.title)))));
+  const history = h("div", { class: "chat" }, h("div", { class: "chat-empty" }, icon("chat"), h("p", {}, "Questions and answers show up here.")));
+  const drawer = h("aside", { class: "ls-drawer" },
+    h("div", { class: "ls-drawer-head" }, h("strong", {}, "Lesson"), h("button", { class: "icon-btn sm", title: "Close", onclick: () => toggleDrawer(false) }, icon("plus", "x"))),
+    h("div", { class: "ls-drawer-label" }, "Outline"), outline,
+    h("div", { class: "ls-drawer-label" }, "Questions"), history);
+  const handle = h("button", { class: "ls-handle", title: "Outline and questions", onclick: () => toggleDrawer() });
+  const toggleDrawer = (on) => lesson.classList.toggle("drawer-open", on);
+
+  const lesson = h("div", { class: "lesson" }, board, topLeft, topRight, followBtn, bar, handle, drawer);
+  main.replaceChildren(lesson);
+
   const clockTimer = setInterval(() => {
     if (!clockChip.isConnected) return clearInterval(clockTimer);
     clockText.textContent = `${mmss(clock.elapsed())} / ${mmss(clock.totalMs)}`;
     clockChip.classList.toggle("warn", clock.left() <= clock.totalMs * 0.10);
   }, 1000);
-  const header = lectureHeader(lectureId, "class", info.status,
-    clockChip, voiceChip);
-  main.replaceChildren(header, h("div", { class: "classroom" }, side, stageCard));
 
-  // ---------- panel + overlay ----------
-  function setPanel(key) {
-    segs.querySelectorAll(".seg").forEach(b => b.classList.toggle("active", b.dataset.key === key));
-    outline.classList.toggle("hidden", key !== "outline");
-    chat.classList.toggle("hidden", key !== "questions");
-    composer.classList.toggle("hidden", key !== "questions");
-  }
-  setPanel("outline");
-
-  function showOverlay(content) { overlay.replaceChildren(content); overlay.classList.toggle("hidden", !content); }
+  // ---------- overlays ----------
+  function showOverlay(content) { overlay.replaceChildren(content || ""); overlay.classList.toggle("hidden", !content); }
   function splash() {
     const saved = store.get(lectureId);
     const savedSec = saved > 0 && saved < segments.length ? [...sections].reverse().find(s => s.index <= saved) : null;
@@ -135,13 +145,13 @@ export async function mountClassroom(lectureId, ctx) {
   }
   splash();
 
-  // ---------- player UI callbacks ----------
+  // ---------- player UI ----------
   let pendingAsk = null;
-  let questionCount = 0;
+  let live = null;  // the question break (or raised question) on screen now
   const ui = {
-    onCaption(text) { caption.replaceChildren(...inlineCode(text)); caption.classList.remove("in"); void caption.offsetWidth; caption.classList.add("in"); },
+    onCaption(text) { setCaption(text); },
     onSection(title) {
-      sectionLabel.textContent = title; stageSection.textContent = title;
+      sectionText.textContent = title;
       const cur = [...sections].reverse().find(s => s.title === title && s.index <= (player?.cursor ?? 0)) || sections.find(s => s.title === title);
       outline.querySelectorAll("li").forEach(li => {
         const idx = +li.dataset.index;
@@ -149,52 +159,79 @@ export async function mountClassroom(lectureId, ctx) {
         li.classList.toggle("done", cur && idx < cur.index);
       });
     },
-    onProgress(i, n) {
-      progressFill.style.width = `${(100 * i) / n}%`;
-      progressText.textContent = `${Math.min(i + 1, n)} / ${n}`;
-      store.set(lectureId, i >= n ? 0 : i);
-    },
+    onProgress(i, n) { store.set(lectureId, i >= n ? 0 : i); },
     cancelAsk() { if (pendingAsk) { const r = pendingAsk; pendingAsk = null; r(""); } stopWait(); },
     openCheckpoint(section, final) {
-      setPanel("questions");
-      chat.querySelector(".chat-empty")?.remove();
-      const status = h("span", { class: "ck-status live" }, "Live");
+      history.querySelector(".chat-empty")?.remove();
+      const raised = raisedPending;  // this break was opened for a question asked mid-lesson
+      raisedPending = false;
       const thread = h("div", { class: "ck-thread" });
       const typing = h("div", { class: "msg teacher typing hidden" }, h("span"), h("span"), h("span"));
       const block = h("div", { class: "checkpoint" },
-        h("div", { class: "ck-head" }, icon("question"), h("strong", {}, final ? "Final questions" : "Question break"), h("small", {}, section), status),
+        h("div", { class: "ck-head" }, icon("question"), h("strong", {}, final ? "Final questions" : raised ? "Your question" : "Question break"), h("small", {}, section)),
         thread, typing);
-      chat.append(block);
-      const scroll = () => { chat.scrollTop = chat.scrollHeight; };
-      scroll();
-      stateLabel.textContent = "Question break";
+      liveThread.replaceChildren(block);
+      liveCard.querySelector(".ls-live-title").textContent = final ? "Final questions" : raised ? "Your question" : "Question break";
+      liveCard.classList.remove("hidden");
+      live = block;
+      const scroll = () => { liveThread.scrollTop = liveThread.scrollHeight; };
+      setState("Question break");
       const add = (cls, text, extra) => { thread.append(h("div", { class: `msg ${cls}` }, h("div", { class: "bubble" }, text), extra)); scroll(); };
       return {
-        thinking(on) { typing.classList.toggle("hidden", !on); stateLabel.textContent = on ? "Thinking…" : "Question break"; avatar?.setMood(on ? "thinking" : "happy"); scroll(); },
-        setLimit(max) { limitLabel.textContent = `Up to ${max} question(s) in this break`; },
-        setCount(asked, max) { limitLabel.textContent = `${asked} of ${max} question(s) asked`; },
-        teacher(text, opts = {}) {
-          add(`teacher ${opts.prompt ? "prompt" : ""}`, text, opts.passed ? h("span", { class: "msg-tag" }, `Passed to ${info.teacher}`) : null);
-        },
-        student(text) { add("student", text); questionCount += 1; qCount.textContent = questionCount; qCount.classList.remove("hidden"); },
+        thinking(on) { typing.classList.toggle("hidden", !on); setState(on ? "Thinking…" : "Question break"); avatar?.setMood(on ? "thinking" : "happy"); scroll(); },
+        setLimit() {},
+        setCount() {},
+        teacher(text, opts = {}) { add(`teacher ${opts.prompt ? "prompt" : ""}`, text, opts.passed ? h("span", { class: "msg-tag" }, `Passed to ${info.teacher}`) : null); },
+        student(text) { add("student", text); },
         note(text) { add("system", text); },
-        // Waits for a student's question. After `seconds` with nobody typing, it resolves "" (no doubts).
         ask(seconds) {
-          avatar?.setMood("happy");  // friendly while waiting for a question
-          setComposer(true);
-          stateLabel.textContent = "Listening for questions";
+          avatar?.setMood("happy");
+          setState("Listening for questions");
+          askInput.placeholder = "Ask your doubt, or say “no”…";
+          askBox.classList.add("active");
+          askInput.focus();
           startWait(seconds);
           return new Promise(resolve => {
-            pendingAsk = (v) => { stopWait(); setComposer(false); stateLabel.textContent = "Question break"; resolve(v); };
+            pendingAsk = (v) => { stopWait(); askBox.classList.remove("active"); askInput.placeholder = "Ask a doubt…"; setState("Question break"); resolve(v); };
           });
         },
-        close() { avatar?.setMood("neutral"); status.textContent = "Done"; status.className = "ck-status done"; setComposer(false); limitLabel.textContent = ""; typing.classList.add("hidden"); },
+        close() {
+          avatar?.setMood("neutral");
+          typing.classList.add("hidden");
+          askBox.classList.remove("active");
+          history.append(block);  // into the drawer's history; the live card fades out
+          if (live === block) { live = null; setTimeout(() => { if (!live) liveCard.classList.add("hidden"); }, 400); }
+          setState(running ? "Teaching" : "Ready");
+        },
       };
     },
   };
 
-  // ---------- question countdown ----------
-  // Counts down only while the class is playing; any typing or dictation stops it for good (no rush).
+  // ---------- live caption: each word lights up as it is spoken ----------
+  let capWords = [], capSeq = 0, capShown = -1, capLive = false;
+  function setCaption(text, live = true) {
+    capWords = text.replace(/`/g, "").split(/\s+/).filter(Boolean).map(w => h("span", { class: "w" }, `${w} `));
+    captionText.replaceChildren(...capWords);
+    capSeq = voice.seq + 1;  // the line the voice starts next
+    capShown = -1;
+    capLive = live;
+    if (!live) capWords.forEach(w => w.classList.add("said"));
+    captionText.scrollTop = 0;
+  }
+  function updateCaption() {
+    if (!capLive || !capWords.length) return;
+    const p = voice.progress();
+    const n = Math.round((p.seq >= capSeq ? p.frac : 0) * capWords.length);
+    if (n === capShown) return;
+    capShown = n;
+    capWords.forEach((w, i) => w.classList.toggle("said", i < n));
+    const cur = capWords[Math.max(0, n - 1)];  // keep the word being said on the last visible line
+    captionText.scrollTop = Math.max(0, cur.offsetTop + cur.offsetHeight - captionText.clientHeight);
+  }
+  setCaption("Press play when the class is ready.", false);
+
+  // ---------- asking ----------
+  let raisedPending = false;
   let waitTimerId = 0, waitLeft = 0, waitTotal = 0;
   function startWait(seconds) {
     stopWait();
@@ -213,65 +250,89 @@ export async function mountClassroom(lectureId, ctx) {
     waitBar.style.width = `${Math.max(0, (100 * waitLeft) / waitTotal)}%`;
     waitText.textContent = player?.paused ? "Paused" : `Moving on in ${Math.ceil(Math.max(0, waitLeft))}s · start typing to ask`;
   }
-  function holdWait() {  // a student started asking: wait as long as they need
+  function holdWait() {
     if (!waitTimerId) return;
     clearInterval(waitTimerId); waitTimerId = 0;
     waitTimer.classList.add("holding");
     waitBar.style.width = "100%";
     waitText.textContent = "Take your time. Press Enter to ask.";
   }
-  function stopWait() {
-    clearInterval(waitTimerId); waitTimerId = 0;
-    waitTimer.classList.add("hidden");
-  }
+  function stopWait() { clearInterval(waitTimerId); waitTimerId = 0; waitTimer.classList.add("hidden"); }
 
-  function setComposer(on) {
-    for (const el of [composerInput, sendBtn, micBtn, noDoubtBtn]) el.disabled = !on;
-    if (!dictation) micBtn.disabled = true;
-    composer.classList.toggle("active", on);
-    if (on) composerInput.focus();
-  }
   function submit(text) {
-    if (!pendingAsk) return;
-    const r = pendingAsk; pendingAsk = null;
-    composerInput.value = ""; autosize();
-    r(text.trim());
+    text = text.trim();
+    askInput.value = ""; autosize(); renderSend();
+    if (pendingAsk) { const r = pendingAsk; pendingAsk = null; r(text); return; }
+    if (!text) return;
+    if (!running || !player) { toast("Start the class first, then ask.", "info"); return; }
+    // Mid-lesson: the teacher answers right after the current sentence.
+    player.raiseHand(text);
+    raisedPending = true;
+    liveThread.replaceChildren(h("div", { class: "msg student raised" }, h("div", { class: "bubble" }, text)),
+      h("div", { class: "msg system" }, h("div", { class: "bubble" }, `${info.teacher.split(" ")[0] || "The teacher"} will answer right after this sentence.`)));
+    liveCard.querySelector(".ls-live-title").textContent = "Your question";
+    liveCard.classList.remove("hidden");
+    if (player.paused) { player.resume(); renderPlay(); }
   }
-  const autosize = () => { composerInput.style.height = "auto"; composerInput.style.height = `${Math.min(composerInput.scrollHeight, 120)}px`; };
-  composerInput.addEventListener("input", () => { autosize(); if (composerInput.value.trim()) holdWait(); });
-  composerInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (composerInput.value.trim()) submit(composerInput.value); }
-  });
-  sendBtn.addEventListener("click", () => composerInput.value.trim() && submit(composerInput.value));
-  noDoubtBtn.addEventListener("click", () => submit(""));
+  const autosize = () => { askInput.style.height = "auto"; askInput.style.height = `${Math.min(askInput.scrollHeight, 120)}px`; };
+  const renderSend = () => { sendBtn.classList.toggle("hidden", !askInput.value.trim()); };
+  askInput.addEventListener("input", () => { autosize(); renderSend(); if (askInput.value.trim()) holdWait(); });
+  askInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (askInput.value.trim()) submit(askInput.value); } });
+  sendBtn.addEventListener("click", () => askInput.value.trim() && submit(askInput.value));
+
+  function openMenu() {
+    const item = (label, ic, fn, disabled) => h("button", { class: "ls-menu-item", disabled, onclick: () => { closeMenu(); fn(); } }, icon(ic), label);
+    plusMenu.replaceChildren(
+      item("No questions, continue", "skip", () => submit(""), !pendingAsk),
+      item("Outline and questions", "layers", () => toggleDrawer(true)),
+      item(captionsOn ? "Hide captions" : "Show captions", "captions", () => captionBtn.click()));
+    plusMenu.classList.remove("hidden");
+    setTimeout(() => document.addEventListener("click", closeMenu, { once: true }));
+  }
+  function closeMenu() { plusMenu.classList.add("hidden"); }
+
+  // The mic: dictation fills the box and sends it when the student stops talking.
   let listening = false;
-  const dictation = createDictation((text) => { composerInput.value = text; autosize(); },
-    () => { listening = false; micBtn.classList.remove("rec"); });
-  if (!dictation) micBtn.title = "Dictation needs Chrome or Safari";
-  micBtn.addEventListener("click", () => {
-    if (!dictation) return;
-    if (listening) { dictation.stop(); return; }
-    listening = true; micBtn.classList.add("rec"); holdWait(); dictation.start();
+  const dictation = createDictation(info.language, (text) => { askInput.value = text; autosize(); renderSend(); }, () => {
+    listening = false; renderMic();
+    if (askInput.value.trim()) submit(askInput.value);
   });
+  if (!dictation) micBtn.title = "Speaking needs Chrome or Safari: type your question instead";
+  micBtn.addEventListener("click", () => {
+    if (!dictation) return toast("Speaking needs Chrome or Safari. Type your question instead.", "info");
+    if (listening) { dictation.stop(); return; }
+    listening = true; renderMic(); holdWait(); askInput.value = ""; dictation.start();
+  });
+  function renderMic() {
+    micBtn.classList.toggle("on", listening);
+    micBtn.title = listening ? "Listening… click to stop" : "Speak your doubt";
+  }
 
   // ---------- controls ----------
-  function setRunning(on) {
-    running = on;
-    stopBtn.disabled = !on;
-    renderPlayBtn();
+  function setState(text) { stateText.textContent = text; }
+  function renderCaptions() { caption.classList.toggle("off", !captionsOn); captionBtn.classList.toggle("active", captionsOn); }
+  function renderMute() { muteBtn.replaceChildren(icon(voice.muted ? "volumeOff" : "volume")); muteBtn.title = voice.muted ? "Unmute" : "Mute"; }
+  function renderPlay() {
+    const playing = running && !player?.paused;
+    playBtn.replaceChildren(icon(playing ? "pause" : "play"));
+    playBtn.title = !running ? "Start (space)" : playing ? "Pause (space)" : "Resume (space)";
+    lesson.classList.toggle("paused", running && !!player?.paused);
+    if (running) setState(player.paused ? "Paused" : stateText.textContent === "Paused" || stateText.textContent === "Ready" ? "Teaching" : stateText.textContent);
   }
-  function renderPlayBtn() {
-    if (!running) playBtn.replaceChildren(icon("play"), "Start class");
-    else if (player.paused) playBtn.replaceChildren(icon("play"), "Resume");
-    else playBtn.replaceChildren(icon("pause"), "Pause");
-    stateLabel.textContent = !running ? stateLabel.textContent : player.paused ? "Paused" : stateLabel.textContent === "Paused" ? "Teaching" : stateLabel.textContent;
-    teacherCard.classList.toggle("paused", !!player?.paused);
+  function togglePen() {
+    const on = !stage.penActive;
+    if (on && stage.env !== "notebook") stage.setEnv("notebook");
+    stage.setPen(on);
+    penBtn.classList.toggle("on", on);
+    clearInkBtn.classList.toggle("hidden", !on);
+    penBtn.title = on ? "Stop drawing" : "Draw on the board";
   }
   function togglePlay() {
     if (!running) return start(0);
     if (player.paused) player.resume(); else player.pause();
-    renderPlayBtn();
+    renderPlay();
   }
+  renderCaptions(); renderMute(); renderPlay();
 
   async function start(from) {
     voice.unlock();
@@ -279,30 +340,39 @@ export async function mountClassroom(lectureId, ctx) {
     const p = new Player({ lectureId, segments, teacher: info.teacher, stage, voice, ui, clock });
     player = p;
     showOverlay(null);
-    setRunning(true);
-    stateLabel.textContent = "Teaching";
+    running = true;
+    setState("Teaching");
+    renderPlay();
     try {
       await p.play(from);
       if (player !== p) return;
-      setRunning(false);
-      await finish(p);
+      running = false; renderPlay();
+      await finish(p, "Class complete.");
     } catch (e) {
       if (player !== p) return;  // replaced by a jump
-      setRunning(false);
-      if (e instanceof Stopped) stoppedOverlay(p);
+      running = false; renderPlay();
+      if (e instanceof Stopped) { if (!p.ended) stoppedOverlay(p); }
       else { console.error(e); toast(`The class stopped: ${e.message}`, "error"); stoppedOverlay(p); }
-    }
+    } finally { followBtn.classList.add("hidden"); }
   }
-
-  function stop() { if (player && running) player.stop(); }
 
   function jump(index) {
     if (running && player && !confirm("Jump to this section? The current step stops.")) return;
+    toggleDrawer(false);
     start(index);
   }
 
+  async function endLesson() {
+    if (!running) { location.hash = studio; return; }
+    if (!confirm("End the lesson now?")) return;
+    const p = player;
+    p.ended = true;  // its Stopped error must not show the "Class stopped" card
+    p.stop();
+    await finish(p, "Lesson ended.");
+  }
+
   function stoppedOverlay(p) {
-    stateLabel.textContent = "Stopped";
+    setState("Stopped");
     const sec = [...sections].reverse().find(s => s.index <= p.cursor);
     showOverlay(h("div", { class: "splash compact" },
       h("div", { class: "splash-badge muted-badge" }, icon("pause")), h("h2", {}, "Class stopped"),
@@ -312,46 +382,46 @@ export async function mountClassroom(lectureId, ctx) {
         h("button", { class: "btn", onclick: () => start(0) }, icon("reset"), "Restart"))));
   }
 
-  async function finish(p) {
-    stateLabel.textContent = "Class complete";
-    caption.textContent = "Class complete.";
-    store.set(lectureId, 0);
-    try { await api.complete(lectureId); header.setStatus("completed"); ctx.setLectureStatus(lectureId, "completed"); } catch {}
+  async function finish(p, title) {
+    running = false; renderPlay();
+    setState(title.replace(/\.$/, ""));
+    setCaption(title, false);
+    const complete = p.cursor >= segments.length;
+    if (complete) {
+      store.set(lectureId, 0);
+      try { await api.complete(lectureId); ctx.setLectureStatus(lectureId, "completed"); } catch {}
+    }
     const s = p.state;
     const item = (label, value) => h("div", { class: "sum-item" }, h("strong", {}, value), h("span", {}, label));
     showOverlay(h("div", { class: "splash" },
-      h("div", { class: "splash-badge ok" }, icon("checkCircle")), h("h2", {}, "Class complete."),
+      h("div", { class: `splash-badge ${complete ? "ok" : "muted-badge"}` }, icon(complete ? "checkCircle" : "stop")), h("h2", {}, title),
       h("p", { class: "muted" }, `${info.topic} · taught for ${info.teacher}`),
       h("div", { class: "sum-grid" }, item("sections covered", s.covered.length), item("doubts asked", s.doubtsAsked),
         item(`passed to ${info.teacher}`, s.passed), item("failed actions", s.failed)),
       h("div", { class: "splash-actions" },
-        h("button", { class: "btn primary", onclick: () => start(0) }, icon("reset"), "Run again"),
-        h("a", { class: "btn", href: `#/lecture/${encodeURIComponent(lectureId)}/studio` }, "Back to Studio"))));
+        complete ? null : h("button", { class: "btn primary", onclick: () => start(p.cursor) }, icon("play"), "Continue"),
+        h("button", { class: `btn ${complete ? "primary" : ""}`, onclick: () => start(0) }, icon("reset"), "Run again"),
+        h("a", { class: "btn", href: studio }, "Back to Studio"))));
   }
 
-  // ---------- live visual ----------
-  let raf = 0;
-  const barEls = [...bars.children];
-  let smooth = 0;
+  // ---------- live visual: the teacher's ring moves with the voice ----------
+  let raf = 0, smooth = 0;
   const loop = () => {
-    const lvl = voice.level();
-    smooth = smooth * 0.7 + lvl * 0.3;
-    teacherCard.style.setProperty("--level", smooth.toFixed(3));
-    teacherCard.classList.toggle("speaking", smooth > 0.04);
-    barEls.forEach((b, i) => { b.style.transform = `scaleY(${0.15 + smooth * (0.5 + 0.5 * Math.abs(Math.sin(performance.now() / (140 + i * 37) + i)))})`; });
-    if (voice.mode !== "unknown") voiceChip.lastChild.textContent = voice.mode === "gnani" ? "Gnani voice" : "Browser voice";
+    smooth = smooth * 0.7 + voice.level() * 0.3;
+    avatarBtn.style.setProperty("--level", smooth.toFixed(3));
+    avatarBtn.classList.toggle("speaking", smooth > 0.04);
+    updateCaption();
     raf = requestAnimationFrame(loop);
   };
   loop();
 
   const onKey = (e) => {
-    if (e.code !== "Space" || !running || /INPUT|TEXTAREA|BUTTON/.test(document.activeElement?.tagName)) return;
+    if (e.code !== "Space" || !running || /INPUT|TEXTAREA|BUTTON|SELECT/.test(document.activeElement?.tagName)) return;
     e.preventDefault(); togglePlay();
   };
   document.addEventListener("keydown", onKey);
 
-  // ---------- talking avatar (optional) ----------
-  // The 3D teacher plays and lip-syncs the same voice. Off: the class runs exactly as before (audio only).
+  // ---------- talking avatar (optional): the 3D teacher in the round portrait ----------
   let avatar = null, avatarLoading = false;
   const AVATAR_PREF = "eris-avatar";
   const avatarWanted = () => { try { return localStorage.getItem(AVATAR_PREF) !== "0"; } catch { return true; } };
@@ -360,24 +430,20 @@ export async function mountClassroom(lectureId, ctx) {
   async function enableAvatar() {
     if (avatar || avatarLoading || !info.avatar?.enabled || !webgl()) return;
     avatarLoading = true;
-    avatarView.replaceChildren(h("div", { class: "avatar-loading" }, h("span", { class: "spinner" }), "Loading the teacher…"));
     avatarView.classList.remove("hidden");
-    teacherCard.classList.add("with-avatar");
+    avatarBtn.classList.add("with-3d");
     try {
       const { createAvatar } = await import("./avatar/avatar.js");  // three.js loads only when the avatar is used
       const created = await createAvatar({ container: avatarView, modelUrl: info.avatar.model_url || undefined });
-      if (!avatarLoading) { created.dispose(); return; }  // turned off (or left the page) while loading
+      if (!avatarLoading) { created.dispose(); return; }
       avatar = created;
-      window.erisAvatar = avatar;  // handy in the browser console (debug overlay values: erisAvatar.debug)
-      avatarView.querySelector(".avatar-loading")?.remove();
+      window.erisAvatar = avatar;
       voice.setAvatar(avatar);
     } catch (e) {
       console.warn("[avatar] could not load, audio only:", e);
-      toast("The 3D teacher could not load. The class continues with audio only.", "error", 5000);
       disableAvatar();
     } finally { avatarLoading = false; }
   }
-
   function disableAvatar() {
     avatarLoading = false;
     voice.setAvatar(null);
@@ -386,21 +452,19 @@ export async function mountClassroom(lectureId, ctx) {
     window.erisAvatar = undefined;
     avatarView.replaceChildren();
     avatarView.classList.add("hidden");
-    teacherCard.classList.remove("with-avatar");
+    avatarBtn.classList.remove("with-3d");
   }
-
   function toggleAvatar() {
     const on = !(avatar || avatarLoading);
     try { localStorage.setItem(AVATAR_PREF, on ? "1" : "0"); } catch {}
     on ? enableAvatar() : disableAvatar();
-    avatarToggle.classList.toggle("off", !on);
   }
-  avatarToggle.classList.toggle("off", !avatarWanted());
   if (avatarWanted()) enableAvatar();
 
   return () => {
     disableAvatar();
     cancelAnimationFrame(raf);
+    clearInterval(clockTimer);
     document.removeEventListener("keydown", onKey);
     if (player) player.stop();
     player = null;

@@ -124,7 +124,7 @@ def teaching_problems(segments, figs=None, slide_count=None, env=None):
         elif seg["kind"] == "say":
             if current:
                 current["words"] += len(seg["text"].split())
-            long_ones += [s for s in re.split(r"(?<=[.!?])\s+", seg["text"]) if len(s.split()) > config.MAX_SENTENCE_WORDS]
+            long_ones += [s for s in re.split(r"(?<=[.!?।॥])\s+", seg["text"]) if len(s.split()) > config.MAX_SENTENCE_WORDS]
     for sentence in long_ones[:5]:
         problems.append(f"this spoken sentence has {len(sentence.split())} words; split it into short sentences "
                         f"(under 20 words each): \"{sentence[:90]}...\"")

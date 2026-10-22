@@ -1,7 +1,7 @@
 // Studio: upload material, describe the teacher, generate, review/edit and approve the script.
 
 import { api } from "./api.js";
-import { h, icon, toast, confirmDialog, sleep, formatDuration } from "./ui.js";
+import { h, icon, toast, confirmDialog, sleep, formatDuration, languageSelect } from "./ui.js";
 import { lectureHeader } from "./header.js";
 import { renderScriptDoc, scriptStats } from "./script-view.js";
 
@@ -79,17 +79,20 @@ export async function mountStudio(lectureId, ctx) {
   const durationInput = h("input", { class: "input", type: "number", min: 5, max: 120, step: 5, value: data.manifest?.duration_min || template.duration_min || 15 });
   const speakingInput = h("input", { class: "input", type: "number", min: 1, max: 120, step: 1,
     value: Math.min(data.manifest?.speaking_min || template.speaking_min || 5, +durationInput.value) });
+  const languageInput = languageSelect(data.manifest?.language || template.language, template.languages);
+  const languageName = () => languageInput.selectedOptions[0]?.textContent || "English";
 
   // The teacher's fields are saved as they are typed, so they are kept without generating a script.
   let setupTimer = null;
   function saveSetupSoon() {
     clearTimeout(setupTimer);
     setupTimer = setTimeout(() => api.saveSetup(lectureId, { persona, topic: topicInput.value.trim(),
-      duration_min: +durationInput.value || 15, speaking_min: +speakingInput.value || 5 }).catch(e => toast(`Could not save: ${e.message}`, "error")), 700);
+      duration_min: +durationInput.value || 15, speaking_min: +speakingInput.value || 5, language: languageInput.value }).catch(e => toast(`Could not save: ${e.message}`, "error")), 700);
   }
   topicInput.addEventListener("input", saveSetupSoon);
   durationInput.addEventListener("input", saveSetupSoon);
   speakingInput.addEventListener("input", saveSetupSoon);
+  languageInput.addEventListener("change", saveSetupSoon);
 
   const personaBody = h("div", { class: "persona" });
   function renderPersona() {
@@ -160,7 +163,8 @@ export async function mountStudio(lectureId, ctx) {
         h("label", { class: "field span-2" }, h("span", {}, "Topic"), topicInput),
         h("label", { class: "field" }, h("span", {}, "Total lecture time (min)"), durationInput),
         h("label", { class: "field" }, h("span", {}, "Speaking time (min)"), speakingInput),
-        h("div", { class: "field" }, h("span", {}, "Voice"), h("div", { class: "pill-note" }, icon("volume"), "Set in .env (Gnani or browser)")))),
+        h("label", { class: "field" }, h("span", {}, "Teaching language"), languageInput),
+        h("div", { class: "field" }, h("span", {}, "Voice"), h("div", { class: "pill-note" }, icon("volume"), "Gnani voice for the language (or browser)")))),
     h("section", { class: "card" },
       h("div", { class: "card-header" }, h("span", { class: "step-num" }, "3"), h("h3", {}, "Teacher persona"),
         h("div", { class: "spacer" }),
@@ -178,7 +182,7 @@ export async function mountStudio(lectureId, ctx) {
     summaryBody.replaceChildren(...[
       row("file", files.length ? `${files.length} file${files.length > 1 ? "s" : ""}: ${files.join(", ")}` : "No material yet"),
       row("user", persona.Teacher?.Name || "No teacher yet"),
-      row("clock", `${topicInput.value || "No topic"} · ${durationInput.value} min lecture, ${speakingInput.value} min speaking`),
+      row("clock", `${topicInput.value || "No topic"} · ${durationInput.value} min lecture, ${speakingInput.value} min speaking · ${languageName()}`),
       data.manifest?.environments ? envChips(data.manifest.environments) : null].filter(Boolean));
   }
 
@@ -478,7 +482,8 @@ export async function mountStudio(lectureId, ctx) {
     if (!(speaking >= 1 && speaking <= duration)) return toast("Speaking time must be 1 minute up to the total lecture time.", "error");
     if (state.segments.length && !await confirmDialog("Regenerate the script?", "This replaces the current script, including any edits.", "Regenerate")) return;
     try {
-      await api.generate(lectureId, { persona, topic: topicInput.value.trim(), duration_min: duration, speaking_min: speaking });
+      await api.generate(lectureId, { persona, topic: topicInput.value.trim(), duration_min: duration, speaking_min: speaking,
+        language: languageInput.value });
       data.job = { status: "running", steps: [], error: "" };
       data.judge = null;  // the old quality result belongs to the old script
       renderQuality(); renderLog(); renderActions(); setTab("log");

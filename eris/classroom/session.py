@@ -63,7 +63,8 @@ def start_doubts(lecture_id, manifest):
     """Common setup for session and the `doubts` test command."""
     set_lecture(lecture_id)
     persona = manifest["persona"]
-    agent = build_doubt_agent(doubt_prompt(persona, persona_to_text(persona), manifest["topic"]))
+    agent = build_doubt_agent(doubt_prompt(persona, persona_to_text(persona), manifest["topic"],
+                                           config.lecture_language(manifest)))
     log_path = config.lecture_dir(lecture_id) / "doubts_log.md"
     return agent, log_path
 

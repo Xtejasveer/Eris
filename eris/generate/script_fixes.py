@@ -194,7 +194,7 @@ def fix_flow_order(text):
             nxt = blocks[k + 1] if k + 1 < len(blocks) else ""
             before, after = _say_line(lines, i - 1, -1), _say_line(lines, i + 1, 1)
             if label and before is not None and said_too_early(
-                    re.split(r"(?<=[.!?])\s+", lines[before].strip())[-1],
+                    re.split(r"(?<=[.!?।॥])\s+", lines[before].strip())[-1],
                     lines[after].split(". ")[0] if after is not None else "", label, nxt):
                 lines.insert(before, lines.pop(i))
                 moved += 1
