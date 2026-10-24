@@ -2,12 +2,17 @@
 // appear on it as cards); a floating bar at the bottom holds the teacher, playback, the live caption, the pen,
 // the question box and the mic. Students can ask at any time: a question typed mid-lesson is answered right
 // after the current sentence.
+//
+// A shared lesson (opts.postId) plays the locked version the teacher shared. For a student it is their own session:
+// it resumes where they left off, programs show their approved output, and every spoken line they hear (with the
+// tab in view) is reported, so the teacher sees attendance: present once every line has been heard.
 
 import { api } from "./api.js";
 import { h, icon, toast, initials, formatDuration } from "./ui.js";
 import { Stage } from "./stage.js";
 import { Voice, createDictation } from "./voice.js";
 import { Player, Stopped, ClassClock } from "./player.js";
+import { renderScriptDoc } from "./script-view.js";
 
 const cursorKey = (id) => `eris-cursor-${id}`;
 const store = {
@@ -19,16 +24,24 @@ const pref = {
   set(k, v) { try { localStorage.setItem(`eris-${k}`, String(v)); } catch {} },
 };
 
-export async function mountClassroom(lectureId, ctx) {
+export async function mountClassroom(lectureId, ctx, opts = {}) {
   const { main } = ctx;
-  const studio = `#/lecture/${encodeURIComponent(lectureId)}/studio`;
+  const postId = opts.postId || null;
   main.replaceChildren(h("div", { class: "page" }, h("div", { class: "empty" }, h("div", { class: "spinner" }), "Opening the classroom…")));
   let info;
-  try { info = await api.classData(lectureId); }
+  try {
+    info = postId ? await api.postClass(postId) : await api.classData(lectureId);
+    if (postId) lectureId = info.lecture_id;
+  }
   catch (e) {
     main.replaceChildren(h("div", { class: "page" }, h("div", { class: "callout error" }, icon("alert"), e.message)));
     return null;
   }
+  const student = info.role === "student";
+  // Where "back" goes: the course for a shared lesson, Studio otherwise.
+  const studio = postId ? `#/course/${info.course.id}` : `#/lecture/${encodeURIComponent(lectureId)}/studio`;
+  const backLabel = postId ? "Back to course" : "Back to Studio";
+  const lessonMeta = postId ? { post_id: postId, version_id: info.version_id } : {};
   if (!info.ready) {
     main.replaceChildren(h("div", { class: "page" },
       h("div", { class: "card empty not-ready" }, h("div", { class: "empty-icon" }, icon("class")),
@@ -66,7 +79,14 @@ export async function mountClassroom(lectureId, ctx) {
 
   // The teacher and the playback controls, together at the top right.
   const playBtn = h("button", { class: "ls-ctl ls-play", title: "Start (space)", onclick: () => togglePlay() }, icon("play"));
+  // The teacher previewing a shared lesson can read the script students get, and regenerate it in Studio.
+  const preview = postId && !student;
+  const scriptBtn = preview ? h("button", { class: "ls-pill", title: "Read the script students get",
+    onclick: () => toggleScript() }, icon("book"), "Script") : null;
+  const regenBtn = preview ? h("button", { class: "ls-pill", title: "Write this lesson's script again, in Studio",
+    onclick: () => regenerate() }, icon("sparkle"), "Regenerate") : null;
   const topRight = h("div", { class: "ls-top-right" },
+    scriptBtn, regenBtn,
     h("div", { class: "ls-controls" }, playBtn),
     clockChip,
     h("button", { class: "ls-end", title: "End the lesson", onclick: () => endLesson() }, h("span", { class: "ls-end-dot" }), "End"));
@@ -127,7 +147,23 @@ export async function mountClassroom(lectureId, ctx) {
     topLeft.querySelector(".ls-panel-btn").classList.toggle("active", lesson.classList.contains("drawer-open"));
   };
 
-  const lesson = h("div", { class: "lesson" }, board, topLeft, topCenter, topRight, followBtn, bar, drawer);
+  // ---------- the script panel (teacher preview) ----------
+  const scriptPanel = preview ? h("aside", { class: "ls-script" },
+    h("div", { class: "ls-script-head" },
+      h("div", {}, h("strong", {}, "Script"), h("small", {}, `Version ${info.version_number || 1} · what students get`)),
+      h("button", { class: "ls-mini", onclick: () => toggleScript(false) }, "Close")),
+    h("p", { class: "ls-script-note" }, "Regenerating writes a new script in Studio. Students keep this version until you approve the new one and share the update."),
+    h("div", { class: "ls-script-body" }, renderScriptDoc(segments, info.teacher, { lectureId }))) : null;
+  function toggleScript(on) {
+    lesson.classList.toggle("script-open", on);
+    scriptBtn?.classList.toggle("active", lesson.classList.contains("script-open"));
+  }
+  async function regenerate() {
+    if (running && player && !player.paused) { player.pause(); renderPlay(); }
+    location.hash = `#/lecture/${encodeURIComponent(lectureId)}/studio/regenerate`;
+  }
+
+  const lesson = h("div", { class: "lesson" }, board, topLeft, topCenter, topRight, followBtn, bar, drawer, scriptPanel);
   main.replaceChildren(lesson);
 
   const clockTimer = setInterval(() => {
@@ -139,12 +175,14 @@ export async function mountClassroom(lectureId, ctx) {
   // ---------- overlays ----------
   function showOverlay(content) { overlay.replaceChildren(content || ""); overlay.classList.toggle("hidden", !content); }
   function splash() {
-    const saved = store.get(lectureId);
+    const saved = postId ? (info.progress?.completed ? 0 : info.progress?.last_index || 0) : store.get(lectureId);
     const savedSec = saved > 0 && saved < segments.length ? [...sections].reverse().find(s => s.index <= saved) : null;
     const item = (ic, label, value) => h("div", { class: "sp-item" }, icon(ic), h("span", {}, label), h("strong", {}, value));
     showOverlay(h("div", { class: "splash" },
       h("div", { class: "splash-badge" }, icon("class")),
       h("h2", {}, info.topic), h("p", { class: "muted" }, `Taught by the AI substitute for ${info.teacher}`),
+      student ? h("p", { class: `splash-progress ${info.progress?.completed ? "done" : ""}` },
+        info.progress?.completed ? "Completed: you're marked present" : `${info.progress?.percent || 0}% heard · present at 100%`) : null,
       h("div", { class: "sp-grid" }, item("clock", "Length", formatDuration(info.estimated_min)), item("layers", "Sections", sections.length),
         item("question", "Question breaks", segments.filter(s => s.name === "DOUBT_CHECK").length), item("volume", "Voice", info.voice ? "Gnani" : "Browser")),
       h("div", { class: "splash-actions" },
@@ -153,11 +191,46 @@ export async function mountClassroom(lectureId, ctx) {
   }
   splash();
 
+  // ---------- attendance: the spoken lines this student heard ----------
+  const heard = new Set(info.played || []);
+  const unsent = new Set();
+  let lineInView = !document.hidden, presentShown = !!info.progress?.completed, lastIndex = info.progress?.last_index || 0;
+  const sayTotal = segments.filter(s => s.kind === "say").length;
+  async function sendProgress() {
+    if (!student || !unsent.size) return;
+    const lines = [...unsent];
+    unsent.clear();
+    try {
+      const res = await api.progress(postId, { version_id: info.version_id, lines, last_index: lastIndex });
+      if (res.completed && !presentShown) { presentShown = true; toast("Lesson complete: you're marked present.", "success", 6000); }
+    } catch { lines.forEach(i => unsent.add(i)); }  // tried again with the next batch
+  }
+  const progressTimer = student ? setInterval(sendProgress, 5000) : 0;
+  const beacon = () => {  // the page is closing: send what is left
+    if (!student || !unsent.size) return;
+    const body = JSON.stringify({ version_id: info.version_id, lines: [...unsent], last_index: lastIndex });
+    navigator.sendBeacon?.(`/api/posts/${postId}/progress`, new Blob([body], { type: "application/json" }));
+    unsent.clear();
+  };
+  // A student's lesson pauses when they leave the tab: a line only counts if it played while they could hear it.
+  const onVisibility = () => {
+    if (!document.hidden) return;
+    lineInView = false;
+    if (student && running && player && !player.paused) { player.pause(); renderPlay(); }
+    beacon();
+  };
+  document.addEventListener("visibilitychange", onVisibility);
+  window.addEventListener("pagehide", beacon);
+
   // ---------- player UI ----------
   let pendingAsk = null;
   let live = null;  // the question break (or raised question) on screen now
   const ui = {
-    onCaption(text) { setCaption(text); },
+    onCaption(text) { lineInView = !document.hidden; setCaption(text); },
+    onSpoken(index) {
+      if (!student || !lineInView || heard.has(index)) return;
+      heard.add(index); unsent.add(index);
+    },
     onSection(title) {
       sectionText.textContent = title;
       const cur = [...sections].reverse().find(s => s.title === title && s.index <= (player?.cursor ?? 0)) || sections.find(s => s.title === title);
@@ -167,7 +240,10 @@ export async function mountClassroom(lectureId, ctx) {
         li.classList.toggle("done", cur && idx < cur.index);
       });
     },
-    onProgress(i, n) { store.set(lectureId, i >= n ? 0 : i); },
+    onProgress(i, n) {
+      lastIndex = i;
+      if (!postId) store.set(lectureId, i >= n ? 0 : i);
+    },
     cancelAsk() { if (pendingAsk) { const r = pendingAsk; pendingAsk = null; r(""); } stopWait(); },
     openCheckpoint(section, final) {
       history.querySelector(".chat-empty")?.remove();
@@ -332,7 +408,7 @@ export async function mountClassroom(lectureId, ctx) {
   async function start(from) {
     voice.unlock();
     if (player) player.stop();
-    const p = new Player({ lectureId, segments, teacher: info.teacher, stage, voice, ui, clock });
+    const p = new Player({ lectureId, segments, teacher: info.teacher, stage, voice, ui, clock, liveCode: !student, lesson: lessonMeta });
     player = p;
     showOverlay(null);
     running = true;
@@ -382,21 +458,25 @@ export async function mountClassroom(lectureId, ctx) {
     setState(title.replace(/\.$/, ""));
     setCaption(title, false);
     const complete = p.cursor >= segments.length;
-    if (complete) {
+    if (complete && !postId) {
       store.set(lectureId, 0);
-      try { await api.complete(lectureId); ctx.setLectureStatus(lectureId, "completed"); } catch {}
+      try { await api.complete(lectureId); ctx.setLectureStatus?.(lectureId, "completed"); } catch {}
     }
+    await sendProgress();
+    const missed = student ? sayTotal - [...heard].filter(i => segments[i]?.kind === "say").length : 0;
     const s = p.state;
     const item = (label, value) => h("div", { class: "sum-item" }, h("strong", {}, value), h("span", {}, label));
     showOverlay(h("div", { class: "splash" },
       h("div", { class: `splash-badge ${complete ? "ok" : "muted-badge"}` }, icon(complete ? "checkCircle" : "stop")), h("h2", {}, title),
       h("p", { class: "muted" }, `${info.topic} · taught for ${info.teacher}`),
+      student ? h("p", { class: `splash-progress ${missed <= 0 ? "done" : ""}` }, missed <= 0 ? "You're marked present for this lesson."
+        : `${missed} line${missed === 1 ? "" : "s"} not heard yet (skipped, or played while away). Play them to be marked present.`) : null,
       h("div", { class: "sum-grid" }, item("sections covered", s.covered.length), item("doubts asked", s.doubtsAsked),
         item(`passed to ${info.teacher}`, s.passed), item("failed actions", s.failed)),
       h("div", { class: "splash-actions" },
         complete ? null : h("button", { class: "btn primary", onclick: () => start(p.cursor) }, icon("play"), "Continue"),
         h("button", { class: `btn ${complete ? "primary" : ""}`, onclick: () => start(0) }, icon("reset"), "Run again"),
-        h("a", { class: "btn", href: studio }, "Back to Studio"))));
+        h("a", { class: "btn", href: studio }, backLabel))));
   }
 
   // ---------- the live caption follows the voice ----------
@@ -467,6 +547,10 @@ export async function mountClassroom(lectureId, ctx) {
   }
 
   return () => {
+    clearInterval(progressTimer);
+    sendProgress();
+    document.removeEventListener("visibilitychange", onVisibility);
+    window.removeEventListener("pagehide", beacon);
     disableAvatar();
     for (const v of [tutorIdle, tutorTalking]) { v.pause(); v.removeAttribute("src"); v.load(); }
     cancelAnimationFrame(raf);

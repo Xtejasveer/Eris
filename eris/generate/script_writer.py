@@ -7,7 +7,7 @@ from datetime import datetime
 from eris import config
 from eris.material import figures
 from eris.persona import persona_to_text
-from eris.prompts import lesson_prompt, research_prompt, staging_prompt
+from eris.prompts import lesson_prompt, prerequisite_rule, research_prompt, staging_prompt
 from eris.generate.script_parser import estimate_minutes, parse_script, word_budget
 from eris.generate.script_agent import run_research
 from eris.generate.quality_loop import unflag_pairs
@@ -299,7 +299,8 @@ def run_generate(lecture_id):
     print(f"[generate] step 1/3: researching the material with {config.LLM_MODEL} ...")
     env = figures.lecture_environments(lecture_id, manifest, count_slides(lecture_id))
     env_text = "\n\n# Environments for this class\n" + figures.describe_environments(env)
-    notes = run_research(research_prompt(*args) + env_text, f"script_{lecture_id}")
+    prerequisite = prerequisite_rule(manifest)  # a prerequisite lesson teaches only the groundwork
+    notes = run_research(research_prompt(*args) + prerequisite + env_text, f"script_{lecture_id}")
     figs = figures.load(lecture_id)  # graphs and diagrams found in the material at index time
     notes += env_text
     # Every figure with how to teach it (decided at index time): drawn, interactive, or shown on its slide.
@@ -324,7 +325,7 @@ def run_generate(lecture_id):
           f"{concepts} concept section(s)")
     print(f"[generate] step 2/3: writing the lesson (~{budget} words), teaching only ...")
     lesson_text, sections, lesson_report, problems = write_lesson(
-        lesson_prompt(*args, plan, language), notes, budget, persona, manifest["topic"], figs, env, len(slides), pictures, rounds,
+        lesson_prompt(*args, plan, language) + prerequisite, notes, budget, persona, manifest["topic"], figs, env, len(slides), pictures, rounds,
         material_text(lecture_id))
     lesson_file = config.lecture_dir(lecture_id) / "lesson.md"
     lesson_file.write_text(lesson_text + "\n", encoding="utf-8")  # kept for review: what was taught before staging

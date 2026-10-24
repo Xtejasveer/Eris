@@ -35,6 +35,8 @@ SPEAKING_WPM = _int_env("SPEAKING_WPM", 115)  # with the slower voice and pauses
 
 # --- Voice (Gnani). Only needed for `render` and `session --voice/--mic` ---
 GNANI_API_KEY = os.getenv("GNANI_API_KEY", "").strip()
+# The sign-in page offers the demo accounts (python main.py seed). Local pilots only: turn off for real users.
+DEMO_LOGINS = os.getenv("ERIS_DEMO_LOGINS", "true").strip().lower() in ("1", "true", "yes")
 TTS_VOICE = os.getenv("TTS_VOICE", "Kaveri").strip()
 TTS_LANGUAGE = os.getenv("TTS_LANGUAGE", "en-IN").strip()
 STT_LANGUAGE = os.getenv("STT_LANGUAGE", "en-IN").strip()

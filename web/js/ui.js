@@ -83,7 +83,7 @@ export function toast(message, kind = "info", ms = 3800) {
 }
 
 // A modal that resolves with the clicked action's value (or null when dismissed).
-export function modal({ title, text, body, actions }) {
+export function modal({ title, text, body, actions, wide = false }) {
   return new Promise((resolve) => {
     const root = $("#modal-root");
     const close = (value) => { root.innerHTML = ""; document.removeEventListener("keydown", onKey); resolve(value); };
@@ -95,7 +95,7 @@ export function modal({ title, text, body, actions }) {
         if (v !== undefined) close(v);
       } }, a.label));
     }
-    const box = h("div", { class: "modal", role: "dialog", "aria-modal": "true" },
+    const box = h("div", { class: `modal ${wide ? "wide" : ""}`, role: "dialog", "aria-modal": "true" },
       h("div", { class: "modal-head" }, h("h2", {}, title), text ? h("p", {}, text) : null),
       body ? h("div", { class: "modal-body" }, body) : null, foot);
     const backdrop = h("div", { class: "modal-backdrop", onmousedown: (e) => { if (e.target === backdrop) close(null); } }, box);
@@ -119,6 +119,23 @@ export function formatDuration(minutes) {
   const m = Math.floor(total / 60), s = total % 60;
   if (!m) return `${s} s`;
   return s ? `${m} min ${s} s` : `${m} min`;
+}
+
+// A warm tint per name, the same every time (sage, terracotta, honey, plum, teal).
+const TINTS = ["primary", "accent", "warning", "violet", "sky"];
+export function avatarTint(name) {
+  let n = 0;
+  for (const ch of String(name)) n = (n * 31 + ch.charCodeAt(0)) >>> 0;
+  const t = TINTS[n % TINTS.length];
+  return `background: var(--${t}-soft); color: var(--${t})`;
+}
+
+// "Oct 30, 5:00 PM" from an ISO date or a datetime-local value.
+export function formatDate(value) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (isNaN(d)) return String(value);
+  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
 export function initials(name) {

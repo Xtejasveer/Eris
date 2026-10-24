@@ -4,6 +4,7 @@ import { api } from "./api.js";
 import { h, icon, toast, confirmDialog, sleep, formatDuration, languageSelect } from "./ui.js";
 import { lectureHeader } from "./header.js";
 import { renderScriptDoc, scriptStats } from "./script-view.js";
+import { showVersions } from "./versions.js";
 
 const LONG_FIELDS = new Set(["Message to class", "Habits", "Order", "Must cover", "Avoid", "Prep", "Reason"]);
 const SECTION_HINTS = {
@@ -14,7 +15,8 @@ const SECTION_HINTS = {
   "Next Class": "Mentioned at the end.",
 };
 
-export async function mountStudio(lectureId, ctx) {
+// opts.regenerate: opened from a lesson preview's Regenerate button: start regenerating right away (it asks first).
+export async function mountStudio(lectureId, ctx, opts = {}) {
   const { main } = ctx;
   let alive = true;
   let data, template;
@@ -27,7 +29,9 @@ export async function mountStudio(lectureId, ctx) {
   }
 
   const status = () => data.manifest?.status || "new";
-  const header = lectureHeader(lectureId, "studio", status());
+  const header = lectureHeader(lectureId, "studio", status(), data.course,
+    data.course ? h("button", { class: "btn sm", title: "Every approved script of this lesson, and which one the class has",
+      onclick: () => showVersions(data.course.lesson_id) }, icon("layers"), "Versions") : null);
   const state = { tab: "preview", dirty: false, busy: false, segments: data.segments, errors: data.errors };
 
   // ---------- left: setup ----------
@@ -515,7 +519,9 @@ export async function mountStudio(lectureId, ctx) {
     renderActions();
     try {
       const res = await api.approve(lectureId);
-      if (res.ok) toast("Approved. Ready for class.", "success");
+      const v = res.lesson_version;
+      if (res.ok) toast(v ? (v.shared ? `Approved as version ${v.version}. The class gets it now.` : `Approved as version ${v.version}. Share it from the course.`)
+        : "Approved. Ready for class.", "success", 6000);
       else toast(`Approval failed: ${res.errors.length} problem(s)`, "error");
       await reload();
       if (!res.ok) { state.errors = res.errors; renderNotices(); renderGutter(); }
@@ -536,5 +542,9 @@ export async function mountStudio(lectureId, ctx) {
   setTab(data.job?.status === "running" ? "log" : data.failed_draft ? "edit" : "preview");
   if (data.job?.status === "running") poll();
   window.onbeforeunload = () => (state.dirty ? true : undefined);
+  if (opts.regenerate) {
+    history.replaceState(null, "", `#/lecture/${encodeURIComponent(lectureId)}/studio`);  // a reload doesn't ask again
+    generate();
+  }
   return () => { alive = false; window.onbeforeunload = null; };
 }

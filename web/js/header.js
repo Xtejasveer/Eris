@@ -2,15 +2,17 @@
 
 import { h, icon, badge } from "./ui.js";
 
-export function lectureHeader(lectureId, active, status, ...extra) {
+// course: where the lecture sits (a lesson in a course's topic), or null for a lecture outside every course.
+export function lectureHeader(lectureId, active, status, course = null, ...extra) {
   const tab = (key, label, ic) =>
     h("a", { class: `tab ${active === key ? "active" : ""}`, href: `#/lecture/${encodeURIComponent(lectureId)}/${key}` },
       icon(ic), label);
   const statusEl = h("span", { class: "header-status" }, badge(status));
   const el = h("header", { class: "page-header" },
     h("div", { class: "page-title" },
-      h("span", { class: "crumb" }, "Lectures"),
-      h("h1", {}, lectureId)),
+      course ? h("a", { class: "crumb", href: `#/course/${course.course_id}` },
+        `${course.subject}${course.year ? ` · ${course.year}` : ""} › ${course.topic_title}`) : h("span", { class: "crumb" }, "Lectures"),
+      h("h1", {}, course ? `${course.kind === "prerequisite" ? "Prerequisite: " : ""}${course.lesson_title}` : lectureId)),
     statusEl,
     h("div", { class: "spacer" }),
     ...extra,

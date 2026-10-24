@@ -252,6 +252,18 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .ls-clock { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 999px; background: var(--pill); box-shadow: 0 1px 8px rgba(74, 52, 26, .08); font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; color: #6d6458; }
 .ls-clock svg { width: 15px; height: 15px; }
 .ls-clock.warn { color: #e5484d; }
+.ls-pill { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px 0 11px; border: 0; border-radius: 999px; background: var(--pill); color: var(--ink); font: 600 13px var(--font); box-shadow: 0 1px 8px rgba(74, 52, 26, .08); cursor: pointer; }
+.ls-pill svg { width: 16px; height: 16px; }
+.ls-pill:hover, .ls-pill.active { background: #e3eee5; color: #2f6a4e; }
+/* The script panel (a teacher previewing a shared lesson): slides in from the right over the board. */
+.ls-script { position: absolute; right: 0; top: 0; bottom: 0; z-index: 7; width: min(560px, 92vw); display: flex; flex-direction: column; background: var(--surface); color: var(--text); border-left: 1px solid var(--border); box-shadow: var(--shadow-lg); transform: translateX(105%); transition: transform .25s ease; }
+.lesson.script-open .ls-script { transform: none; }
+.ls-script-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 18px 20px 6px; }
+.ls-script-head strong { display: block; font: 600 20px var(--display); }
+.ls-script-head small { color: var(--muted); font-size: 12.5px; }
+.ls-script-note { margin: 4px 20px 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); color: var(--text-2); font-size: 12.5px; line-height: 1.5; }
+.ls-script-body { flex: 1; min-height: 0; overflow-y: auto; }
+.ls-script-body .script-doc { padding: 8px 20px 40px; }
 .ls-end { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px 0 11px; border: 0; border-radius: 999px; background: var(--pill); color: var(--ink); font: 600 13px var(--font); box-shadow: 0 1px 8px rgba(74, 52, 26, .08); cursor: pointer; }
 .ls-end:hover { background: #fdecec; color: #c93a3a; }
 .ls-end-dot { width: 9px; height: 9px; border-radius: 2px; background: #e5484d; }

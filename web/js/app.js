@@ -1,223 +1,120 @@
-// App shell: hash router, sidebar lecture list, overview page and "new lecture".
+// App shell: sign-in, hash router, sidebar (the person's courses), home and course pages, Studio and the lesson.
+//   #/                      home: course grid
+//   #/course/<id>[/<tab>]   a course (stream, classwork, people)
+//   #/lesson/<postId>       a shared lesson (a student's own session, or the teacher's preview)
+//   #/lecture/<id>/studio   build a lesson (teachers);  #/lecture/<id>/class  run its current script (teachers)
 
-import { api, LECTURE_ID_RE } from "./api.js";
-import { h, $, icon, toast, modal, badge, initials, STATUS_ORDER, languageSelect } from "./ui.js";
+import { api, LECTURE_ID_RE, whenSignedOut } from "./api.js";
+import { h, $, toast, initials, avatarTint } from "./ui.js";
 import { mountStudio } from "./studio.js";
 import { mountClassroom } from "./classroom.js";
+import { renderAuth } from "./auth.js";
+import { renderHome, mountCourse, newCourse, joinCourse } from "./courses.js";
 
 const main = $("#main");
 const appEl = $("#app");
+let me = null;
+let courses = [];
 let lectures = [];
 let unmount = null;
 
-// Lectures created here but with no files uploaded yet (the backend only lists folders in data/).
-const PENDING_KEY = "eris-pending-lectures";
-function pending() {
-  try { return JSON.parse(localStorage.getItem(PENDING_KEY) || "[]"); } catch { return []; }
-}
-function setPending(ids) {
-  try { localStorage.setItem(PENDING_KEY, JSON.stringify(ids)); } catch {}
+let coursesLoaded = false;
+export async function refreshCourses() {
+  try { courses = await api.courses(); coursesLoaded = true; } catch (e) { if (e.status !== 401) toast(`Could not load courses: ${e.message}`, "error"); courses = []; }
+  renderSidebar();
+  return courses;
 }
 
 export async function refreshLectures() {
-  try {
-    lectures = await api.lectures();
-  } catch (e) {
-    toast(`Could not load lectures: ${e.message}`, "error");
-    lectures = [];
-  }
-  const known = new Set(lectures.map(l => l.id));
-  const still = pending().filter(id => !known.has(id));
-  setPending(still);
-  lectures = [...lectures, ...still.map(id => ({ id, status: "new", local: true }))]
-    .sort((a, b) => a.id.localeCompare(b.id));
-  renderSidebar();
+  if (me?.role !== "teacher") return [];
+  try { lectures = await api.lectures(); } catch { lectures = []; }
   return lectures;
 }
 
 function currentRoute() {
   const parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
-  if (parts[0] === "lecture" && parts[1]) return { page: parts[2] === "class" ? "class" : "studio", id: parts[1] };
+  if (parts[0] === "lecture" && parts[1]) return { page: parts[2] === "class" ? "class" : "studio", id: parts[1], regenerate: parts[3] === "regenerate" };
+  if (parts[0] === "course" && /^\d+$/.test(parts[1] || "")) return { page: "course", id: +parts[1], tab: parts[2] };
+  if (parts[0] === "lesson" && /^\d+$/.test(parts[1] || "")) return { page: "lesson", id: +parts[1] };
   return { page: "home" };
 }
 
 function renderSidebar() {
   const route = currentRoute();
   const list = $("#lecture-list");
-  list.replaceChildren(...lectures.map(l => h("li", {},
-    h("a", { class: `lecture-link ${route.id === l.id ? "active" : ""}`, href: `#/lecture/${encodeURIComponent(l.id)}/studio`, title: `${l.id} · ${l.status}` },
-      h("span", { class: "lecture-avatar", style: avatarTint(l.id) }, initials(l.id)),
-      h("span", { class: "name" }, l.id),
-      h("span", { class: `dot ${l.status}` })))));
-  if (!lectures.length) list.append(h("li", { class: "muted", style: "padding:6px 11px;font-size:12.5px" }, "No lectures yet"));
+  list.replaceChildren(...courses.map(c => h("li", {},
+    h("a", { class: `lecture-link ${route.page === "course" && route.id === c.id ? "active" : ""}`, href: `#/course/${c.id}`,
+      title: `${c.subject}${c.year ? ` · ${c.year}` : ""}` },
+      h("span", { class: "lecture-avatar", style: avatarTint(c.subject) }, initials(c.subject)),
+      h("span", { class: "name" }, c.subject, c.year ? h("small", {}, c.year) : null),
+      c.to_watch ? h("span", { class: "count-dot", title: `${c.to_watch} to watch` }, c.to_watch) : null))));
+  if (!courses.length) list.append(h("li", { class: "muted", style: "padding:6px 11px;font-size:12.5px" }, "No courses yet"));
   document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("active", route.page === "home" && a.dataset.nav === "home"));
+  const add = $("#new-lecture-btn");
+  add.title = add.ariaLabel = me?.role === "teacher" ? "New course" : "Join a course";
+  const userEl = $("#user-chip");
+  if (me) userEl.replaceChildren(h("span", { class: "lecture-avatar", style: avatarTint(me.name) }, initials(me.name)),
+    h("span", { class: "user-text" }, h("strong", {}, me.name), h("small", {}, me.role === "teacher" ? "Teacher" : "Student")));
 }
 
-export function setLectureStatus(id, status) {
-  const l = lectures.find(x => x.id === id);
-  if (l && l.status !== status) { l.status = status; renderSidebar(); }
-}
-
-export async function newLecture() {
-  // The teacher names the topic and length once, here at the start; the id is suggested from the topic.
-  const topic = h("input", { class: "input", placeholder: "e.g. Introduction to recursion", autocomplete: "off" });
-  const defaults = await api.personaTemplate().catch(() => ({}));  // the configured total and speaking time
-  const duration = h("input", { class: "input", type: "number", min: 5, max: 120, step: 5, value: defaults.duration_min || 15 });
-  const speaking = h("input", { class: "input", type: "number", min: 1, max: 120, step: 1, value: defaults.speaking_min || 5 });
-  const language = languageSelect(defaults.language, defaults.languages);
-  const input = h("input", { class: "input mono", placeholder: "intro_topic_week1", autocomplete: "off", spellcheck: "false" });
-  const hint = h("small", {}, "3–63 characters: letters, digits, _ or -. It names the folder in data/.");
-  let idEdited = false;
-  const slug = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
-  topic.addEventListener("input", () => { if (!idEdited) input.value = slug(topic.value); });
-  input.addEventListener("input", () => { idEdited = true; });
-  for (const el of [topic, duration, speaking, input]) {
-    el.addEventListener("keydown", (e) => { if (e.key === "Enter") e.target.closest(".modal").querySelector(".btn.primary").click(); });
-  }
-  const bad = (el) => { el.classList.add("invalid"); el.focus(); return undefined; };
-  const made = await modal({
-    title: "New lecture",
-    text: "What will this lecture teach? Next, you'll upload the study material and describe the teacher.",
-    body: h("div", { class: "new-lecture-fields" },
-      h("label", { class: "field" }, h("span", {}, "Topic"), topic),
-      h("div", { class: "field-row" },
-        h("label", { class: "field" }, h("span", {}, "Total lecture time (min)"), duration),
-        h("label", { class: "field" }, h("span", {}, "Speaking time (min)"), speaking)),
-      h("label", { class: "field" }, h("span", {}, "Teaching language"), language),
-      h("small", { class: "muted" }, "The script is written for the speaking time; doubts, notes and code fill the rest. "
-        + "The class warns when 10% and 5% of the total time are left."),
-      h("label", { class: "field" }, h("span", {}, "Lecture id"), input, hint)),
-    actions: [
-      { label: "Cancel", value: null },
-      { label: "Create lecture", kind: "primary", value: () => {
-        const t = topic.value.trim(), d = +duration.value, sp = +speaking.value, v = input.value.trim();
-        if (!t) return bad(topic);
-        if (!(d >= 5 && d <= 120)) return bad(duration);
-        if (!(sp >= 1 && sp <= d)) return bad(speaking);
-        if (!LECTURE_ID_RE.test(v)) { hint.style.color = "var(--danger)"; return bad(input); }
-        return { id: v, topic: t, duration_min: d, speaking_min: sp, language: language.value };
-      } },
-    ],
-  });
-  if (!made) return;
-  try {
-    await api.createLecture(made.id, { topic: made.topic, duration_min: made.duration_min, speaking_min: made.speaking_min,
-      language: made.language });
-  } catch (e) { return toast(e.message, "error", 6000); }
-  await refreshLectures();
-  location.hash = `#/lecture/${encodeURIComponent(made.id)}/studio`;
-}
-
-// ---------- overview ----------
-
-const PIPE = [
-  ["upload", "Upload material", "Slides, notes and lab sheets (PPTX, PDF, DOCX)."],
-  ["user", "Describe the teacher", "Tone, pace, habits and what to cover or avoid."],
-  ["sparkle", "Generate a script", "The AI writes narration, notes, code and question breaks."],
-  ["checkCircle", "Review & approve", "Read it as a document, edit, and approve. Code is re-run."],
-  ["class", "Run the class", "The AI teacher speaks, writes and answers student doubts."],
-];
-
-function renderOverview() {
-  const counts = Object.fromEntries(STATUS_ORDER.map(s => [s, lectures.filter(l => l.status === s).length]));
-  const ready = counts.approved + counts.completed;
-  const card = (l) => {
-    const step = STATUS_ORDER.indexOf(l.status);
-    return h("a", { class: "card lecture-card", href: `#/lecture/${encodeURIComponent(l.id)}/${l.status === "approved" ? "class" : "studio"}` },
-      h("div", { class: "top" }, h("span", { class: "lecture-avatar", style: avatarTint(l.id) }, initials(l.id)),
-        h("div", { style: "min-width:0;flex:1" }, h("h3", {}, l.id)), badge(l.status)),
-      h("div", { class: "progress" }, STATUS_ORDER.slice(1).map((_, i) => h("i", { class: i < step ? "on" : "" }))),
-      h("div", { class: "foot" }, h("span", {}, nextStep(l.status)), icon("arrowRight")));
-  };
-  const page = h("div", { class: "page" },
-    h("section", { class: "hero" },
-      h("div", { class: "hero-copy" },
-        h("div", { class: "hero-kicker" }, "Your AI substitute teacher"),
-        h("h1", {}, "Your class, taught ", h("span", { class: "mark" }, "while you're away"), "."),
-        h("p", {}, "Eris turns your material into a lecture you approve, then teaches it in your style: it talks the class through, "
-          + "writes on the board, runs real code and answers every doubt."),
-        h("div", { class: "hero-actions" },
-          h("button", { class: "btn primary lg", onclick: newLecture }, icon("plus"), "New lecture"),
-          lectures.length ? h("a", { class: "btn lg outline", href: `#/lecture/${encodeURIComponent((lectures.find(l => l.status === "approved") || lectures[0]).id)}/studio` }, "Open a lecture") : null)),
-      heroTutor()),
-    h("div", { class: "stat-row" },
-      stat("Lectures", lectures.length), stat("Drafts to review", counts.draft),
-      stat("Ready for class", ready), stat("Classes taught", counts.completed)),
-    h("div", { class: "section-title" }, h("h2", {}, "How it works")),
-    h("div", { class: "pipeline" }, PIPE.map(([ic, t, d], i) => h("div", { class: "card pipe-step" },
-      h("span", { class: "pipe-num" }, i + 1), h("div", { class: "pipe-icon" }, icon(ic)), h("h4", {}, t), h("p", {}, d)))),
-    h("div", { class: "section-title" }, h("h2", {}, "Lectures"),
-      h("button", { class: "btn sm", onclick: newLecture }, icon("plus"), "New")),
-    h("div", { class: "lecture-grid" }, lectures.map(card),
-      h("button", { class: "card lecture-card new-card", onclick: newLecture }, icon("plus"), "Create a lecture")));
-  main.replaceChildren(page);
-}
-
-// The tutor, looping quietly (the same character the class sees), with a handwritten hello.
-function heroTutor() {
-  const v = h("video", { src: "assets/tutor/tutor-idle.mp4", poster: "assets/tutor/tutor-idle-poster.webp", loop: true,
-    playsinline: true, autoplay: true, "aria-hidden": "true", disablepictureinpicture: true });
-  v.muted = true;
-  v.addEventListener("error", () => v.replaceWith(h("img", { src: "assets/tutor/tutor-idle-poster.webp", alt: "" })));
-  return h("div", { class: "hero-tutor" }, h("span", { class: "hero-bubble" }, "Ready when you are!"), v);
-}
-
-// A warm tint per lecture, the same every time (sage, terracotta, honey, plum, teal).
-const TINTS = ["primary", "accent", "warning", "violet", "sky"];
-export function avatarTint(name) {
-  let n = 0;
-  for (const ch of String(name)) n = (n * 31 + ch.charCodeAt(0)) >>> 0;
-  const t = TINTS[n % TINTS.length];
-  return `background: var(--${t}-soft); color: var(--${t})`;
-}
-
-function stat(label, value) {
-  return h("div", { class: "card stat" }, h("div", { class: "label" }, label), h("div", { class: "value" }, value));
-}
-
-function nextStep(status) {
-  return { new: "Upload material & generate", indexed: "Generate a script", draft: "Review & approve",
-    approved: "Ready to teach", completed: "Taught · run again" }[status] || "";
-}
+export function setLectureStatus() {}
 
 // ---------- router ----------
 
 async function route() {
   if (unmount) { try { unmount(); } catch {} unmount = null; }
+  if (!me) return;
   const r = currentRoute();
   applySidebar(r);
   renderSidebar();
   main.scrollTop = 0;
-  if (r.page === "home") { await refreshLectures(); renderOverview(); return; }
-  if (!LECTURE_ID_RE.test(r.id)) { location.hash = "#/"; return; }
-  const ctx = { main, refreshLectures, setLectureStatus };
-  unmount = r.page === "class" ? await mountClassroom(r.id, ctx) : await mountStudio(r.id, ctx);
+  const ctx = { main, refreshLectures, refreshCourses, setLectureStatus };
+  if (r.page === "home") {
+    await Promise.all([refreshCourses(), refreshLectures()]);
+    if (currentRoute().page === "home") renderHome(main, me, courses, lectures);
+    return;
+  }
+  if (!coursesLoaded) await refreshCourses();  // the sidebar lists them on every page
+  if (r.page === "course") { unmount = await mountCourse(r.id, r.tab, ctx); return; }
+  if (r.page === "lesson") { unmount = await mountClassroom(null, ctx, { postId: r.id }); return; }
+  if (me.role !== "teacher" || !LECTURE_ID_RE.test(r.id)) { location.hash = "#/"; return; }
+  unmount = r.page === "class" ? await mountClassroom(r.id, ctx) : await mountStudio(r.id, ctx, { regenerate: r.regenerate });
 }
 
-$("#new-lecture-btn").addEventListener("click", newLecture);
+function showSignIn() {
+  if (unmount) { try { unmount(); } catch {} unmount = null; }
+  me = null;
+  coursesLoaded = false;
+  appEl.classList.add("signed-out");
+  renderAuth(main, (user) => {
+    me = user;
+    appEl.classList.remove("signed-out");
+    toast(`Signed in as ${user.name}.`, "success");
+    route();  // the page they asked for, or home
+  });
+}
+whenSignedOut(() => { if (me) { toast("Please sign in again.", "info"); showSignIn(); } });
+
+$("#new-lecture-btn").addEventListener("click", () => me?.role === "teacher" ? newCourse() : joinCourse());
+$("#signout-btn").addEventListener("click", async () => {
+  try { await api.logout(); } catch {}
+  courses = []; lectures = [];
+  location.hash = "#/";
+  showSignIn();
+});
 $("#theme-btn").addEventListener("click", () => {
   const root = document.documentElement;
   const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
   root.dataset.theme = dark ? "light" : "dark";
   try { localStorage.setItem("eris-theme", root.dataset.theme); } catch {}
 });
-// Sidebar: open on the Overview; on a lecture's Studio and Classroom it folds to an icon rail to give the work
-// room, and slides out over the page while the mouse is on it. "Keep open" pins it open everywhere (remembered).
-const PIN_KEY = "eris-sidebar-pinned";
-const pinned = () => { try { return localStorage.getItem(PIN_KEY) === "1"; } catch { return false; } };
+// Sidebar: open on the home and course pages; in Studio it folds to an icon rail to give the work room, and slides
+// out over the page while the mouse is on it.
 function applySidebar(r = currentRoute()) {
-  appEl.classList.toggle("collapsed", r.page !== "home" && !pinned());
-  appEl.classList.toggle("immersive", r.page === "class");  // the lesson takes the whole window
+  appEl.classList.toggle("collapsed", ["studio", "class", "lesson"].includes(r.page));
+  appEl.classList.toggle("immersive", r.page === "class" || r.page === "lesson");  // the lesson takes the whole window
   appEl.classList.remove("peek");
-  const btn = $("#collapse-btn");
-  btn.querySelector("span").textContent = pinned() ? "Auto-hide" : "Keep open";
-  btn.title = pinned() ? "Fold the sidebar away on lecture pages" : "Keep the sidebar open on lecture pages";
-  btn.classList.toggle("pinned", pinned());
 }
-$("#collapse-btn").addEventListener("click", () => {
-  try { localStorage.setItem(PIN_KEY, pinned() ? "0" : "1"); } catch {}
-  applySidebar();
-});
 let peekTimer = null;
 const sidebarEl = $("#sidebar");
 sidebarEl.addEventListener("mouseenter", () => {
@@ -231,4 +128,4 @@ sidebarEl.addEventListener("mouseleave", () => {
 });
 sidebarEl.addEventListener("click", (e) => { if (e.target.closest("a")) appEl.classList.remove("peek"); });
 window.addEventListener("hashchange", route);
-refreshLectures().then(route);
+api.me().then((user) => { me = user; appEl.classList.remove("signed-out"); route(); }, () => showSignIn());

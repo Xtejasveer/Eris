@@ -15,12 +15,13 @@
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/studio.css">
   <link rel="stylesheet" href="css/classroom.css">
+  <link rel="stylesheet" href="css/platform.css">
   <script>
     try { const t = localStorage.getItem("eris-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
   </script>
 </head>
 <body>
-  <div class="app" id="app">
+  <div class="app signed-out" id="app">
     <aside class="sidebar" id="sidebar">
       <a class="brand" href="#/">
         <span class="brand-mark">E</span>
@@ -28,16 +29,16 @@
       </a>
 
       <nav class="nav">
-        <a class="nav-item" href="#/" data-nav="home" title="Overview">
+        <a class="nav-item" href="#/" data-nav="home" title="Home">
           <svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5V21h-6v-6H9v6H3z"/></svg>
-          <span>Overview</span>
+          <span>Home</span>
         </a>
       </nav>
 
       <div class="sidebar-section">
         <div class="sidebar-heading">
-          <span>Lectures</span>
-          <button class="icon-btn sm" id="new-lecture-btn" title="New lecture" aria-label="New lecture">
+          <span>Courses</span>
+          <button class="icon-btn sm" id="new-lecture-btn" title="New course" aria-label="New course">
             <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
           </button>
         </div>
@@ -45,13 +46,14 @@
       </div>
 
       <div class="sidebar-footer">
+        <div class="user-chip" id="user-chip"></div>
+        <button class="nav-item" id="signout-btn" title="Sign out">
+          <svg viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></svg>
+          <span>Sign out</span>
+        </button>
         <button class="nav-item" id="theme-btn" title="Toggle theme">
           <svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
           <span>Theme</span>
-        </button>
-        <button class="nav-item" id="collapse-btn" title="Keep the sidebar open on lecture pages">
-          <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>
-          <span>Keep open</span>
         </button>
       </div>
     </aside>

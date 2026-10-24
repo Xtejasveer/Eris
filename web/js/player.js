@@ -69,8 +69,10 @@ export class ClassClock {
 }
 
 export class Player {
-  constructor({ lectureId, segments, teacher, stage, voice, ui, clock = null }) {
-    Object.assign(this, { lectureId, segments, teacher, stage, voice, ui });
+  // liveCode false: programs show their approved output instead of running (students never run code on the server).
+  // lesson: {post_id, version_id} of a shared lesson (doubts are answered on that version, and logged).
+  constructor({ lectureId, segments, teacher, stage, voice, ui, clock = null, liveCode = true, lesson = {} }) {
+    Object.assign(this, { lectureId, segments, teacher, stage, voice, ui, liveCode, lesson });
     this.clock = clock || new ClassClock(0);  // shared across jumps, so a jump doesn't reset the lecture time
     this.doubtThread = null;     // ONE doubt-agent conversation for the whole class: it remembers every answer
     this.deferredDoubts = false; // a break ran out of time: the final break opens with "as promised…"
@@ -235,6 +237,7 @@ export class Player {
     this.ui.onCaption?.(text);
     if (index != null) this.voice.prefetch(this.nextSay(index));
     await this.voice.speak(text);
+    if (index != null && !this.stopped) this.ui.onSpoken?.(index);  // a lesson line was heard (attendance)
     await this.tick(BREATH_MS);  // tick also honours pause and stop
   }
 
@@ -332,7 +335,8 @@ export class Player {
         if (!(file in b.files)) return `${file} is not on the board`;
         const out = st.runStart(a.cmd);
         let res;
-        try { res = await api.run(this.lectureId, file, b.files[file]); }
+        try { res = this.liveCode ? await api.run(this.lectureId, file, b.files[file])
+          : { output: seg.expected_output || "", exit_code: 0, stderr: "" }; }
         catch (e) { st.runEnd(out, e.message, false); return `${a.cmd} could not run: ${e.message}`; }
         const expected = seg.expected_output || "";
         b.lastOutput = res.output; b.expectedOutput = expected;
@@ -429,6 +433,7 @@ export class Player {
           turn = await api.doubtAsk(this.lectureId, {
             question, context: this.snapshot(), section: this.state.section, final, cursor: this.cursor,
             threadId: this.doubtThread, visuals: [this.stage.visualStates(), this.stage.flowStates()].filter(Boolean).join("\n"),
+            lesson: this.lesson,
           });
         } finally { chk.thinking(false); }
         this.doubtThread = turn.thread_id || this.doubtThread;

@@ -1,4 +1,8 @@
-// Thin wrapper over the FastAPI backend (server.py, server_class.py).
+// Thin wrapper over the FastAPI backend (server.py, server_class.py, server_platform.py).
+
+// Called when the server says the session is over (401), so the app can show the sign-in screen.
+let onSignedOut = null;
+export function whenSignedOut(fn) { onSignedOut = fn; }
 
 async function request(method, path, body, { raw = false } = {}) {
   const opts = { method, headers: {} };
@@ -15,7 +19,10 @@ async function request(method, path, body, { raw = false } = {}) {
   if (!res.ok) {
     const detail = data && typeof data === "object" ? data.detail : data;
     const message = Array.isArray(detail) ? detail.map(d => d.msg).join("; ") : detail;
-    throw new Error(message || `${res.status} ${res.statusText}`);
+    if (res.status === 401 && !path.startsWith("/api/auth/")) onSignedOut?.();
+    const err = new Error(message || `${res.status} ${res.statusText}`);
+    err.status = res.status;
+    throw err;
   }
   return data;
 }
@@ -48,13 +55,53 @@ export const api = {
   recovery: (lid, segment, error, stateText) =>
     request("POST", `/api/lectures/${id(lid)}/recovery`, { segment, error, state_text: stateText }),
   // question: a student's question the player already collected (then the agent answers it right away).
-  doubtStart: (lid, context, section, final, cursor, question = "") =>
-    request("POST", `/api/lectures/${id(lid)}/doubts/start`, { context, section, final, cursor, question }),
+  // lesson: {post_id, version_id} of a shared lesson a student is playing (its locked script; doubts are logged).
+  doubtStart: (lid, context, section, final, cursor, question = "", lesson = {}) =>
+    request("POST", `/api/lectures/${id(lid)}/doubts/start`, { context, section, final, cursor, question, ...lesson }),
   // One student question on the class's single agent conversation (threadId from the previous answer, or null).
-  doubtAsk: (lid, { question, context, section, final, cursor, threadId, visuals = "" }) =>
-    request("POST", `/api/lectures/${id(lid)}/doubts/ask`, { question, context, section, final, cursor, thread_id: threadId, visuals }),
+  doubtAsk: (lid, { question, context, section, final, cursor, threadId, visuals = "", lesson = {} }) =>
+    request("POST", `/api/lectures/${id(lid)}/doubts/ask`, { question, context, section, final, cursor, thread_id: threadId, visuals, ...lesson }),
   doubtReply: (lid, threadId, answer) =>
     request("POST", `/api/lectures/${id(lid)}/doubts/reply`, { thread_id: threadId, answer }),
+
+  // ---------- accounts and courses ----------
+  me: () => request("GET", "/api/auth/me"),
+  demoLogins: () => request("GET", "/api/auth/demo"),
+  login: (email, password) => request("POST", "/api/auth/login", { email, password }),
+  signup: (body) => request("POST", "/api/auth/signup", body),
+  logout: () => request("POST", "/api/auth/logout"),
+  courses: () => request("GET", "/api/courses"),
+  course: (cid) => request("GET", `/api/courses/${cid}`),
+  createCourse: (subject, year) => request("POST", "/api/courses", { subject, year }),
+  updateCourse: (cid, subject, year) => request("PUT", `/api/courses/${cid}`, { subject, year }),
+  newCode: (cid) => request("POST", `/api/courses/${cid}/code`),
+  join: (code) => request("POST", "/api/join", { code }),
+  addChapter: (cid, title) => request("POST", `/api/courses/${cid}/chapters`, { title }),
+  renameChapter: (chid, title) => request("PUT", `/api/chapters/${chid}`, { title }),
+  deleteChapter: (chid) => request("DELETE", `/api/chapters/${chid}`),
+  addTopic: (chid, title) => request("POST", `/api/chapters/${chid}/topics`, { title }),
+  renameTopic: (tid, title) => request("PUT", `/api/topics/${tid}`, { title }),
+  deleteTopic: (tid) => request("DELETE", `/api/topics/${tid}`),
+  addLesson: (tid, body) => request("POST", `/api/topics/${tid}/lessons`, body),
+  deleteLesson: (lessonId) => request("DELETE", `/api/lessons/${lessonId}`),
+  share: (lessonId, note = "", dueAt = null) => request("POST", `/api/lessons/${lessonId}/share`, { note, due_at: dueAt }),
+  addMaterial(cid, { title, body, topicId, dueAt, files }) {
+    const form = new FormData();
+    form.append("title", title); form.append("body", body || "");
+    form.append("topic_id", topicId ? String(topicId) : ""); form.append("due_at", dueAt || "");
+    for (const f of files || []) form.append("files", f, f.name);
+    return request("POST", `/api/courses/${cid}/materials`, form);
+  },
+  editPost: (pid, body) => request("PUT", `/api/posts/${pid}`, body),
+  deletePost: (pid) => request("DELETE", `/api/posts/${pid}`),
+  fileUrl: (pid, fid) => `/api/posts/${pid}/files/${fid}`,
+  versions: (lessonId) => request("GET", `/api/lessons/${lessonId}/versions`),
+  versionScript: (vid) => request("GET", `/api/versions/${vid}`),
+  shareVersion: (lessonId, vid) => request("POST", `/api/lessons/${lessonId}/versions/${vid}/share`),
+  postClass: (pid) => request("GET", `/api/posts/${pid}/class`),
+  progress: (pid, body) => request("POST", `/api/posts/${pid}/progress`, body),
+  attendance: (pid) => request("GET", `/api/posts/${pid}/attendance`),
+  postDoubts: (pid, userId) => request("GET", `/api/posts/${pid}/doubts${userId ? `?user_id=${userId}` : ""}`),
 };
 
 // Same rule as main.LECTURE_ID_RE.

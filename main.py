@@ -87,6 +87,8 @@ def build_parser():
     p.add_argument("--idle", required=True, help="video of the character listening (mouth closed)")
     p.add_argument("--talking", required=True, help="video of the same character talking")
 
+    sub.add_parser("seed", help="add demo accounts and courses built from the lectures in data/ (local testing)")
+
     p = sub.add_parser("serve", help="start the website (home + class)")
     p.add_argument("--port", type=int, default=8000)
 
@@ -110,6 +112,10 @@ def main():
     if args.command == "tutor-video":
         from eris.classroom.tutor_video import prepare
         prepare(args.idle, args.talking)
+        return
+    if args.command == "seed":
+        from eris.platform.seed import run
+        run()
         return
     if args.command == "measure-voice":
         from eris.classroom.voice_speed import run

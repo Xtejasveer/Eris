@@ -32,6 +32,18 @@ def language_rule(language, task="lesson"):
             "OUTPUT, FIGURE) and the \"# \" section titles stay in English, exactly as in the format.")
 
 
+
+def prerequisite_rule(manifest):
+    """A prerequisite lesson: only the groundwork a student needs before the topic, not the topic itself. Empty for
+    an ordinary lecture."""
+    topic = (manifest or {}).get("prerequisite_for")
+    if not topic:
+        return ""
+    return (f"\n\n# Prerequisite lesson\nThis is a short prerequisite lesson for the topic \"{topic}\". Teach only "
+            f"the earlier ideas a student must already know to follow \"{topic}\", using the material only for what "
+            f"it says about those ideas. Do not teach \"{topic}\" itself; close by saying these ideas are what the "
+            f"lesson on \"{topic}\" builds on.")
+
 # Numbered: script_checks.py names these numbers in its feedback ("formatting rule 2").
 FORMAT_RULES = """# Formatting (every non-marker line is spoken)
 1. Each marker alone on its own line, never inside a sentence.

@@ -2,9 +2,10 @@
 
 import json
 import re
+import threading
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
@@ -25,7 +26,10 @@ CODE_FILE_RE = re.compile(r"^[A-Za-z0-9_-]+\.py$")
 _agents = {}        # lecture_id -> (doubt agent, log path); built once per server run
 _doubt_counts = {}  # thread_id -> {"asked": int, "max": int, "section": str, "board": dict}
 # What earlier doubt answers added to the screen in the current class run (notes, answer1.py, ...).
-_answer_extras = {}  # lecture_id -> {"cursor": int, "segments": [segment, ...]}
+_answer_extras = {}  # lecture_id or a class run's thread_id -> {"cursor": int, "segments": [segment, ...]}
+# The doubt agent's tools read one shared board (eris.tools.set_board), so answers are made one at a time: with many
+# students in their own lessons at once, one student's board must never leak into another student's answer.
+_doubt_lock = threading.Lock()
 _slides = {}         # lecture_id -> {slide number: text}
 
 
@@ -166,15 +170,22 @@ def complete(lecture_id: str):
     return {"ok": True}
 
 
+def _check_user(request, lecture_id):
+    _check_id(lecture_id)
+    from eris.platform import access
+    if not access.can_use_lecture(request.state.user, lecture_id):
+        raise HTTPException(403, "You do not have access to this lesson")
+
+
 class TTSRequest(BaseModel):
     lecture_id: str
     text: str
 
 
 @router.post("/tts")
-def tts(body: TTSRequest):
+def tts(body: TTSRequest, request: Request):
     """WAV narration from Gnani (cached). 204 = no voice available: the browser uses its own speech."""
-    _check_id(body.lecture_id)
+    _check_user(request, body.lecture_id)
     if not config.GNANI_API_KEY or not body.text.strip():
         return Response(status_code=204)
     try:
@@ -186,9 +197,9 @@ def tts(body: TTSRequest):
 
 
 @router.post("/tts/timing")
-def tts_timing(body: TTSRequest):
+def tts_timing(body: TTSRequest, request: Request):
     """Word timings of a clip /tts already made, for the avatar's lip sync. 204 = none (lips follow the audio)."""
-    _check_id(body.lecture_id)
+    _check_user(request, body.lecture_id)
     from eris.classroom import voice
     clip = voice.clip_path(body.lecture_id, body.text)
     if not body.text.strip() or not clip.exists():
@@ -241,16 +252,41 @@ class DoubtStart(BaseModel):
     final: bool = False
     cursor: int | None = None  # index of the DOUBT_CHECK segment: the board is rebuilt up to here
     question: str = ""         # the player asked the class and a student asked this (else the agent asks)
+    post_id: int | None = None   # a shared lesson a student is playing: its locked version, and where to log doubts
+    version_id: int | None = None
 
 
-def _board_at(lecture_id, cursor):
-    """The class screen at `cursor`: the approved script so far plus earlier doubt answers in this run."""
-    script_json = config.lecture_dir(lecture_id) / "script.json"
-    segments = json.loads(script_json.read_text(encoding="utf-8")) if script_json.exists() else []
+def _locked_segments(lecture_id, body):
+    """The locked version a student is playing (None: the lecture's current approved script)."""
+    if body.version_id is None:
+        return None
+    from eris.api.server_platform import version_segments
+    return version_segments(body.version_id, lecture_id)
+
+
+def _log(request, lecture_id, lesson, section, question, turn):
+    """Keep every question and answer, for the teacher's view of the lesson."""
+    if not question:
+        return
+    from eris.api.server_platform import log_doubt
+    try:
+        log_doubt(request.state.user, lesson.get("post_id"), lesson.get("version_id"), lecture_id, section, question,
+                  turn.get("reply_text") or turn.get("reply", ""), turn.get("passed"))
+    except Exception as e:  # a missed log must never cost the student their answer
+        print(f"[doubts] could not log: {e}")
+
+
+def _board_at(lecture_id, cursor, key=None, segments=None):
+    """The class screen at `cursor`: the script so far plus earlier doubt answers in this run. segments: the locked
+    version a student is playing (default: the lecture's current approved script). key: one student's class run."""
+    if segments is None:
+        script_json = config.lecture_dir(lecture_id) / "script.json"
+        segments = json.loads(script_json.read_text(encoding="utf-8")) if script_json.exists() else []
     cursor = len(segments) if cursor is None else cursor
-    extras = _answer_extras.get(lecture_id)
+    key = key or lecture_id
+    extras = _answer_extras.get(key)
     if extras is None or cursor < extras["cursor"]:  # a new run (or a jump back): earlier answers are gone
-        extras = _answer_extras[lecture_id] = {"cursor": cursor, "segments": []}
+        extras = _answer_extras[key] = {"cursor": cursor, "segments": []}
     extras["cursor"] = cursor
     board = class_board.rebuild(segments, cursor)
     board["figures"] = figures.load(lecture_id)  # the material's graphs: the only ones an answer may build
@@ -262,12 +298,12 @@ def _board_at(lecture_id, cursor):
     return class_board.add_segments(board, extras["segments"])
 
 
-def _remember_answer(lecture_id, board, turn):
+def _remember_answer(lecture_id, board, turn, key=None):
     """Answers change the screen; later answers (and quotes) must see that."""
     played = turn.get("reply_segments", []) + turn.get("final_segments", [])
     class_board.add_segments(board, played)
-    if lecture_id in _answer_extras:
-        _answer_extras[lecture_id]["segments"].extend(played)
+    if (key or lecture_id) in _answer_extras:
+        _answer_extras[key or lecture_id]["segments"].extend(played)
 
 
 def _slides_for(lecture_id):
@@ -282,16 +318,24 @@ class DoubtReply(BaseModel):
 
 
 @router.post("/lectures/{lecture_id}/doubts/start")
-def doubts_start(lecture_id: str, body: DoubtStart):
+def doubts_start(lecture_id: str, body: DoubtStart, request: Request):
     agent, _ = _agent(_check_id(lecture_id))
     thread_id = f"web_{lecture_id}_{uuid.uuid4().hex[:8]}"
     limit = config.MAX_DOUBTS_FINAL if body.final else config.MAX_DOUBTS_PER_CHECK
-    board = _board_at(lecture_id, body.cursor)
-    _doubt_counts[thread_id] = {"asked": 0, "max": limit, "section": body.section, "board": board}
-    set_board(board, _slides_for(lecture_id))
+    board = _board_at(lecture_id, body.cursor, thread_id, _locked_segments(lecture_id, body))
+    _doubt_counts[thread_id] = {"asked": 0, "max": limit, "section": body.section, "board": board,
+                                "post_id": body.post_id, "version_id": body.version_id}
     question = body.question.strip()
     if question:
         _doubt_counts[thread_id]["asked"] = 1
+    with _doubt_lock:
+        set_board(board, _slides_for(lecture_id))
+        turn = _start_turn(lecture_id, agent, thread_id, body, question, board)
+    _log(request, lecture_id, body.model_dump(), body.section, question, turn)
+    return {"thread_id": thread_id, "max": limit, "asked": 1 if question else 0, **turn}
+
+
+def _start_turn(lecture_id, agent, thread_id, body, question, board):
     try:
         if question:
             _, log_path = _agent(lecture_id)
@@ -304,8 +348,8 @@ def doubts_start(lecture_id: str, body: DoubtStart):
         turn.pop("_board_files", None)
     except Exception as e:
         raise HTTPException(502, f"Doubt agent failed: {e}")
-    _remember_answer(lecture_id, board, turn)
-    return {"thread_id": thread_id, "max": limit, "asked": 1 if question else 0, **turn}
+    _remember_answer(lecture_id, board, turn, thread_id)
+    return turn
 
 
 class DoubtAsk(BaseModel):
@@ -316,6 +360,8 @@ class DoubtAsk(BaseModel):
     cursor: int | None = None
     thread_id: str | None = None  # the class's conversation from an earlier question; None = a new class run
     visuals: str = ""            # what each visual on screen shows now (its Visual.state line), from the player
+    post_id: int | None = None   # a shared lesson a student is playing: its locked version, and where to log doubts
+    version_id: int | None = None
 
 
 _class_threads = {}  # thread_id -> {"lecture": id, "cursor": int, "notes": [str]}  (one conversation per class run)
@@ -383,7 +429,7 @@ def _output_notes(turn):
 
 
 @router.post("/lectures/{lecture_id}/doubts/ask")
-def doubts_ask(lecture_id: str, body: DoubtAsk):
+def doubts_ask(lecture_id: str, body: DoubtAsk, request: Request):
     """One student question. The whole class run shares ONE agent conversation (thread_id), so the agent
     remembers its earlier answers, programs and outputs across questions and question breaks."""
     agent, log_path = _agent(_check_id(lecture_id))
@@ -396,7 +442,15 @@ def doubts_ask(lecture_id: str, body: DoubtAsk):
         thread = _class_threads[thread_id] = {"lecture": lecture_id, "cursor": None, "notes": []}
     else:
         thread_id = body.thread_id
-    board = _board_at(lecture_id, body.cursor)
+    with _doubt_lock:
+        turn = _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body)
+    _log(request, lecture_id, body.model_dump(), body.section, question, turn)
+    limit = config.MAX_DOUBTS_FINAL if body.final else config.MAX_DOUBTS_PER_CHECK
+    return {"thread_id": thread_id, "max": limit, **turn}
+
+
+def _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body):
+    board = _board_at(lecture_id, body.cursor, thread_id, _locked_segments(lecture_id, body))
     set_board(board, _slides_for(lecture_id))
     parts = []
     if thread["cursor"] != body.cursor:  # a new question break: where the class is now
@@ -420,14 +474,13 @@ def doubts_ask(lecture_id: str, body: DoubtAsk):
     except Exception as e:
         raise HTTPException(502, f"Doubt agent failed: {e}")
     _show_slide_if_asked(question, board, turn, _slides_for(lecture_id))
-    _remember_answer(lecture_id, board, turn)
+    _remember_answer(lecture_id, board, turn, thread_id)
     thread["notes"] += _output_notes(turn)
-    limit = config.MAX_DOUBTS_FINAL if body.final else config.MAX_DOUBTS_PER_CHECK
-    return {"thread_id": thread_id, "max": limit, **turn}
+    return turn
 
 
 @router.post("/lectures/{lecture_id}/doubts/reply")
-def doubts_reply(lecture_id: str, body: DoubtReply):
+def doubts_reply(lecture_id: str, body: DoubtReply, request: Request):
     agent, log_path = _agent(_check_id(lecture_id))
     count = _doubt_counts.get(body.thread_id)
     if count is None:
@@ -437,15 +490,18 @@ def doubts_reply(lecture_id: str, body: DoubtReply):
         answer = "no more doubts"  # Limit reached: tell the agent to wrap up.
     elif answer.lower() not in doubt_agent.NO_DOUBT_WORDS:
         count["asked"] += 1
-    set_board(count["board"], _slides_for(lecture_id))
-    try:
-        turn = doubt_agent.with_segments(
-            doubt_agent.turn_reply(agent, body.thread_id, answer, log_path, count["section"]),
-            count_slides(lecture_id), count["board"])
-        turn["_board_files"] = count["board"].get("files", {})
-        _build_answer_visuals(lecture_id, turn)
-        turn.pop("_board_files", None)
-    except Exception as e:
-        raise HTTPException(502, f"Doubt agent failed: {e}")
-    _remember_answer(lecture_id, count["board"], turn)
+    with _doubt_lock:
+        set_board(count["board"], _slides_for(lecture_id))
+        try:
+            turn = doubt_agent.with_segments(
+                doubt_agent.turn_reply(agent, body.thread_id, answer, log_path, count["section"]),
+                count_slides(lecture_id), count["board"])
+            turn["_board_files"] = count["board"].get("files", {})
+            _build_answer_visuals(lecture_id, turn)
+            turn.pop("_board_files", None)
+        except Exception as e:
+            raise HTTPException(502, f"Doubt agent failed: {e}")
+        _remember_answer(lecture_id, count["board"], turn, body.thread_id)
+    if answer.lower() not in doubt_agent.NO_DOUBT_WORDS and answer != "no more doubts":
+        _log(request, lecture_id, count, count["section"], answer, turn)
     return {"asked": count["asked"], "max": count["max"], **turn}

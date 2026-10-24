@@ -6,9 +6,11 @@ generate, approve, TTS, running code, recovery lines and doubt-agent turns.
 """
 
 import json
+import re
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi import FastAPI, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -18,8 +20,42 @@ from main import LECTURE_ID_RE
 from eris.persona import REQUIRED, parse_persona, persona_to_markdown
 from eris.generate.script_parser import parse_script
 from eris.generate.script_writer import approve_script, count_slides
+from eris.platform import access
+from eris.platform.auth import user_from_request
 
 app = FastAPI(title="AI Substitute Teacher")
+
+# Every /api route needs a signed-in user, except signing in itself. Lecture routes need the lecture's teacher;
+# a student may use only the class-time routes, and only for a lecture shared with a course they are in.
+PUBLIC_API = re.compile(r"^/api/auth/(login|signup|logout|demo)$")
+LECTURE_PATH = re.compile(r"^/api/lectures/([^/]+)(/.*)?$")
+STUDENT_LECTURE_ROUTES = re.compile(r"^/(visuals/[^/]+|images/[^/]+|doubts/(start|ask|reply)|recovery)$")
+TEACHER_ONLY = re.compile(r"^/api/(lectures|persona/template)$")
+
+
+def _deny(status, message):
+    return JSONResponse({"detail": message}, status_code=status)
+
+
+@app.middleware("http")
+async def auth_gate(request, call_next):
+    path = request.url.path
+    if path.startswith("/api/") and not PUBLIC_API.match(path):
+        user = user_from_request(request)
+        if not user:
+            return _deny(401, "Please sign in")
+        request.state.user = user
+        m = LECTURE_PATH.match(path)
+        if m:
+            lecture_id, rest = m.group(1), m.group(2) or ""
+            if user["role"] == "teacher":
+                if not access.teacher_owns_lecture(user, lecture_id):
+                    return _deny(403, "This lecture belongs to another teacher")
+            elif not (STUDENT_LECTURE_ROUTES.match(rest) and access.student_can_play_lecture(user, lecture_id)):
+                return _deny(403, "This lesson hasn't been shared with you")
+        elif TEACHER_ONLY.match(path) and user["role"] != "teacher":
+            return _deny(403, "Only teachers can do this")
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -73,10 +109,17 @@ def _check_times(total, speaking):
 
 
 @app.get("/api/lectures")
-def list_lectures():
+def list_lectures(request: Request):
+    """The signed-in teacher's lectures: those in their courses, plus any made before courses existed."""
     root = Path(config.DATA_ROOT)
     ids = sorted(p.name for p in root.iterdir() if p.is_dir() and LECTURE_ID_RE.match(p.name))
-    return [{"id": i, "status": (_manifest_or_none(i) or {}).get("status", "new")} for i in ids]
+    user = request.state.user
+    out = []
+    for i in ids:
+        course = access.course_of_lecture(i)
+        if course is None or course["teacher_id"] == user["id"]:
+            out.append({"id": i, "status": (_manifest_or_none(i) or {}).get("status", "new"), "in_course": course is not None})
+    return out
 
 
 class NewLecture(BaseModel):
@@ -156,7 +199,7 @@ def get_lecture(lecture_id: str):
             judge = None
     return {"id": lecture_id, "manifest": _manifest_or_none(lecture_id), "files": files, "judge": judge,
             "persona": persona, "script_md": text, "segments": segments, "errors": errors, "failed_draft": failed,
-            "job": jobs.get_job(lecture_id)}
+            "job": jobs.get_job(lecture_id), "course": access.course_of_lecture(lecture_id)}
 
 
 @app.post("/api/lectures/{lecture_id}/files")
@@ -241,7 +284,10 @@ def approve(lecture_id: str):
     from eris.api.server_class import manifest_or_404
     manifest_or_404(_check_id(lecture_id))  # approve_script would exit the process without one
     errors = approve_script(lecture_id)
-    return {"ok": not errors, "errors": errors}
+    if errors:
+        return {"ok": False, "errors": errors}
+    from eris.api.server_platform import on_approved
+    return {"ok": True, "errors": [], "lesson_version": on_approved(lecture_id)}
 
 
 @app.post("/api/lectures/{lecture_id}/reset")
@@ -272,5 +318,8 @@ def reset_lecture(lecture_id: str):
 from eris.api.server_class import router as class_router  # noqa: E402  (class routes live in their own file)
 
 app.include_router(class_router)
+from eris.api.server_platform import router as platform_router  # noqa: E402  (courses, sign-in, attendance)
+
+app.include_router(platform_router)
 if Path("web").is_dir():  # the frontend is optional; the API works without it
     app.mount("/", StaticFiles(directory="web", html=True), name="web")
