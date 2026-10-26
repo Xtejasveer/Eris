@@ -1,6 +1,6 @@
 // The header shared by a lecture's Studio and Classroom pages.
 
-import { h, icon, badge } from "./ui.js";
+import { h, icon, badge, kindTag } from "./ui.js";
 
 // course: where the lecture sits (a lesson in a course's topic), or null for a lecture outside every course.
 export function lectureHeader(lectureId, active, status, course = null, ...extra) {
@@ -12,7 +12,8 @@ export function lectureHeader(lectureId, active, status, course = null, ...extra
     h("div", { class: "page-title" },
       course ? h("a", { class: "crumb", href: `#/course/${course.course_id}` },
         `${course.subject}${course.year ? ` · ${course.year}` : ""} › ${course.topic_title}`) : h("span", { class: "crumb" }, "Lectures"),
-      h("h1", {}, course ? `${course.kind === "prerequisite" ? "Prerequisite: " : ""}${course.lesson_title}` : lectureId)),
+      h("h1", {}, course ? course.lesson_title : lectureId)),
+    course ? kindTag(course.kind, course.topic_title) : null,
     statusEl,
     h("div", { class: "spacer" }),
     ...extra,

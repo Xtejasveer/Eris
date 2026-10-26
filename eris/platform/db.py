@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS posts (
   lesson_id INTEGER REFERENCES lessons(id) ON DELETE CASCADE,
   version_id INTEGER REFERENCES versions(id),
   due_at TEXT,
+  allow_skip INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -108,13 +109,29 @@ CREATE TABLE IF NOT EXISTS doubts (
   question TEXT NOT NULL,
   answer TEXT NOT NULL DEFAULT '',
   passed INTEGER NOT NULL DEFAULT 0,
+  flags TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS feedback (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+  version_id INTEGER,
+  section TEXT NOT NULL DEFAULT '',
+  line_index INTEGER,
+  line_text TEXT NOT NULL DEFAULT '',
+  comment TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  resolved_at TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_posts_course ON posts(course_id);
+CREATE INDEX IF NOT EXISTS idx_feedback_post ON feedback(post_id);
 CREATE INDEX IF NOT EXISTS idx_lessons_topic ON lessons(topic_id);
 CREATE INDEX IF NOT EXISTS idx_doubts_post ON doubts(post_id, user_id);
 """
 
+# Columns added after a table first shipped: (table, column, definition). Added to older databases on first connect.
+COLUMNS = [("posts", "allow_skip", "INTEGER NOT NULL DEFAULT 1"), ("doubts", "flags", "TEXT NOT NULL DEFAULT ''")]
 _ready = False
 
 
@@ -133,6 +150,9 @@ def connect():
     if not _ready:
         conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(SCHEMA)
+        for table, column, definition in COLUMNS:
+            if column not in {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
         _ready = True
     try:
         yield conn

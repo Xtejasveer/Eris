@@ -21,9 +21,12 @@ export const CODE_MS = 14;   // per character, "typing"
 export class Stage {
   // used: environment keys this class uses (from its script); null = show all.
   // pictures: {slide number: [{url, kind, description}]}, the real pictures on each slide.
-  constructor(slides, used = null, pictures = {}) {
+  // images: {slide number: {url, ratio, lines, pictures}}, the real slides drawn as pictures, with where each line of
+  // text and each picture sits (fractions of the slide). A slide with one is shown as it is; else from its text.
+  constructor(slides, used = null, pictures = {}, images = {}) {
     this.slides = slides || {};
     this.pictures = pictures || {};
+    this.images = images || {};
     this.envs = ENVS.filter(([key]) => !used || key === "notebook" || used.includes(key));
     this.files = {};          // name -> { lines, tab, body }
     this.current = null;
@@ -51,7 +54,8 @@ export class Stage {
 
     this.slideBox = h("div", { class: "slide" }, h("div", { class: "slide-empty" }, icon("slides"), "No slide shown yet"));
     this.slideNum = h("span", { class: "slide-num" });
-    this.slidesEl = h("div", { class: "env env-slides" }, h("div", { class: "slide-frame" }, this.slideBox, this.slideNum));
+    this.slideFrame = h("div", { class: "slide-frame" }, this.slideBox, this.slideNum);
+    this.slidesEl = h("div", { class: "env env-slides" }, this.slideFrame);
 
     this.tabBar = h("div", { class: "ed-tabs" });
     this.codeBody = h("div", { class: "ed-body" }, h("div", { class: "ed-empty" }, icon("code"), "No code yet"));
@@ -278,6 +282,10 @@ export class Stage {
   // ---------- slides ----------
   showSlide(n) {
     this.setEnv("slides");
+    const image = this.images[n] ?? this.images[String(n)];
+    if (image) return this._showSlideImage(n, image);
+    this.slideBox.classList.remove("as-image");
+    this.slideFrame.style.removeProperty("--ratio");
     const text = this.slides[n] ?? this.slides[String(n)];
     if (text == null) return false;
     const [title, ...rest] = text.split("\n").map(s => s.trim()).filter(Boolean);
@@ -301,6 +309,44 @@ export class Stage {
     return true;
   }
 
+  /** The real slide, drawn as a picture; highlights and pen circles go on top of it, where the text or picture is. */
+  _showSlideImage(n, image) {
+    const title = (this.slides[n] ?? this.slides[String(n)] ?? "").split("\n")[0].trim();
+    this.slideBox.classList.add("as-image");
+    this.slideFrame.style.setProperty("--ratio", image.ratio || 16 / 9);
+    this.slideBox.replaceChildren(h("img", { class: "slide-img", src: image.url, alt: title || `Slide ${n}` }));
+    this.currentSlideNo = n;
+    this.slideBox.classList.remove("enter"); void this.slideBox.offsetWidth; this.slideBox.classList.add("enter");
+    this.slideNum.textContent = "";  // the deck's own slide number is on the picture
+    return true;
+  }
+
+  /** Where a box of the shown slide picture is, in pixels of the slide box: [x0, y0, x1, y1] fractions in. */
+  _slidePx([x0, y0, x1, y1]) {
+    const { width: w, height: hgt } = this.slideBox.getBoundingClientRect();
+    return { x: x0 * w, y: y0 * hgt, w: (x1 - x0) * w, h: (y1 - y0) * hgt };
+  }
+
+  /** Mark the line(s) of the slide picture that read `text`, like a highlighter pen over the printed words. */
+  _markSlideImage(text) {
+    const image = this.images[this.currentSlideNo] ?? this.images[String(this.currentSlideNo)];
+    const norm = s => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+    const want = norm(text);
+    if (!image || !want) return false;
+    // The text may run over several lines of the slide: find it in all the lines read together.
+    let joined = "";
+    const spans = image.lines.map(l => { const t = norm(l.text), span = [joined.length, joined.length + t.length, l]; joined += t; return span; });
+    const at = joined.indexOf(want);
+    const hits = at >= 0 ? spans.filter(([a, b]) => b > at && a < at + want.length).map(s => s[2])
+      : image.lines.filter(l => { const t = norm(l.text); return t.length >= 4 && want.includes(t); });  // a point spread over shapes
+    for (const l of hits) {
+      const [x0, y0, x1, y1] = l.box, pad = 0.004;
+      this.slideBox.append(h("div", { class: "slide-mark", style: `left:${(x0 - pad) * 100}%; top:${(y0 - pad) * 100}%; `
+        + `width:${(x1 - x0 + 2 * pad) * 100}%; height:${(y1 - y0 + 2 * pad) * 100}%` }));
+    }
+    return hits.length > 0;
+  }
+
   /** Shrink the slide's text (--fit) until its points fit under the title; a long slide never spills over it. */
   fitSlide() {
     const box = this.slideBox, points = box.querySelector(".slide-points");
@@ -317,6 +363,7 @@ export class Stage {
   slideCircle(n) {
     if (String(this.currentSlideNo) !== String(n) && !this.showSlide(n)) return false;
     this.setEnv("slides");
+    if (this.slideBox.classList.contains("as-image")) return this._circleSlideImage(n);
     const imgs = [...this.slideBox.querySelectorAll(".slide-pictures img")];
     if (!imgs.length) return false;
     const draw = () => {
@@ -343,9 +390,34 @@ export class Stage {
     return true;
   }
 
+  /** Circle the pictures and charts on the slide picture, at the places the deck puts them. */
+  _circleSlideImage(n) {
+    const boxes = (this.images[n] ?? this.images[String(n)])?.pictures || [];
+    if (!boxes.length) return false;
+    const draw = () => {
+      this.slideBox.querySelector(".pen-layer")?.remove();
+      const box = this.slideBox.getBoundingClientRect();
+      const layer = svgLayer("pen-layer");
+      layer.setAttribute("viewBox", `0 0 ${box.width} ${box.height}`);
+      this.slideBox.appendChild(layer);
+      boxes.forEach((b, k) => {
+        const r = this._slidePx(b), cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+        // loosely around the picture, but never off the slide (the stroke drifts out ~4% at its end)
+        const rx = Math.min(r.w / 2 * 1.1 + 6, cx - 6, box.width - cx - 6) / 1.05;
+        const ry = Math.min(r.h / 2 * 1.1 + 6, cy - 6, box.height - cy - 6) / 1.05;
+        drawPen(layer, cx, cy, rx, ry, { seed: n * 7 + k, ms: 750 });
+      });
+    };
+    const img = this.slideBox.querySelector(".slide-img");
+    if (img && !img.complete) img.addEventListener("load", draw, { once: true });
+    else draw();
+    return true;
+  }
+
   slideHighlight(text) {
     this.setEnv("slides");
     text = String(text).replace(/^\s*[•\-*]\s*/, "");  // the slide shows its points without bullet marks
+    if (this.slideBox.classList.contains("as-image")) return this._markSlideImage(text);
     return [...this.slideBox.querySelectorAll("h2, li")].some(el => markText(el, text));
   }
 
@@ -599,6 +671,8 @@ export class Stage {
     this.tabBar.replaceChildren();
     this.codeBody.replaceChildren(h("div", { class: "ed-empty" }, icon("code"), "No code yet"));
     this.termBody.replaceChildren();
+    this.slideBox.classList.remove("as-image");
+    this.slideFrame.style.removeProperty("--ratio");
     this.slideBox.replaceChildren(h("div", { class: "slide-empty" }, icon("slides"), "No slide shown yet"));
     this.slideNum.textContent = "";
     Object.values(this.flows).forEach(f => { f.wrap.remove(); f.tab.remove(); });

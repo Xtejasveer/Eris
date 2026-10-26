@@ -74,6 +74,7 @@ export const api = {
   course: (cid) => request("GET", `/api/courses/${cid}`),
   createCourse: (subject, year) => request("POST", "/api/courses", { subject, year }),
   updateCourse: (cid, subject, year) => request("PUT", `/api/courses/${cid}`, { subject, year }),
+  deleteCourse: (cid) => request("DELETE", `/api/courses/${cid}`),
   newCode: (cid) => request("POST", `/api/courses/${cid}/code`),
   join: (code) => request("POST", "/api/join", { code }),
   addChapter: (cid, title) => request("POST", `/api/courses/${cid}/chapters`, { title }),
@@ -84,7 +85,8 @@ export const api = {
   deleteTopic: (tid) => request("DELETE", `/api/topics/${tid}`),
   addLesson: (tid, body) => request("POST", `/api/topics/${tid}/lessons`, body),
   deleteLesson: (lessonId) => request("DELETE", `/api/lessons/${lessonId}`),
-  share: (lessonId, note = "", dueAt = null) => request("POST", `/api/lessons/${lessonId}/share`, { note, due_at: dueAt }),
+  share: (lessonId, note = "", dueAt = null, allowSkip = true) =>
+    request("POST", `/api/lessons/${lessonId}/share`, { note, due_at: dueAt, allow_skip: allowSkip }),
   addMaterial(cid, { title, body, topicId, dueAt, files }) {
     const form = new FormData();
     form.append("title", title); form.append("body", body || "");
@@ -100,6 +102,10 @@ export const api = {
   shareVersion: (lessonId, vid) => request("POST", `/api/lessons/${lessonId}/versions/${vid}/share`),
   postClass: (pid) => request("GET", `/api/posts/${pid}/class`),
   progress: (pid, body) => request("POST", `/api/posts/${pid}/progress`, body),
+  feedback: (pid, body) => request("POST", `/api/posts/${pid}/feedback`, body),
+  insights: (pid) => request("GET", `/api/posts/${pid}/insights`),
+  resolveFeedback: (fid) => request("POST", `/api/feedback/${fid}/resolve`),
+  regenerateSection: (lid, body) => request("POST", `/api/lectures/${encodeURIComponent(lid)}/regenerate-section`, body),
   attendance: (pid) => request("GET", `/api/posts/${pid}/attendance`),
   postDoubts: (pid, userId) => request("GET", `/api/posts/${pid}/doubts${userId ? `?user_id=${userId}` : ""}`),
 };

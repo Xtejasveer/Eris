@@ -171,6 +171,7 @@ code, pre, .mono { font-family: var(--mono); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn svg { width: 16px; height: 16px; }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); box-shadow: 0 4px 14px color-mix(in srgb, var(--primary) 28%, transparent); }
+.btn.primary:disabled { background: var(--surface-3); border-color: var(--surface-3); color: var(--muted); box-shadow: none; opacity: 1; }
 .btn.primary:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
 .btn.success { background: var(--success); border-color: var(--success); color: var(--on-primary); }
 .btn.success:hover:not(:disabled) { filter: brightness(1.06); }
@@ -199,7 +200,11 @@ code, pre, .mono { font-family: var(--mono); }
   background: var(--surface); color: var(--text); outline: none; transition: border-color .15s, box-shadow .15s;
 }
 .input { height: 40px; }
-.select { height: 40px; }
+.select {
+  height: 40px; padding-right: 40px; cursor: pointer; -webkit-appearance: none; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238c8276' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 14px center; background-size: 16px;
+}
 .textarea { resize: vertical; min-height: 64px; line-height: 1.5; }
 .input::placeholder, .textarea::placeholder { color: var(--muted); }
 .input:focus, .textarea:focus, .select:focus { border-color: var(--primary); box-shadow: 0 0 0 4px var(--primary-soft); }
@@ -230,6 +235,9 @@ code, pre, .mono { font-family: var(--mono); }
 .badge.completed { background: var(--violet-soft); color: var(--violet); }
 .badge.running { background: var(--primary-soft); color: var(--primary); }
 .badge.failed { background: var(--danger-soft); color: var(--danger); }
+.model-tag { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 999px; background: var(--violet-soft); color: var(--violet); font-size: 11.5px; font-weight: 600; white-space: nowrap; align-self: flex-start; }
+.model-tag svg { width: 12px; height: 12px; }
+.model-tag.center { align-self: center; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border-strong); flex: none; }
 .dot.indexed { background: var(--sky); } .dot.draft { background: var(--warning); }
 .dot.approved { background: var(--success); } .dot.completed { background: var(--violet); }

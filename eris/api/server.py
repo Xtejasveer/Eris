@@ -25,11 +25,19 @@ from eris.platform.auth import user_from_request
 
 app = FastAPI(title="AI Substitute Teacher")
 
+
+@app.on_event("startup")
+def _claim_lectures():
+    try:
+        access.claim_lectures()  # every lecture records its teacher (see access.claim_lectures)
+    except Exception as e:
+        print(f"[startup] could not record lecture owners: {e}")
+
 # Every /api route needs a signed-in user, except signing in itself. Lecture routes need the lecture's teacher;
 # a student may use only the class-time routes, and only for a lecture shared with a course they are in.
 PUBLIC_API = re.compile(r"^/api/auth/(login|signup|logout|demo)$")
 LECTURE_PATH = re.compile(r"^/api/lectures/([^/]+)(/.*)?$")
-STUDENT_LECTURE_ROUTES = re.compile(r"^/(visuals/[^/]+|images/[^/]+|doubts/(start|ask|reply)|recovery)$")
+STUDENT_LECTURE_ROUTES = re.compile(r"^/(visuals/[^/]+|images/[^/]+|slides/[^/]+|doubts/(start|ask|reply)|recovery)$")
 TEACHER_ONLY = re.compile(r"^/api/(lectures|persona/template)$")
 
 
@@ -88,11 +96,14 @@ def persona_template():
     values = parse_persona("templates/persona.md")  # the example persona, kept apart from any lecture
     return {"fields": REQUIRED, "values": values, "topic": "", "duration_min": config.LECTURE_DURATION_MIN,
             "speaking_min": config.default_speaking_min(config.LECTURE_DURATION_MIN),
-            "language": config.DEFAULT_LANGUAGE, "languages": _languages()}
+            "language": config.DEFAULT_LANGUAGE, "languages": _languages(), "gnani": bool(config.GNANI_API_KEY)}
 
 
 def _languages():
-    return [{"code": code, "name": name} for code, (name, _) in config.LANGUAGES.items()]
+    """Each teaching language, its Gnani voices (Studio's voice picker), its default voice and a sample line."""
+    return [{"code": code, "name": name, "voices": config.LANGUAGE_VOICES.get(code, []),
+             "default_voice": config.language_voice(code), "sample": config.VOICE_SAMPLES.get(code, "")}
+            for code, (name, _) in config.LANGUAGES.items()]
 
 
 def _check_language(code):
@@ -116,9 +127,9 @@ def list_lectures(request: Request):
     user = request.state.user
     out = []
     for i in ids:
-        course = access.course_of_lecture(i)
-        if course is None or course["teacher_id"] == user["id"]:
-            out.append({"id": i, "status": (_manifest_or_none(i) or {}).get("status", "new"), "in_course": course is not None})
+        if access.teacher_owns_lecture(user, i):
+            out.append({"id": i, "status": (_manifest_or_none(i) or {}).get("status", "new"),
+                        "in_course": access.course_of_lecture(i) is not None})
     return out
 
 
@@ -152,6 +163,7 @@ class LectureSetup(BaseModel):
     duration_min: int = 30
     speaking_min: int = 20
     language: str = ""
+    voice: str = ""   # a Gnani voice for the language ("" = the language's default)
 
 
 @app.put("/api/lectures/{lecture_id}/setup")
@@ -167,8 +179,12 @@ def save_setup(lecture_id: str, body: LectureSetup):
         manifest["duration_min"], manifest["speaking_min"] = body.duration_min, body.speaking_min
     if body.language in config.LANGUAGES:
         manifest["language"] = body.language
+    if body.voice in config.LANGUAGE_VOICES.get(config.lecture_language(manifest), []):
+        manifest["voice"] = body.voice
+    else:
+        manifest.pop("voice", None)  # a voice for another language: back to this language's default
     config.save_manifest(lecture_id, manifest)
-    return {"saved": True}
+    return {"saved": True, "voice": config.lecture_voice(manifest)}
 
 
 @app.get("/api/lectures/{lecture_id}")
@@ -199,7 +215,9 @@ def get_lecture(lecture_id: str):
             judge = None
     return {"id": lecture_id, "manifest": _manifest_or_none(lecture_id), "files": files, "judge": judge,
             "persona": persona, "script_md": text, "segments": segments, "errors": errors, "failed_draft": failed,
-            "job": jobs.get_job(lecture_id), "course": access.course_of_lecture(lecture_id)}
+            "job": jobs.get_job(lecture_id), "course": access.course_of_lecture(lecture_id),
+            "model": config.model_name(config.LLM_MODEL),  # writes the next script
+            "script_model": config.model_name((_manifest_or_none(lecture_id) or {}).get("llm_model") or config.LLM_MODEL)}
 
 
 @app.post("/api/lectures/{lecture_id}/files")
@@ -279,6 +297,29 @@ def save_script(lecture_id: str, body: ScriptRequest):
     return {"segments": segments, "errors": errors, "status": manifest["status"]}
 
 
+class SectionRewrite(BaseModel):
+    section: str
+    feedback: str = ""
+
+
+@app.post("/api/lectures/{lecture_id}/regenerate-section")
+def regenerate_section(lecture_id: str, body: SectionRewrite):
+    """Rewrite one section from students' feedback. The lecture becomes a draft: the teacher reviews and approves it."""
+    from eris.api.server_class import manifest_or_404
+    from eris.generate.section_rewrite import rewrite_section
+    manifest = manifest_or_404(_check_id(lecture_id))
+    if jobs.get_job(lecture_id)["status"] == "running":
+        raise HTTPException(409, "A generation is running for this lecture; wait for it to finish")
+    try:
+        text = rewrite_section(lecture_id, body.section, body.feedback)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    (config.lecture_dir(lecture_id) / "script.md").write_text(text.rstrip() + "\n", encoding="utf-8")
+    manifest["status"] = "draft"  # the class keeps its version until the teacher approves this one
+    config.save_manifest(lecture_id, manifest)
+    return {"ok": True, "status": "draft"}
+
+
 @app.post("/api/lectures/{lecture_id}/approve")
 def approve(lecture_id: str):
     from eris.api.server_class import manifest_or_404
@@ -287,6 +328,8 @@ def approve(lecture_id: str):
     if errors:
         return {"ok": False, "errors": errors}
     from eris.api.server_platform import on_approved
+    from eris.material.slide_images import render_later
+    render_later(lecture_id)  # the class shows the real slides: draw them now, not when the first student opens it
     return {"ok": True, "errors": [], "lesson_version": on_approved(lecture_id)}
 
 

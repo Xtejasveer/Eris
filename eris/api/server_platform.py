@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from eris import config
+from eris.material.slide_images import slide_images
 from eris.platform import access, auth
 from eris.platform.db import all_rows, connect, loads, now, one
 
@@ -150,6 +151,64 @@ def update_course(course_id: int, body: CourseIn, request: Request):
     return {"ok": True}
 
 
+# ---------- deleting: a lesson takes its lecture with it ----------
+
+def _delete_lessons(conn, lessons_sql, *args):
+    """Remove the lessons `lessons_sql` selects, with everything tied to them (shared posts, students' progress,
+    doubts and feedback, locked versions), in an order where nothing still points at a removed row. Returns
+    (lecture ids, version files) for _remove_files once the database change is saved."""
+    lectures = [r["lecture_id"] for r in all_rows(conn, f"SELECT lecture_id FROM lessons WHERE id IN ({lessons_sql})", *args)]
+    from eris.api import jobs
+    busy = [lid for lid in lectures if jobs.get_job(lid)["status"] == "running"]
+    if busy:
+        raise HTTPException(409, "A script is being generated for a lesson here; wait for it to finish, then delete")
+    versions = [r["path"] for r in all_rows(conn, f"SELECT path FROM versions WHERE lesson_id IN ({lessons_sql})", *args)]
+    posts = f"SELECT id FROM posts WHERE lesson_id IN ({lessons_sql})"
+    for sql in (f"DELETE FROM progress WHERE post_id IN ({posts})", f"DELETE FROM doubts WHERE post_id IN ({posts})",
+                f"DELETE FROM feedback WHERE post_id IN ({posts})", f"DELETE FROM posts WHERE lesson_id IN ({lessons_sql})",
+                f"DELETE FROM versions WHERE lesson_id IN ({lessons_sql})", f"DELETE FROM lessons WHERE id IN ({lessons_sql})"):
+        conn.execute(sql, args)
+    return lectures, versions
+
+
+def _remove_files(lectures, versions):
+    """A deleted lesson's lecture goes too: its material and persona (data/<id>), everything generated (script, audio,
+    board, logs), its search index, and its locked versions."""
+    import chromadb
+    from eris.api import jobs
+    from eris.api.server_class import forget_lecture
+    for lid in lectures:
+        try:
+            chromadb.PersistentClient(path=config.CHROMA_DIR).delete_collection(lid)
+        except Exception:
+            pass  # never indexed
+        shutil.rmtree(config.data_dir(lid), ignore_errors=True)
+        shutil.rmtree(config.lecture_dir(lid), ignore_errors=True)
+        forget_lecture(lid)
+        jobs.clear_job(lid)
+    for path in versions:
+        Path(path).unlink(missing_ok=True)
+
+
+@router.delete("/courses/{course_id}")
+def delete_course(course_id: int, request: Request):
+    """Delete a course with everything in it: chapters, topics, lessons and their lectures, shared posts and their
+    files, students' progress, doubts and feedback, and enrolments."""
+    access.need_course(auth.require_teacher(request), course_id, teacher=True)
+    with connect() as conn:
+        lessons = """SELECT l.id FROM lessons l JOIN topics t ON t.id = l.topic_id JOIN chapters ch ON ch.id = t.chapter_id
+                     WHERE ch.course_id = ?"""
+        removed = _delete_lessons(conn, lessons, course_id)
+        posts = "SELECT id FROM posts WHERE course_id = ?"  # the material posts left
+        for sql in (f"DELETE FROM post_files WHERE post_id IN ({posts})", "DELETE FROM posts WHERE course_id = ?",
+                    "DELETE FROM chapters WHERE course_id = ?", "DELETE FROM enrollments WHERE course_id = ?",
+                    "DELETE FROM courses WHERE id = ?"):
+            conn.execute(sql, (course_id,))
+    _remove_files(*removed)
+    shutil.rmtree(COURSE_FILES / str(course_id), ignore_errors=True)
+    return {"ok": True}
+
+
 @router.post("/courses/{course_id}/code")
 def new_course_code(course_id: int, request: Request):
     access.need_course(auth.require_teacher(request), course_id, teacher=True)
@@ -191,7 +250,7 @@ def _progress_of(conn, user_id, post):
 
 
 def _post_view(conn, post, user, role):
-    view = {k: post[k] for k in ("id", "kind", "title", "body", "topic_id", "due_at", "created_at", "updated_at")}
+    view = {k: post[k] for k in ("id", "kind", "title", "body", "topic_id", "due_at", "allow_skip", "created_at", "updated_at")}
     view["topic_title"] = post.get("topic_title")
     view["files"] = all_rows(conn, "SELECT id, name, size FROM post_files WHERE post_id = ? ORDER BY id", post["id"])
     if post["kind"] == "lesson":
@@ -227,7 +286,7 @@ def get_course(course_id: int, request: Request):
         for ch in chapters:
             ch["topics"] = all_rows(conn, "SELECT id, title FROM topics WHERE chapter_id = ? ORDER BY position, id", ch["id"])
             for t in ch["topics"]:
-                lessons = all_rows(conn, "SELECT * FROM lessons WHERE topic_id = ? ORDER BY id", t["id"])
+                lessons = all_rows(conn, "SELECT * FROM lessons WHERE topic_id = ? ORDER BY kind != 'prerequisite', id", t["id"])
                 if role == "student":  # students see only what was shared
                     lessons = [l for l in lessons if l["id"] in shared]
                 for l in lessons:
@@ -304,7 +363,9 @@ def delete_chapter(chapter_id: int, request: Request):
     user = auth.require_teacher(request)
     with connect() as conn:
         access.need_course(user, _chapter(conn, chapter_id)["course_id"], teacher=True)
+        removed = _delete_lessons(conn, "SELECT l.id FROM lessons l JOIN topics t ON t.id = l.topic_id WHERE t.chapter_id = ?", chapter_id)
         conn.execute("DELETE FROM chapters WHERE id = ?", (chapter_id,))
+    _remove_files(*removed)
     return {"ok": True}
 
 
@@ -333,7 +394,9 @@ def delete_topic(topic_id: int, request: Request):
     user = auth.require_teacher(request)
     with connect() as conn:
         access.need_course(user, _topic(conn, topic_id)["course_id"], teacher=True)
+        removed = _delete_lessons(conn, "SELECT id FROM lessons WHERE topic_id = ?", topic_id)
         conn.execute("DELETE FROM topics WHERE id = ?", (topic_id,))
+    _remove_files(*removed)
     return {"ok": True}
 
 
@@ -374,7 +437,7 @@ def add_lesson(topic_id: int, body: LessonIn, request: Request):
         manifest = {"lecture_id": lecture_id, "topic": title, "duration_min": total, "speaking_min": speaking,
                     "language": language, "status": "new", "kind": body.kind,
                     "course_label": " · ".join(x for x in (course["subject"], course["year"]) if x),
-                    "topic_title": topic["title"]}
+                    "topic_title": topic["title"], "owner_id": user["id"]}
         if body.kind == "prerequisite":
             manifest["prerequisite_for"] = topic["title"]
         config.data_dir(lecture_id).mkdir(parents=True, exist_ok=True)
@@ -399,17 +462,57 @@ def _lesson(conn, lesson_id):
 
 @router.delete("/lessons/{lesson_id}")
 def delete_lesson(lesson_id: int, request: Request):
-    """Removes the lesson from the course (and its shared post); the lecture's files stay on disk."""
+    """Removes the lesson, its shared post and its lecture (material, script, audio)."""
     user = auth.require_teacher(request)
     with connect() as conn:
         access.need_course(user, _lesson(conn, lesson_id)["course_id"], teacher=True)
-        conn.execute("DELETE FROM lessons WHERE id = ?", (lesson_id,))
+        removed = _delete_lessons(conn, "SELECT ?", lesson_id)
+    _remove_files(*removed)
     return {"ok": True}
 
 
 class ShareIn(BaseModel):
     note: str = ""
     due_at: str | None = None
+    allow_skip: bool = True   # students may jump ahead past lines they haven't heard
+
+
+_rendering = set()  # lectures whose voice clips are being made now
+
+
+def _prerender(lecture_id, segments):
+    """Make every voice clip of a newly locked version in the background, so playing (and jumping around in) the
+    lesson only downloads finished clips and never waits for the voice service."""
+    if not config.GNANI_API_KEY or lecture_id in _rendering:
+        return
+    import threading
+    from eris.classroom import voice
+
+    def work():
+        try:
+            total, failures = voice.render_lecture(lecture_id, segments)
+            print(f"[share] voice for {lecture_id} ready: {total:.0f}s of audio, {failures} failed")
+        except Exception as e:
+            print(f"[share] could not make the voice for {lecture_id}: {e}")
+        finally:
+            _rendering.discard(lecture_id)
+    _rendering.add(lecture_id)
+    threading.Thread(target=work, daemon=True).start()
+
+
+def _durations(lecture_id, segments):
+    """{segment index: seconds} for spoken lines whose clip is already made (the player places checkpoints by them)."""
+    from eris.classroom import voice
+    out = {}
+    for i, seg in enumerate(segments):
+        if seg.get("kind") == "say":
+            clip = voice.clip_path(lecture_id, seg["text"])
+            if clip.exists() and clip.stat().st_size > 44:
+                try:
+                    out[i] = round(voice.wav_seconds(clip), 2)
+                except Exception:
+                    pass
+    return out
 
 
 def _lock_version(conn, lesson):
@@ -426,6 +529,7 @@ def _lock_version(conn, lesson):
     say_count = sum(1 for s in data["segments"] if s.get("kind") == "say")
     cur = conn.execute("INSERT INTO versions (lesson_id, number, path, say_count, created_at) VALUES (?, ?, ?, ?, ?)",
                        (lesson["id"], number, str(path), say_count, now()))
+    _prerender(lesson["lecture_id"], data["segments"])
     return cur.lastrowid, number
 
 
@@ -512,11 +616,11 @@ def share_lesson(lesson_id: int, body: ShareIn, request: Request):
             if body.note.strip() or body.due_at:
                 conn.execute("UPDATE posts SET body = ?, due_at = ? WHERE id = ?", (body.note.strip(), body.due_at, post["id"]))
             return {"post_id": post["id"], "version": number}
-        label = "Prerequisite: " if lesson["kind"] == "prerequisite" else ""
-        cur = conn.execute("""INSERT INTO posts (course_id, topic_id, kind, title, body, lesson_id, version_id, due_at, created_at, updated_at)
-                              VALUES (?, ?, 'lesson', ?, ?, ?, ?, ?, ?, ?)""",
+        label = ""  # the kind shows as a tag everywhere (Lecture / Prerequisite), not in the title
+        cur = conn.execute("""INSERT INTO posts (course_id, topic_id, kind, title, body, lesson_id, version_id, due_at, allow_skip,
+                                                 created_at, updated_at) VALUES (?, ?, 'lesson', ?, ?, ?, ?, ?, ?, ?, ?)""",
                            (lesson["course_id"], lesson["topic_id"], label + lesson["title"], body.note.strip(), lesson_id,
-                            version_id, body.due_at, now(), now()))
+                            version_id, body.due_at, int(body.allow_skip), now(), now()))
     return {"post_id": cur.lastrowid, "version": number}
 
 
@@ -560,17 +664,21 @@ class PostEdit(BaseModel):
     title: str | None = None
     body: str | None = None
     due_at: str | None = None
+    allow_skip: bool | None = None
 
 
 @router.put("/posts/{post_id}")
 def edit_post(post_id: int, body: PostEdit, request: Request):
+    """Change what was sent; fields left out keep their value (send due_at: null to clear the due date)."""
     user = auth.require_teacher(request)
+    sent = body.model_fields_set
     with connect() as conn:
         post = _post(conn, post_id)
         access.need_course(user, post["course_id"], teacher=True)
-        conn.execute("UPDATE posts SET title = ?, body = ?, due_at = ?, updated_at = ? WHERE id = ?",
+        conn.execute("UPDATE posts SET title = ?, body = ?, due_at = ?, allow_skip = ?, updated_at = ? WHERE id = ?",
                      ((body.title or post["title"]).strip(), post["body"] if body.body is None else body.body.strip(),
-                      body.due_at or None, now(), post_id))
+                      (body.due_at or None) if "due_at" in sent else post["due_at"],
+                      int(body.allow_skip) if body.allow_skip is not None else post["allow_skip"], now(), post_id))
     return {"ok": True}
 
 
@@ -635,8 +743,14 @@ def post_class(post_id: int, request: Request):
                       user["id"], post_id, post["version_id"])
             played = loads(row["played"], []) if row else []
     version, data = _version_data(post["version_id"])
-    return {**data, "ready": True, "post": {"id": post_id, "title": post["title"], "due_at": post["due_at"]},
-            "version_id": post["version_id"], "version_number": version["number"], "course": course, "role": role, "progress": progress, "played": played}
+    return {**data, "ready": True, "post": {"id": post_id, "title": post["title"], "due_at": post["due_at"],
+                                            "allow_skip": bool(post["allow_skip"]), "kind": post["lesson_kind"],
+                                            "topic_title": post["topic_title"]},
+            "version_id": post["version_id"], "version_number": version["number"],
+            "live_model": config.model_name(config.LLM_MODEL),  # the locked copy's is from when it was shared
+            # The slides drawn from the deck as it is now, so a copy locked before they existed shows them too
+            "slide_images": slide_images(data.get("lecture_id") or post["lecture_id"]),
+            "durations": _durations(data.get("lecture_id") or post["lecture_id"], data["segments"]), "course": course, "role": role, "progress": progress, "played": played}
 
 
 class ProgressIn(BaseModel):
@@ -678,6 +792,99 @@ def report_progress(post_id: int, body: ProgressIn, request: Request):
     return {"percent": round(100 * len(played & say_lines) / max(1, len(say_lines))), "completed": done}
 
 
+# ---------- lesson feedback and where students got stuck ----------
+
+class FeedbackIn(BaseModel):
+    version_id: int | None = None
+    line_index: int | None = None
+    section: str = ""
+    comment: str = ""
+
+
+@router.post("/posts/{post_id}/feedback")
+def add_feedback(post_id: int, body: FeedbackIn, request: Request):
+    """A student marks the part they are on as confusing (optionally saying why)."""
+    user = auth.require_user(request)
+    with connect() as conn:
+        post = _post(conn, post_id)
+        if access.need_course(user, post["course_id"]) != "student":
+            raise HTTPException(403, "Only students send lesson feedback")
+        line = ""
+        if body.version_id and body.line_index is not None:
+            segments = version_segments(body.version_id, post["lecture_id"]) or []
+            if 0 <= body.line_index < len(segments):
+                line = segments[body.line_index].get("text", "")
+        conn.execute("""INSERT INTO feedback (user_id, post_id, version_id, section, line_index, line_text, comment, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", (user["id"], post_id, body.version_id, body.section[:200],
+                                                             body.line_index, line[:1000], body.comment.strip()[:2000], now()))
+    return {"ok": True}
+
+
+@router.post("/feedback/{feedback_id}/resolve")
+def resolve_feedback(feedback_id: int, request: Request):
+    user = auth.require_teacher(request)
+    with connect() as conn:
+        f = one(conn, "SELECT post_id FROM feedback WHERE id = ?", feedback_id)
+        if not f:
+            raise HTTPException(404, "Not found")
+        access.need_course(user, _post(conn, f["post_id"])["course_id"], teacher=True)
+        conn.execute("UPDATE feedback SET resolved_at = ? WHERE id = ?", (now(), feedback_id))
+    return {"ok": True}
+
+
+@router.get("/posts/{post_id}/insights")
+def insights(post_id: int, request: Request):
+    """Where a lesson is weak, section by section: the doubts asked there, students' "confusing" flags, and where
+    students who haven't finished stopped."""
+    user = auth.require_teacher(request)
+    with connect() as conn:
+        post = _post(conn, post_id)
+        access.need_course(user, post["course_id"], teacher=True)
+        _, data = _version_data(post["version_id"])
+        doubts = all_rows(conn, """SELECT d.section, d.question, d.passed, d.flags, d.created_at, u.name AS student, d.user_id
+                                   FROM doubts d JOIN users u ON u.id = d.user_id WHERE d.post_id = ? ORDER BY d.created_at DESC""", post_id)
+        flags = all_rows(conn, """SELECT f.id, f.section, f.line_text, f.comment, f.created_at, f.resolved_at, u.name AS student
+                                  FROM feedback f JOIN users u ON u.id = f.user_id WHERE f.post_id = ? ORDER BY f.created_at DESC""", post_id)
+        stopped = all_rows(conn, """SELECT p.user_id, p.last_index, p.version_id FROM progress p JOIN enrollments e
+                                    ON e.user_id = p.user_id AND e.course_id = ? WHERE p.post_id = ? AND p.completed_at IS NULL
+                                    AND p.user_id NOT IN (SELECT user_id FROM progress WHERE post_id = ? AND completed_at IS NOT NULL)""",
+                           post["course_id"], post_id, post_id)
+    sections, title = [], None
+    for seg in data["segments"]:
+        if seg.get("name") == "SECTION":
+            title = seg["args"]["title"]
+            sections.append({"title": title, "lines": 0})
+        elif seg.get("kind") == "say" and sections:
+            sections[-1]["lines"] += 1
+    by_title = {s["title"]: {**s, "doubts": [], "students": set(), "flags": [], "stopped": 0} for s in sections}
+    for d in doubts:
+        if d["section"] in by_title:
+            by_title[d["section"]]["doubts"].append({**{k: d[k] for k in ("question", "passed", "created_at", "student")},
+                                                     "flags": loads(d["flags"], [])})
+            by_title[d["section"]]["students"].add(d["user_id"])
+    for f in flags:
+        if f["section"] in by_title:
+            by_title[f["section"]]["flags"].append(f)
+    segments_of = {}
+    for p in stopped:  # the section each unfinished student stopped in (of the version they played)
+        if p["version_id"] not in segments_of:
+            segments_of[p["version_id"]] = version_segments(p["version_id"], post["lecture_id"]) or []
+        here = None
+        for seg in segments_of[p["version_id"]][:p["last_index"] + 1]:
+            if seg.get("name") == "SECTION":
+                here = seg["args"]["title"]
+        if here in by_title:
+            by_title[here]["stopped"] += 1
+    out = []
+    for s in sections:
+        b = by_title[s["title"]]
+        out.append({"title": s["title"], "lines": s["lines"], "doubts": b["doubts"][:20], "doubt_count": len(b["doubts"]),
+                    "students_asking": len(b["students"]), "flags": b["flags"],
+                    "open_flags": sum(1 for f in b["flags"] if not f["resolved_at"]), "stopped": b["stopped"]})
+    return {"post": {"id": post_id, "title": post["title"], "lecture_id": post["lecture_id"], "version": post["version_number"]},
+            "sections": out}
+
+
 # ---------- attendance and doubts (teacher) ----------
 
 @router.get("/posts/{post_id}/attendance")
@@ -691,12 +898,14 @@ def attendance(post_id: int, request: Request):
         rows = []
         for s in students:
             p = _progress_of(conn, s["id"], post)
-            doubts = one(conn, "SELECT COUNT(*) AS n, SUM(passed) AS passed FROM doubts WHERE post_id = ? AND user_id = ?",
+            doubts = one(conn, "SELECT COUNT(*) AS n, SUM(passed) AS passed, SUM(flags != '') AS flagged FROM doubts "
+                               "WHERE post_id = ? AND user_id = ?",
                          post_id, s["id"])
             completed = one(conn, "SELECT MIN(completed_at) AS at FROM progress WHERE user_id = ? AND post_id = ?", s["id"], post_id)
             status = "present" if p["completed"] else "started" if p["started"] else "not_started"
             rows.append({**s, "status": status, "percent": p["percent"], "last_activity": p["updated_at"],
-                         "completed_at": completed["at"], "doubts": doubts["n"] or 0, "passed": doubts["passed"] or 0})
+                         "completed_at": completed["at"], "doubts": doubts["n"] or 0, "passed": doubts["passed"] or 0,
+                         "flagged": doubts["flagged"] or 0})
     return {"post": {"id": post_id, "title": post["title"], "due_at": post["due_at"], "version": post["version_number"]},
             "students": rows}
 
@@ -707,21 +916,24 @@ def post_doubts(post_id: int, request: Request, user_id: int | None = None):
     with connect() as conn:
         post = _post(conn, post_id)
         access.need_course(teacher, post["course_id"], teacher=True)
-        sql = """SELECT d.id, d.question, d.answer, d.passed, d.section, d.created_at, u.name AS student
+        sql = """SELECT d.id, d.question, d.answer, d.passed, d.flags, d.section, d.created_at, u.name AS student
                  FROM doubts d JOIN users u ON u.id = d.user_id WHERE d.post_id = ?"""
         args = [post_id]
         if user_id:
             sql += " AND d.user_id = ?"
             args.append(user_id)
-        return all_rows(conn, sql + " ORDER BY d.created_at", *args)
+        rows = all_rows(conn, sql + " ORDER BY d.created_at", *args)
+    for r in rows:
+        r["flags"] = loads(r["flags"], [])  # what the guardrails flagged (eris/guardrails.py)
+    return rows
 
 
-def log_doubt(user, post_id, version_id, lecture_id, section, question, answer, passed):
-    """Called by the doubt route after every answer to a signed-in user."""
+def log_doubt(user, post_id, version_id, lecture_id, section, question, answer, passed, flags=()):
+    """Called by the doubt route after every answer to a signed-in user. flags: what the guardrails flagged."""
     with connect() as conn:
         if post_id is not None and not one(conn, "SELECT id FROM posts WHERE id = ?", post_id):
             post_id = None
-        conn.execute("""INSERT INTO doubts (user_id, post_id, version_id, lecture_id, section, question, answer, passed, created_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        conn.execute("""INSERT INTO doubts (user_id, post_id, version_id, lecture_id, section, question, answer, passed, flags,
+                                            created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                      (user["id"], post_id, version_id, lecture_id, section[:200], question[:2000], (answer or "")[:8000],
-                      int(bool(passed)), now()))
+                      int(bool(passed)), json.dumps(list(flags)) if flags else "", now()))

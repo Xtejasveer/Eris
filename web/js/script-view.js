@@ -76,6 +76,9 @@ export function renderScriptDoc(segments, teacher = "Teacher", { lectureId = nul
       case "SLIDE":
         target().append(chip("slides", `Show slide ${a.n}`));
         break;
+      case "SLIDE_CIRCLE":
+        target().append(chip("pen", `Circle the picture on slide ${a.n}`, "marker"));
+        break;
       case "SLIDE_HIGHLIGHT":
         target().append(chip("slides", `Highlight on slide ${a.n}: “${a.text}”`, "marker"));
         break;

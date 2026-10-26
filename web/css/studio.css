@@ -10,6 +10,10 @@
 .linkish { border: 0; background: none; padding: 0; color: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
 .pill-note { display: flex; align-items: center; gap: 7px; height: 40px; padding: 0 14px; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-size: 12.5px; }
 .pill-note svg { width: 15px; height: 15px; }
+.voice-row { display: flex; align-items: center; gap: 6px; }
+.voice-row .select { flex: 1; min-width: 0; }
+.voice-play { width: 40px; height: 40px; flex: none; border: 1px solid var(--border-strong); background: var(--surface); color: var(--primary); }
+.voice-play:hover { background: var(--primary-soft); }
 
 .dropzone {
   display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 22px 16px; text-align: center; cursor: pointer;
@@ -52,6 +56,7 @@
 .studio-right { position: sticky; top: 84px; display: flex; flex-direction: column; height: calc(100vh - 104px); min-height: 520px; overflow: hidden; }
 .script-head { flex-wrap: wrap; }
 .script-stats { display: flex; gap: 6px; flex-wrap: wrap; padding: 12px 20px; border-bottom: 1px dashed var(--border-strong); background: color-mix(in srgb, var(--surface-2) 55%, var(--surface)); }
+.model-tag.s-model { height: auto; padding: 3px 10px; font-size: 12.5px; align-self: center; }
 .s-item { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); font-size: 12.5px; color: var(--muted); }
 .s-item svg { width: 14px; height: 14px; }
 .s-item strong { color: var(--text); font-weight: 600; }
@@ -116,8 +121,9 @@ code.ic { font-size: .88em; padding: 1px 5px; border-radius: 5px; background: va
 .ws { position: relative; }
 .ws-tag { position: absolute; top: -9px; right: 12px; display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 8px; border-radius: 999px; background: var(--primary); color: var(--on-primary); font: 600 10.5px var(--font); letter-spacing: .02em; }
 .ws-tag svg { width: 11px; height: 11px; }
-.doc-chip.ws { padding-right: 104px; }
-.doc-chip.ws .ws-tag { top: 50%; transform: translateY(-50%); right: 6px; }
+/* On a chip the tag sits after the label, so the chip grows to fit both (it never covers the text). */
+.doc-chip.ws { padding-right: 5px; }
+.doc-chip.ws .ws-tag { position: static; flex: none; margin-left: 4px; height: 22px; }
 
 /* syntax colors (code always sits on a warm dark surface) */
 .tk-kw { color: #e6a3c9; } .tk-str { color: #b8d68f; } .tk-num { color: #f0a477; }
@@ -187,7 +193,7 @@ code.ic { font-size: .88em; padding: 1px 5px; border-radius: 5px; background: va
 .sum-row { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-2); line-height: 1.4; }
 .sum-row svg { width: 15px; height: 15px; flex: none; margin-top: 2px; color: var(--muted); }
 .sum-row span { min-width: 0; overflow-wrap: anywhere; }
-.setup-summary-foot { padding: 0 16px 16px; }
+.setup-summary-foot { padding: 0 16px 16px; display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
 .setup-summary .env-chips { margin-top: 2px; }
 
 /* ---------- tabs: Preview / Quality / Edit (+ Progress) ---------- */

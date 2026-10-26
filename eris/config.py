@@ -12,6 +12,14 @@ load_dotenv()
 # --- Settings from .env ---
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
 LLM_MODEL = os.getenv("LLM_MODEL", "").strip()
+
+
+def model_name(model_id):
+    """A model id as people say it: "anthropic/claude-haiku-5.5" -> "Claude Haiku 5.5", "openai/gpt-4o" -> "GPT 4o"."""
+    words = (model_id or "").split("/")[-1].replace("_", "-").split("-")
+    upper = {"gpt", "llm", "ai"}
+    return " ".join(w.upper() if w.lower() in upper else w if any(c.isdigit() for c in w) else w.capitalize()
+                    for w in words if w)
 EMBED_MODEL = os.getenv("EMBED_MODEL", "baai/bge-m3").strip()
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -35,6 +43,11 @@ SPEAKING_WPM = _int_env("SPEAKING_WPM", 115)  # with the slower voice and pauses
 
 # --- Voice (Gnani). Only needed for `render` and `session --voice/--mic` ---
 GNANI_API_KEY = os.getenv("GNANI_API_KEY", "").strip()
+# Guardrails on student doubts (eris/guardrails.py): Jev checks every question and answer (uses OPENROUTER_API_KEY).
+GUARDRAILS_ENABLED = os.getenv("GUARDRAILS_ENABLED", "true").strip().lower() in ("1", "true", "yes")
+# Where programs run (eris/sandbox.py): auto (docker when SANDBOX_IMAGE is pulled, else the OS sandbox), docker, os, off.
+SANDBOX = os.getenv("ERIS_SANDBOX", "auto").strip().lower()
+SANDBOX_IMAGE = os.getenv("ERIS_SANDBOX_IMAGE", "python:3.12-slim").strip()
 # The sign-in page offers the demo accounts (python main.py seed). Local pilots only: turn off for real users.
 DEMO_LOGINS = os.getenv("ERIS_DEMO_LOGINS", "true").strip().lower() in ("1", "true", "yes")
 TTS_VOICE = os.getenv("TTS_VOICE", "Kaveri").strip()
@@ -55,6 +68,24 @@ LANGUAGES = {
     "pa-IN": ("Punjabi", "Mehuli"),
 }
 DEFAULT_LANGUAGE = TTS_LANGUAGE if TTS_LANGUAGE in LANGUAGES else "en-IN"
+# Gnani Timbre v2.5 voices that suit each language; the teacher picks one per lecture in Studio (else the default).
+LANGUAGE_VOICES = {
+    "en-IN": ["Kaveri", "Trupti", "Devika", "Pranav", "Shlok", "Girish"],
+    "hi-IN": ["Nalini", "Bhavna", "Yashvi", "Urmila", "Jwala", "Chitra", "Ambuja", "Deepak", "Roopesh", "Vikrant",
+              "Hemraj", "Jalaj", "Omkar"],
+    "ta-IN": ["Asmita", "Trisha", "Brinda", "Vedika", "Noopur"], "te-IN": ["Suhana", "Lehara", "Lavanya", "Yukti", "Varuni"],
+    "kn-IN": ["Saanvi", "Kavin"], "ml-IN": ["Reshma", "Riyaan"], "mr-IN": ["Zahira", "Ishaan"], "bn-IN": ["Kirra", "Dhruva"],
+    "gu-IN": ["Falak", "Veera"], "pa-IN": ["Mehuli", "Zayan"],
+}
+# What Studio's voice preview says, in the lecture's language.
+VOICE_SAMPLES = {
+    "en-IN": "Hello class. Today I'm teaching in place of your teacher.",
+    "hi-IN": "नमस्ते दोस्तों, आज की क्लास में आपका स्वागत है।", "ta-IN": "வணக்கம், இன்றைய வகுப்புக்கு வரவேற்கிறேன்.",
+    "te-IN": "నమస్కారం, ఈ రోజు తరగతికి స్వాగతం.", "kn-IN": "ನಮಸ್ಕಾರ, ಇಂದಿನ ತರಗತಿಗೆ ಸ್ವಾಗತ.",
+    "ml-IN": "നമസ്കാരം, ഇന്നത്തെ ക്ലാസ്സിലേക്ക് സ്വാഗതം.", "mr-IN": "नमस्कार, आजच्या वर्गात तुमचे स्वागत आहे.",
+    "bn-IN": "নমস্কার, আজকের ক্লাসে স্বাগত।", "gu-IN": "નમસ્તે, આજના વર્ગમાં તમારું સ્વાગત છે.",
+    "pa-IN": "ਸਤ ਸ੍ਰੀ ਅਕਾਲ, ਅੱਜ ਦੀ ਕਲਾਸ ਵਿੱਚ ਤੁਹਾਡਾ ਸਵਾਗਤ ਹੈ।",
+}
 if not 0.85 <= TTS_SPEED <= 1.15:  # Gnani refuses anything else, and the class would fall silent
     print(f"[config] TTS_SPEED {TTS_SPEED} is outside Gnani's 0.85-1.15; using {min(max(TTS_SPEED, 0.85), 1.15)}")
     TTS_SPEED = min(max(TTS_SPEED, 0.85), 1.15)
@@ -206,6 +237,13 @@ def lecture_language(manifest):
 
 def language_name(code):
     return LANGUAGES.get(code, LANGUAGES[DEFAULT_LANGUAGE])[0]
+
+
+def lecture_voice(manifest):
+    """The Gnani voice a lecture speaks with: the teacher's pick if it suits the lecture's language, else the default."""
+    language = lecture_language(manifest)
+    chosen = (manifest or {}).get("voice", "")
+    return chosen if chosen in LANGUAGE_VOICES.get(language, []) else language_voice(language)
 
 
 def language_voice(code):

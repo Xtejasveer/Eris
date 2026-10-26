@@ -1,7 +1,7 @@
 // Studio: upload material, describe the teacher, generate, review/edit and approve the script.
 
 import { api } from "./api.js";
-import { h, icon, toast, confirmDialog, sleep, formatDuration, languageSelect } from "./ui.js";
+import { h, icon, toast, confirmDialog, sleep, formatDuration, languageSelect, modelTag } from "./ui.js";
 import { lectureHeader } from "./header.js";
 import { renderScriptDoc, scriptStats } from "./script-view.js";
 import { showVersions } from "./versions.js";
@@ -85,18 +85,45 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     value: Math.min(data.manifest?.speaking_min || template.speaking_min || 5, +durationInput.value) });
   const languageInput = languageSelect(data.manifest?.language || template.language, template.languages);
   const languageName = () => languageInput.selectedOptions[0]?.textContent || "English";
+  // The Gnani voice: one of the voices that suit the teaching language (each language lists its own).
+  const languageInfo = () => (template.languages || []).find(l => l.code === languageInput.value) || {};
+  const voiceInput = h("select", { class: "select" });
+  function renderVoices(keep) {
+    const info = languageInfo(), voices = info.voices || [];
+    const pick = voices.includes(keep) ? keep : info.default_voice || voices[0];
+    voiceInput.replaceChildren(...voices.map(v => h("option", { value: v, selected: v === pick }, v)));
+  }
+  renderVoices(data.manifest?.voice);
+  const previewBtn = h("button", { class: "icon-btn voice-play", type: "button", title: "Hear this voice", onclick: () => previewVoice() }, icon("play"));
+  const previewAudio = new Audio();
+  const setupBody = () => ({ persona, topic: topicInput.value.trim(), duration_min: +durationInput.value || 15,
+    speaking_min: +speakingInput.value || 5, language: languageInput.value, voice: voiceInput.value });
+  async function previewVoice() {
+    const sample = languageInfo().sample;
+    if (!sample) return;
+    previewBtn.replaceChildren(h("span", { class: "spinner" }));
+    try {
+      clearTimeout(setupTimer);
+      await api.saveSetup(lectureId, setupBody());  // the preview speaks with the voice as saved
+      const res = await api.tts(lectureId, sample);
+      if (!res.ok || res.status === 204) throw new Error("No Gnani voice right now (check GNANI_API_KEY)");
+      previewAudio.src = URL.createObjectURL(await res.blob());
+      await previewAudio.play();
+    } catch (e) { toast(e.message, "error"); }
+    previewBtn.replaceChildren(icon("play"));
+  }
 
   // The teacher's fields are saved as they are typed, so they are kept without generating a script.
   let setupTimer = null;
   function saveSetupSoon() {
     clearTimeout(setupTimer);
-    setupTimer = setTimeout(() => api.saveSetup(lectureId, { persona, topic: topicInput.value.trim(),
-      duration_min: +durationInput.value || 15, speaking_min: +speakingInput.value || 5, language: languageInput.value }).catch(e => toast(`Could not save: ${e.message}`, "error")), 700);
+    setupTimer = setTimeout(() => api.saveSetup(lectureId, setupBody()).catch(e => toast(`Could not save: ${e.message}`, "error")), 700);
   }
   topicInput.addEventListener("input", saveSetupSoon);
   durationInput.addEventListener("input", saveSetupSoon);
   speakingInput.addEventListener("input", saveSetupSoon);
-  languageInput.addEventListener("change", saveSetupSoon);
+  languageInput.addEventListener("change", () => { renderVoices(voiceInput.value); saveSetupSoon(); });
+  voiceInput.addEventListener("change", saveSetupSoon);
 
   const personaBody = h("div", { class: "persona" });
   function renderPersona() {
@@ -154,7 +181,7 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
   const setupSummary = h("section", { class: "card setup-summary" },
     h("div", { class: "card-header" }, icon("layers"), h("h3", {}, "Lecture setup"), h("div", { class: "spacer" }),
       h("button", { class: "btn ghost sm", onclick: () => setFolded(false) }, icon("edit"), "Edit setup")),
-    summaryBody, h("div", { class: "setup-summary-foot" }, regenBtn));
+    summaryBody, h("div", { class: "setup-summary-foot" }, regenBtn, modelTag(data.model, "center")));
   const doneBtn = h("button", { class: "btn ghost sm", onclick: () => setFolded(true) }, icon("chevron"), "Done");
   const setupFull = h("div", { class: "setup-full" },
     h("div", { class: "setup-full-head" }, h("strong", {}, "Lecture setup"), h("div", { class: "spacer" }), doneBtn),
@@ -168,7 +195,9 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
         h("label", { class: "field" }, h("span", {}, "Total lecture time (min)"), durationInput),
         h("label", { class: "field" }, h("span", {}, "Speaking time (min)"), speakingInput),
         h("label", { class: "field" }, h("span", {}, "Teaching language"), languageInput),
-        h("div", { class: "field" }, h("span", {}, "Voice"), h("div", { class: "pill-note" }, icon("volume"), "Gnani voice for the language (or browser)")))),
+        h("div", { class: "field" }, h("span", {}, "Voice"), template.gnani
+          ? h("div", { class: "voice-row" }, voiceInput, previewBtn)
+          : h("div", { class: "pill-note" }, icon("volume"), "Browser voice")))),
     h("section", { class: "card" },
       h("div", { class: "card-header" }, h("span", { class: "step-num" }, "3"), h("h3", {}, "Teacher persona"),
         h("div", { class: "spacer" }),
@@ -177,7 +206,7 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
         } }, "Use example")),
       personaBody),
     h("div", { class: "generate-bar" }, generateBtn,
-      h("div", { class: "generate-meta" }, h("small", { class: "muted" }, "Indexes the material, then writes the script. Takes 1–3 minutes."), resetBtn)));
+      h("div", { class: "generate-meta" }, modelTag(data.model), resetBtn)));
   const left = h("div", { class: "studio-left" }, setupSummary, setupFull);
 
   function renderSummary() {
@@ -186,7 +215,7 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     summaryBody.replaceChildren(...[
       row("file", files.length ? `${files.length} file${files.length > 1 ? "s" : ""}: ${files.join(", ")}` : "No material yet"),
       row("user", persona.Teacher?.Name || "No teacher yet"),
-      row("clock", `${topicInput.value || "No topic"} · ${durationInput.value} min lecture, ${speakingInput.value} min speaking · ${languageName()}`),
+      row("clock", `${topicInput.value || "No topic"} · ${durationInput.value} min lecture, ${speakingInput.value} min speaking · ${languageName()}${template.gnani ? ` · ${voiceInput.value} voice` : ""}`),
       data.manifest?.environments ? envChips(data.manifest.environments) : null].filter(Boolean));
   }
 
@@ -361,7 +390,8 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     const est = data.manifest?.estimated_min;
     const item = (ic, v, l) => h("div", { class: "s-item" }, icon(ic), h("strong", {}, v), h("span", {}, l));
     statsEl.replaceChildren(item("layers", s.sections, "sections"), item("clock", est ? formatDuration(est) : `~${formatDuration(s.words / 115)}`, ""),
-      item("book", s.notes, "notes"), item("code", s.files, "programs"), item("question", s.breaks, "question breaks"));
+      item("book", s.notes, "notes"), item("code", s.files, "programs"), item("question", s.breaks, "question breaks"),
+      modelTag(data.script_model, "s-model"));
     statsEl.classList.toggle("hidden", !state.segments.length);
   }
 
@@ -384,6 +414,9 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     classBtn.classList.toggle("hidden", !(["approved", "completed"].includes(status()) && !state.dirty));
     generateBtn.disabled = running || state.busy;
     generateBtn.replaceChildren(...(running ? [h("span", { class: "spinner" }), "Generating…"] : [icon("sparkle"), data.script_md ? "Regenerate script" : "Generate script"]));
+    // Both buttons rest while a script is being written: a second click would start a second generation.
+    regenBtn.disabled = running || state.busy;
+    regenBtn.replaceChildren(...(running ? [h("span", { class: "spinner" }), "Generating…"] : [icon("sparkle"), "Regenerate script"]));
     resetBtn.disabled = running || state.busy;
     header.setStatus(running ? "running" : status());
   }
@@ -423,7 +456,7 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     const mark = { done: () => icon("check"), now: () => h("span", { class: "spinner" }), failed: () => icon("alert"),
       later: () => h("span", { class: "step-dot" }) };
     logList.replaceChildren(...(job.steps || []).map(st => h("div", { class: `progress-step ${st.state}` }, mark[st.state](), h("span", {}, st.label))));
-    if (job.status === "running") logList.append(h("p", { class: "progress-note" }, "This usually takes 1–3 minutes. You can leave this page and come back."));
+    if (job.status === "running") logList.append(h("p", { class: "progress-note" }, "You can leave this page and come back."));
     logActions.replaceChildren(...(job.status === "failed" ? [
       h("button", { class: "btn primary sm", onclick: () => generate() }, icon("reset"), "Try again"),
       data.script_md ? h("button", { class: "btn ghost sm", onclick: () => { data.job = { status: "idle" }; setTab("preview"); } }, "Back to the script") : null,
@@ -473,6 +506,7 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
   }
 
   async function generate() {
+    if (data.job?.status === "running" || state.busy) return toast("A script is already being generated. Wait for it to finish.", "info");
     if (!data.files.some(f => f !== "persona.md")) return toast("Upload at least one PPTX, PDF or DOCX first.", "error");
     const missing = collectPersona();
     if (missing.length) {

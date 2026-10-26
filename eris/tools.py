@@ -1,7 +1,6 @@
 """The agent tools. Every tool returns a string and never raises."""
 
 import subprocess
-import sys
 import time
 
 from langchain.tools import tool
@@ -57,16 +56,18 @@ def program_output(exit_code, stdout, stderr):
 def run_code_file(code, filename="dry_run.py", folder=None):
     """Write `code` to tmp/<filename> (or folder/<filename>), run it, return (exit_code, stdout, stderr).
 
-    The program is stopped (exit code -1, reason at the end of stderr) when it runs longer than
-    DRY_RUN_TIMEOUT_S or prints more than OUTPUT_LIMIT_BYTES. Output goes to files, not memory,
-    so an endless print loop can never fill up the server's memory.
+    The program runs in the sandbox (eris/sandbox.py: no network, no project files, no secrets). It is stopped
+    (exit code -1, reason at the end of stderr) when it runs longer than DRY_RUN_TIMEOUT_S or prints more than
+    OUTPUT_LIMIT_BYTES. Output goes to files, not memory, so an endless print loop can never fill up the server's memory.
     """
+    from eris import sandbox
     path = safe_path(filename) if folder is None else (folder / filename)
     path.write_text(code, encoding="utf-8")
     out_path, err_path = path.with_suffix(".out"), path.with_suffix(".err")
     limit, reason = config.OUTPUT_LIMIT_BYTES, None
     with open(out_path, "wb") as out, open(err_path, "wb") as err:
-        proc = subprocess.Popen([sys.executable, path.name], cwd=path.parent, stdout=out, stderr=err)
+        argv, options, stop = sandbox.command(path)
+        proc = subprocess.Popen(argv, stdout=out, stderr=err, **options)
         started = time.monotonic()
         while proc.poll() is None:
             if time.monotonic() - started > config.DRY_RUN_TIMEOUT_S:
@@ -74,7 +75,7 @@ def run_code_file(code, filename="dry_run.py", folder=None):
             elif out_path.stat().st_size + err_path.stat().st_size > limit:
                 reason = f"ERROR: stopped after {limit} bytes of output (an endless loop?)"
             if reason:
-                proc.kill()
+                stop(proc)
                 proc.wait()
                 break
             time.sleep(0.05)

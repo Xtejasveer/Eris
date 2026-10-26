@@ -12,6 +12,9 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .outline li.done .o-num { background: var(--success-soft); color: var(--success); border-color: transparent; }
 .outline li.current button { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
 .outline li.current .o-num { background: var(--primary); color: var(--on-primary); border-color: transparent; }
+.outline li.o-sub button { padding-left: 28px; font-size: 12.5px; }
+.outline li.o-sub .o-num { min-width: 26px; width: auto; padding: 0 4px; font-size: 10.5px; border-radius: 999px; }
+.outline button:disabled { opacity: .45; cursor: not-allowed; }
 
 .chat { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 12px; }
 .chat-empty { margin: auto; text-align: center; color: var(--muted); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 20px; font-size: 13px; }
@@ -95,7 +98,7 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 
 /* slides */
 .env-slides { background: radial-gradient(circle at 50% 0, var(--surface-2), var(--surface-3)); display: grid; place-items: center; padding: 28px; }
-.slide-frame { position: relative; width: min(100%, calc((100vh - 220px) * 16 / 9)); aspect-ratio: 16 / 9; container-type: size; }
+.slide-frame { --ratio: 16 / 9; position: relative; width: min(100%, calc((100vh - 220px) * var(--ratio))); aspect-ratio: var(--ratio); container-type: size; }
 /* Sizes follow the slide (cq units), not the window, so a slide in a narrow panel keeps its proportions.
    --fit (set by Stage.fitSlide) shrinks the text further when a slide still has too much on it. */
 .slide { --fit: 1; position: absolute; inset: 0; background: #fff; color: #1b1c21; border-radius: 10px; box-shadow: 0 10px 40px rgba(20, 20, 40, .18); padding: 5.5cqh 6.5cqw; overflow: hidden; display: flex; flex-direction: column; }
@@ -114,6 +117,13 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .slide-pictures img { max-width: 100%; max-height: 100%; min-height: 0; object-fit: contain; border-radius: 6px; flex: 1 1 0; }
 .slide-empty { margin: auto; display: flex; flex-direction: column; align-items: center; gap: 8px; color: #8b8d96; }
 .slide-empty svg { width: 28px; height: 28px; }
+/* The real slide as a picture; highlights sit over its printed lines */
+.slide.as-image { padding: 0; }
+.slide.as-image::before { display: none; }
+.slide-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.slide-mark { position: absolute; z-index: 1; border-radius: 4px; pointer-events: none;  /* see-through: readable on light and dark boxes */
+  background: linear-gradient(rgba(255, 214, 10, .42), rgba(255, 214, 10, .42)) no-repeat 0 0 / 0 100%;
+  animation: marker .6s ease forwards; }
 .slide-num { position: absolute; right: 14px; bottom: 10px; font-size: 12px; color: #8b8d96; font-variant-numeric: tabular-nums; }
 
 /* code */
@@ -186,6 +196,7 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
   position: relative; flex: 1; min-height: 0; height: 100vh; overflow: hidden; color: var(--ink);
   background: radial-gradient(circle, var(--dot) 1.2px, transparent 1.4px) 0 0 / 28px 28px, var(--board); }
 .ls-board { position: absolute; inset: 0; }
+.lesson.is-preview .ls-board { top: 44px; }  /* room for the teacher's preview bar under the title */
 .ls-board .stage-envs { position: absolute; inset: 0; }
 
 /* notebook: handwriting straight on the board, in columns that grow to the right */
@@ -217,7 +228,7 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 
 /* slides, code and graphs: cards on the board */
 .env-slides { background: none; padding: 100px 64px 170px; }
-.slide-frame { width: min(100%, calc((100vh - 290px) * 16 / 9)); }
+.slide-frame { width: min(100%, calc((100vh - 290px) * var(--ratio))); }
 .ls-board .env.env-code { inset: 96px 0 140px; width: min(1080px, calc(100% - 112px)); margin: 0 auto; border-radius: 16px; overflow: hidden; box-shadow: 0 12px 40px rgba(20, 20, 40, .18); }
 .ls-board .env.env-visual { inset: 96px 56px 150px; background: none; padding: 0; }
 .ls-board .vz-win { border-radius: 16px; box-shadow: 0 12px 40px rgba(20, 20, 40, .14); }
@@ -255,6 +266,15 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .ls-pill { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 14px 0 11px; border: 0; border-radius: 999px; background: var(--pill); color: var(--ink); font: 600 13px var(--font); box-shadow: 0 1px 8px rgba(74, 52, 26, .08); cursor: pointer; }
 .ls-pill svg { width: 16px; height: 16px; }
 .ls-pill:hover, .ls-pill.active { background: #e3eee5; color: #2f6a4e; }
+/* The teacher's preview bar: under the title, on its own row, so its names always show. */
+.ls-preview-bar { position: absolute; top: 74px; left: 22px; z-index: 4; display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 999px; background: var(--pill); box-shadow: 0 1px 8px rgba(74, 52, 26, .08); }
+.pv-tag { display: inline-flex; align-items: center; gap: 6px; padding: 0 10px 0 8px; font: 600 11px var(--font); text-transform: uppercase; letter-spacing: .06em; color: #8c8276; }
+.pv-tag svg { width: 14px; height: 14px; }
+.pv-btn { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 14px 0 11px; border: 1px solid #e9e0d0; border-radius: 999px; background: #fffdf8; color: var(--ink); font: 600 13px var(--font); cursor: pointer; }
+.pv-btn svg { width: 15px; height: 15px; }
+.pv-btn:hover, .pv-btn.active { border-color: #2f6a4e; color: #2f6a4e; }
+.pv-btn.primary { background: #2f6a4e; border-color: #2f6a4e; color: #fff; }
+.pv-btn.primary:hover { background: #275a41; color: #fff; }
 /* The script panel (a teacher previewing a shared lesson): slides in from the right over the board. */
 .ls-script { position: absolute; right: 0; top: 0; bottom: 0; z-index: 7; width: min(560px, 92vw); display: flex; flex-direction: column; background: var(--surface); color: var(--text); border-left: 1px solid var(--border); box-shadow: var(--shadow-lg); transform: translateX(105%); transition: transform .25s ease; }
 .lesson.script-open .ls-script { transform: none; }
@@ -272,8 +292,39 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .ls-follow svg { width: 16px; height: 16px; }
 
 /* bottom: the live caption and the doubt box, nothing else */
-.ls-bar { position: absolute; left: 22px; right: 22px; bottom: 18px; z-index: 5; display: flex; align-items: flex-end; gap: 16px; pointer-events: none; }
-.ls-bar > * { pointer-events: auto; }
+.ls-bar { position: absolute; left: 22px; right: 22px; bottom: 18px; z-index: 5; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+.ls-bar-row { display: flex; align-items: flex-end; gap: 16px; }
+.ls-bar-row > *, .ls-scrub { pointer-events: auto; }
+/* The scrubber row: the whole lesson as a bar, with back, next and speed. */
+.ls-scrub { display: flex; align-items: center; gap: 2px; height: 34px; padding: 0 4px; align-self: center; width: min(640px, 100%); border-radius: 999px; background: var(--pill); box-shadow: 0 1px 8px rgba(74, 52, 26, .08); color: var(--ink); }
+.sc-btn { display: inline-flex; align-items: center; gap: 4px; height: 26px; min-width: 26px; justify-content: center; padding: 0 6px; border: 0; border-radius: 999px; background: none; color: #5b5248; font: 600 12px var(--font); cursor: pointer; flex: none; }
+.sc-btn:hover, .sc-btn.active { background: #f2ece2; color: var(--ink); }
+.sc-btn svg { width: 14px; height: 14px; }
+.sc-back10 span { font-size: 11px; }
+.sc-speed { min-width: 38px; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.sc-track { position: relative; flex: 1; height: 20px; margin: 0 8px; }
+.sc-track::before { content: ""; position: absolute; left: 0; right: 0; top: 9px; height: 3px; border-radius: 2px; background: #e9e0d0; }
+.sc-heard i { position: absolute; top: 9px; height: 3px; background: #b9d6c3; }
+.sc-fill { position: absolute; left: 0; top: 9px; height: 3px; border-radius: 2px; background: #2f6a4e; width: 0; }
+/* Checkpoints: reached ones are filled and clickable; the rest are hollow. */
+.sc-point { position: absolute; top: 5px; width: 10px; height: 10px; padding: 0; border-radius: 50%; transform: translateX(-50%); border: 2px solid #c9bda8; background: var(--pill); cursor: pointer; transition: transform .12s; }
+.sc-point.topic { width: 16px; height: 16px; top: 2px; display: grid; place-items: center; font: 700 9px var(--font); color: #8c8276; }
+.sc-point.topic.reached { color: #fff; }
+.sc-point.sub { width: 8px; height: 8px; top: 6px; border-width: 1.5px; }
+.sc-count { flex: none; padding: 0 6px; font: 600 11px var(--font); color: #8c8276; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sc-point.reached { background: #2f6a4e; border-color: #2f6a4e; }
+.sc-point:not(:disabled):hover { transform: translateX(-50%) scale(1.25); }
+.sc-point:disabled { cursor: not-allowed; opacity: .7; }
+.busy { pointer-events: none; opacity: .5; }
+.sc-tip { position: absolute; bottom: 24px; transform: translateX(-50%); width: max-content; max-width: 240px; padding: 5px 9px; border-radius: 10px; z-index: 2; background: #2b2621; color: #f6f2ea; font-size: 12px; line-height: 1.4; pointer-events: none; display: flex; flex-direction: column; box-shadow: 0 6px 20px rgba(0,0,0,.2); }
+.sc-tip strong { font-size: 11.5px; color: #e8c34e; }
+.sc-continue { background: #e3eee5 !important; color: #2f6a4e !important; }
+.lesson.has-overlay .ls-scrub { visibility: hidden; }
+.sc-gap { flex: none; height: 22px; padding: 0 8px; border: 0; border-radius: 999px; background: #f9eed7; color: #b5771d; font: 600 11.5px var(--font); cursor: pointer; white-space: nowrap; }
+.transcript { list-style: none; margin: 0; padding: 4px 8px; overflow-y: auto; flex: none; max-height: 30%; }
+.transcript li { padding: 6px 10px; border-radius: 10px; font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
+.transcript li.current { background: var(--primary-soft); color: var(--primary); }
+.flag-line { margin: 0; padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--surface-2); border-radius: 0 12px 12px 0; color: var(--text-2); font-size: 13.5px; }
 /* The caption runs straight on the whiteboard, beside the tutor: no card behind it. */
 .ls-caption { flex: 1; min-width: 0; max-width: 760px; display: flex; align-items: center; gap: 16px; }
 .ls-tutor { --level: 0; position: relative; width: 84px; height: 84px; flex: none; border-radius: 50%; overflow: hidden; background: #e9ecf6; box-shadow: 0 2px 10px rgba(74, 52, 26, .14); }
@@ -314,12 +365,22 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .ls-menu-item svg { width: 17px; height: 17px; }
 
 /* the question being answered: a card above the doubt box */
-.ls-live { position: absolute; right: 0; bottom: 76px; width: 100%; max-height: 48vh; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 18px; background: var(--pill); box-shadow: 0 10px 34px rgba(74, 52, 26, .16); animation: toast-in .2s ease; }
+/* Above the doubt box and the checkpoint bar (never over them). */
+.ls-live { position: absolute; right: 0; bottom: 134px; width: min(640px, 52vw); max-height: min(60vh, calc(100vh - 230px)); display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 18px; background: var(--pill); box-shadow: 0 10px 34px rgba(74, 52, 26, .16); animation: toast-in .2s ease; }
 .ls-live-head { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
 .ls-live-head svg { width: 16px; height: 16px; color: var(--accent); }
 .ls-live-head strong { flex: 1; }
 .ls-live-thread { overflow-y: auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
-.ls-live .ck-head { display: none; }
+/* Each question break in the chat starts with a small label, so earlier ones are easy to tell apart. */
+.ls-live .ck-head { display: flex; align-items: center; gap: 6px; margin: 4px 0 2px; font-size: 11px; color: #8c8276; text-transform: uppercase; letter-spacing: .05em; }
+.ls-live .ck-head svg { width: 12px; height: 12px; }
+.ls-live .ck-head strong { font-weight: 600; }
+.ls-live .checkpoint + .checkpoint, .ls-live .raised-note + .checkpoint { border-top: 1px dashed #e0d7c6; padding-top: 8px; }
+.ls-live .raised-note { display: flex; flex-direction: column; gap: 8px; }
+/* While the teacher talks, the doubt box rests: pause the lesson (or wait for a question break) to ask. */
+.ls-ask.locked { opacity: .55; box-shadow: none; }
+.ls-ask.locked .ls-input { cursor: not-allowed; }
+.ls-ask.locked .ls-mic, .ls-ask.locked .ls-plus { cursor: not-allowed; background: #d9d1c4; }
 .ls-live .msg .bubble, .ls-drawer .msg .bubble { font-size: 13.5px; }
 .ls-live .msg.teacher .bubble { background: #f2ece2; color: var(--ink); }
 .ls-live .msg.teacher.prompt .bubble { background: var(--primary-soft); }
@@ -342,9 +403,13 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 }
 @media (max-width: 760px) {
   .ls-top-center .env-indicator, .ls-clock, .ls-where { display: none; }
-  .ls-bar { left: 10px; right: 10px; flex-direction: column; align-items: stretch; }
+  .ls-bar { left: 10px; right: 10px; }
+  .ls-bar-row { flex-direction: column; align-items: stretch; }
+  .sc-gap, .sc-btn span { display: none; }
   .ls-ask-wrap { margin-left: 0; }
   .ls-ask { width: 100%; }
 }
+.ls-ask .ls-model { align-self: center; flex: none; height: 22px; padding: 0 8px; font-size: 11px; margin-right: 4px; }
+.ls-kind { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 999px; background: #f3e5ee; color: #8a4f78; font-size: 10.5px; font-weight: 700; vertical-align: 2px; }
 .ls-mini { height: 26px; padding: 0 11px; border: 0; border-radius: 999px; background: #f2ece2; color: #6d6458; font: 600 12px var(--font); cursor: pointer; }
 .ls-mini:hover { color: var(--ink); }

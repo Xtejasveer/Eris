@@ -166,7 +166,10 @@ export class Player {
       switch (seg.name) {
         case "SECTION": this.state.section = a.title; this.state.covered.push(a.title); this.state.sectionText = []; break;
         case "WRITE_CODE": this.board.files[a.file] = a.code; await this.stage.writeCode(a.file, a.code); break;
-        case "RUN": this.board.lastOutput = this.board.expectedOutput = seg.expected_output || ""; break;
+        case "RUN":  // the terminal shows each run again, with its approved output
+          this.board.lastOutput = this.board.expectedOutput = seg.expected_output || "";
+          this.stage.runEnd(this.stage.runStart(a.cmd), seg.expected_output || "", true);
+          break;
         case "SLIDE": this.board.currentSlide = a.n; this.stage.showSlide(a.n); break;
         case "NOTE": case "WRITE": this.board.notebook.push(...a.text.split("\n")); await this.stage.note(a.text); break;
         case "NOTE_TITLE": this.board.notebook.push("## " + a.text); await this.stage.noteTitle(a.text); break;
@@ -234,6 +237,9 @@ export class Player {
   }
 
   async say(text, index = null) {
+    // A new speed starts with a new line, so the voice and the writing on the board always share one speed.
+    await this.gate();  // a stopped player (replaced by a jump) never starts another line
+    if (this.nextRate) { this.rate = this.nextRate; this.voice.setRate(this.rate); this.nextRate = null; }
     this.ui.onCaption?.(text);
     if (index != null) this.voice.prefetch(this.nextSay(index));
     await this.voice.speak(text);
@@ -254,7 +260,13 @@ export class Player {
       await this.tick(SECTION_BREATH_MS);
       return;
     }
-    if (seg.name === "DOUBT_CHECK") return this.doubtCheck(index === this.segments.length - 1);
+    if (seg.name === "DOUBT_CHECK") {
+      // A break the student already went through (before a rewind) is not asked again.
+      if (this.ui.isBreakDone?.(index)) return;
+      await this.doubtCheck(index === this.segments.length - 1);
+      this.ui.onBreakDone?.(index);
+      return;
+    }
     if (seg.name === "WRITE_CODE") this.state.sectionText.push(`Code in ${a.file}:\n${a.code}`);
     if (["NOTE", "NOTE_TITLE", "WRITE"].includes(seg.name)) this.state.sectionText.push(`Notebook:\n${a.text}`);
     if (seg.name === "VISUAL") this.state.sectionText.push(`Visual "${a.title}" (${a.id}): ${a.brief}`);
@@ -297,6 +309,7 @@ export class Player {
   // Runs one action on the stage. Returns an error string, or "" when it worked.
   // paceS: seconds the writing should take (while_speaking); otherwise the normal speed.
   async action(seg, paceS = null) {
+    await this.gate();  // nor another action
     const a = seg.args || {}, b = this.board, st = this.stage;
     const ctl = paceS ? this.pacedCtl(seg, paceS) : this.ctl;
     switch (seg.name) {

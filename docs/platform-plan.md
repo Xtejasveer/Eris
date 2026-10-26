@@ -1,6 +1,7 @@
 # Eris platform plan: courses, lessons on every student's device, prerequisite classes, attendance
 
-Status: planning (nothing built yet). Add points anywhere; the open questions are at the end.
+Status: **v1 and v1.1 are built** (sections 1-6) and run as a pilot. Next is **v2** (sections 7-8).
+Add points anywhere; the open questions are at the end.
 
 ## Goal
 
@@ -72,13 +73,13 @@ How "watched" should be measured (so it can't be gamed by leaving a tab open):
 - Count only while the tab is visible and the lesson is playing (not paused, not hidden in the background).
 - Skipping ahead does not count the skipped part.
 - Optional engagement checks: the question breaks already ask "any doubts?"; an occasional "still with me?" tap,
-  or a 2-3 question check at the end, can confirm the student was there.
+  or the practice part after the lesson (section 7), can confirm the student was there.
 
 What the teacher sees, per lesson:
 - who is present (watched all of it), who started but didn't finish (and how far they got), who never opened it,
 - how far each student got and when,
 - the doubts each student asked (and which were passed to the teacher),
-- the check results, if the lesson has a check.
+- the practice results, if the lesson has a practice part.
 
 Attendance needs 100% of the lesson. A student can stop and come back as often as they like (progress is kept, and
 lines already played stay counted); rewinding is fine. Question breaks and doubt answers are not counted, only the
@@ -103,53 +104,34 @@ Decision needed: where prerequisite content comes from when the teacher has no m
 uploads a short reference, or approves a generated outline first. Either way the approved script is the safeguard,
 because everything else in Eris is grounded in the teacher's material.
 
-## 6. Making it more useful (v2)
+## 6. v1.1 (built)
 
-Everything in this section is **v2**: none of it is part of v1. Each item says which problem it solves.
+What was built, and what was left out:
+- **Code sandbox** (`eris/sandbox.py`): every program (lesson code, doubt answers, generation dry runs) runs with no
+  network, no access to the project (so not `.env` or the database), writes only in its own folder, CPU, file and
+  open-file limits, and no secrets in its environment. On macOS this is the OS sandbox; with
+  `docker pull python:3.12-slim` it switches to a locked-down container (`ERIS_SANDBOX`).
+- **Safe answers**: rules in the doubt prompt (graded work, personal problems, harmful requests, keeping its role).
+- **Playback by checkpoints** (`web/js/checkpoints.js`): students jump only to checkpoints, never to any sentence.
+  Checkpoints come from the script's structure, for any lesson: the first safe line of each section, plus extra ones
+  in stretches longer than 75 s (at safe lines, preferring new steps on screen), none closer than 20 s. A safe line is
+  one where nothing is half-done (no action spoken over, no program output waiting, no graph mid-slide, no diagram
+  part-built). Students can go to checkpoints they reached (and the next one if the teacher allows skipping), restart
+  the part, or continue where they left off. Jumps run one at a time: the old run stops completely before the board
+  is rebuilt, and a voice clip still loading never starts. No code runs during playback (approved output is shown).
+  Speed (0.75x-1.5x) changes from the next sentence. Voice clips are made in the background when a version is shared,
+  and the server makes at most 3 clips at once. Breaks already taken are not asked again; the transcript is read-only.
+  Not built: board snapshots (a rebuild takes about 30 ms) and tapping a line on the board to replay it.
+- **Insights** per lesson (doubts, "confusing" flags and drop-offs per section) and **students' "Confusing?" flag**;
+  the teacher can rewrite one section from that feedback, which makes a draft to approve as a new version.
 
-### For students
+The plan as written before building:
 
-- **Readiness check before a topic.** A short check on the prerequisites; students who pass can skip the
-  prerequisite class, the rest are sent to it. Solves: everyone sitting through prerequisites they already know.
-- **Quick check at the end of a lesson.** Optional per lesson: 2-3 questions made from the locked script and
-  approved by the teacher. Solves: the teacher not knowing whether watching turned into understanding; also confirms
-  attendance.
-- **Course study helper.** Ask doubts outside a lesson, answered only from that course's material and approved
-  lessons, and visible to the teacher. Solves: students going back to YouTube or ChatGPT between classes.
-- **Missed-lesson catch-up.** A student who joins late or misses a due date sees exactly which lessons they still
-  owe, in order. Solves: students falling behind without anyone noticing.
-- **Transcript and notes after the lesson.** The board notes and the full transcript, downloadable. Solves:
-  revision without re-watching.
-- **Low-data mode.** Voice, captions and board only (no tutor video, smaller downloads), for slow connections
-  and cheap phones. Solves: students who can't stream reliably.
-- **Revision reminders.** A short recap or check a few days after a lesson (spaced repetition). Solves:
-  forgetting before the exam.
-- **Lesson in the student's language.** The teacher approves a translated version of a script (Eris already
-  generates in 10 languages); students pick theirs. Solves: students who learn better in their first language.
+The first things to add to the v1 pilot: the playback controls students ask for first, two ways for the teacher to
+see where a lesson is weak, and the two safety items that matter most once students use it on their own (answers that
+stay safe, and code that never runs on the main server).
 
-### For teachers
-
-- **Where students got stuck.** A per-lesson view of which sections drew the most doubts, and which students
-  dropped off where. Solves: the teacher not knowing what to revisit in the next live class.
-- **Doubt summary.** The doubts of the whole class grouped into a few common confusions, with how many students
-  asked each, e.g. "12 students: why the base case returns 1". Solves: reading 200 doubts one by one.
-- **Doubts passed to the teacher, as an inbox.** Marks, deadlines and anything the agent hands over arrive in one
-  place; the teacher answers once, and can publish the answer as a course FAQ the agent uses from then on. Solves:
-  questions lost or answered ten times.
-- **Students who need attention.** A short list: not started, started but not finished, low check scores, many doubts.
-  Solves: struggling students staying invisible until the exam.
-- **Students' feedback on a lesson.** "This part was confusing" on any section; the teacher sees it and can
-  regenerate just that section. Solves: a weak part of a script staying weak.
-- **Reuse.** Copy a course to next year's batch with its chapters, topics and approved lessons. Solves:
-  rebuilding the same course every year.
-- **Co-teachers and TAs.** More than one teacher on a course, with roles. Solves: shared courses and lab
-  sections.
-- **Export.** Attendance and check results as a CSV for the institution's records. Solves: copying attendance by
-  hand.
-- **Scheduling.** Release a lesson at a set time; mark late completions separately from on-time ones. Solves:
-  lessons going out too early or too late.
-
-### Self-paced playback: a scrubber, rewind and speed (v2)
+### Self-paced playback: a scrubber, rewind and speed
 
 Each student watches on their own, so they need the controls of a video player: a scrubber (progress bar) to jump
 around, rewind when they missed something, and a speed control. A lesson is not a video, though: it is a script played
@@ -192,10 +174,90 @@ How it works with attendance (100%):
   past unwatched parts for a lesson.
 - Lines played at any speed up to 1.5x count as watched.
 
-## 7. Making it robust (v2)
+### Where the lesson is weak
 
-Everything in this section is **v2**: none of it is part of v1. Until these land (the code sandbox, limits, backups
-and privacy above all), v1 should run only as a pilot with trusted teachers and students, not as a public site.
+- **Where students got stuck.** A per-lesson view of which sections drew the most doubts, and which students
+  dropped off where. Solves: the teacher not knowing what to revisit in the next live class.
+- **Students' feedback on a lesson.** "This part was confusing" on any section; the teacher sees it and can
+  regenerate just that section. Solves: a weak part of a script staying weak.
+
+### Safety
+
+- **Safe answers.** The doubt agent stays on the course topic, refuses to do graded assignments for students,
+  keeps answers age-appropriate, and passes anything about marks, exams or personal issues to the teacher. Every
+  answer is logged. Solves: the AI saying something the teacher would not.
+- **Code runs in a sandbox.** Lesson programs and doubt-answer programs run in an isolated, time- and
+  memory-limited sandbox, never on the main server. Solves: today's server running code it is sent; in v1 a
+  student's doubt can still make the agent run code on the server.
+
+## 7. Making it more useful (v2)
+
+Everything in this section is **v2** (none of it is in v1 or v1.1). Each item says which problem it solves.
+
+### For students
+
+- **Readiness check before a topic.** A short check on the prerequisites; students who pass can skip the
+  prerequisite class, the rest are sent to it. Solves: everyone sitting through prerequisites they already know.
+- **Point at it and ask.** When a student pauses, they can mark exactly what confused them on the board, and an
+  "Ask AI about this" button appears beside the mark. Solves: doubts like "what does this mean?" where typing out the
+  line, the formula or the part of a picture is slow or impossible.
+  - Slides and notebook: highlight words or a line. Code: highlight one or more lines. Pictures, diagrams and
+    graphs: circle or underline with a red pen (the board already has a pen for the teacher's circles).
+  - The doubt agent gets what was marked: the exact text or code lines, the diagram block or the graph's current
+    state, and for a picture the marked part of the image (sent to the vision model). It answers in the usual way, on
+    the board, starting from the marked thing.
+  - The mark stays on the board while the answer plays, then clears; the student can type or say the question too.
+  - The teacher sees the marks with the doubts in Insights, so "most students circled this part of slide 7" shows up.
+  - Watch: image marks cost a vision-model call, so they count toward the doubt limits; marks work only while paused,
+    so the lesson never moves under the student's pen.
+- **Practice after the lesson.** An optional part after the lesson ends, in the same workspaces the lesson used.
+  Made in an extra step from the approved lesson, reviewed and approved in Studio, and locked into the version.
+  Solves: students only watching, and the teacher not knowing whether watching turned into understanding.
+  - Code: a starter file and a small task; the student edits and runs it in the code panel. Student code runs for
+    real, in the sandbox, and is checked against tests the teacher approved.
+  - Notebook (any subject): multiple-choice questions, fill in the blank, put things in order (checked by code), and
+    short written answers (checked by the AI against a rubric the teacher approved).
+  - Graphs: "move the slider until …", checked from the graph's state. Diagrams: put the blocks in order.
+  - The doubt agent helps with hints, never the answer (the graded-work rule). Attendance stays "heard every line";
+    practice scores are separate and show in Insights with the common wrong answers.
+  - Watch: a limit on code runs per student (and the Docker sandbox for real use), the cost of AI-checked answers
+    (so code-checked exercises come first), and copying (slightly different numbers per student).
+  - Order: multiple-choice and code exercises first, then graph and diagram tasks, then written answers.
+- **Course study helper.** Ask doubts outside a lesson, answered only from that course's material and approved
+  lessons, and visible to the teacher. Solves: students going back to YouTube or ChatGPT between classes.
+- **Missed-lesson catch-up.** A student who joins late or misses a due date sees exactly which lessons they still
+  owe, in order. Solves: students falling behind without anyone noticing.
+- **Transcript and notes after the lesson.** The board notes and the full transcript, downloadable. Solves:
+  revision without re-watching.
+- **Low-data mode.** Voice, captions and board only (no tutor video, smaller downloads), for slow connections
+  and cheap phones. Solves: students who can't stream reliably.
+- **Revision reminders.** A short recap or check a few days after a lesson (spaced repetition). Solves:
+  forgetting before the exam.
+- **Lesson in the student's language.** The teacher approves a translated version of a script (Eris already
+  generates in 10 languages); students pick theirs. Solves: students who learn better in their first language.
+
+### For teachers
+
+- **Doubt summary.** The doubts of the whole class grouped into a few common confusions, with how many students
+  asked each, e.g. "12 students: why the base case returns 1". Solves: reading 200 doubts one by one.
+- **Doubts passed to the teacher, as an inbox.** Marks, deadlines and anything the agent hands over arrive in one
+  place; the teacher answers once, and can publish the answer as a course FAQ the agent uses from then on. Solves:
+  questions lost or answered ten times.
+- **Students who need attention.** A short list: not started, started but not finished, low practice scores, many
+  doubts. Solves: struggling students staying invisible until the exam.
+- **Reuse.** Copy a course to next year's batch with its chapters, topics and approved lessons. Solves:
+  rebuilding the same course every year.
+- **Co-teachers and TAs.** More than one teacher on a course, with roles. Solves: shared courses and lab
+  sections.
+- **Export.** Attendance and practice results as a CSV for the institution's records. Solves: copying attendance by
+  hand.
+- **Scheduling.** Release a lesson at a set time; mark late completions separately from on-time ones. Solves:
+  lessons going out too early or too late.
+
+## 8. Making it robust (v2)
+
+Everything in this section is **v2**. Until these land (limits, backups and privacy above all, after v1.1's safe
+answers and code sandbox), Eris should run only as a pilot with trusted teachers and students, not as a public site.
 
 - **Progress that can't be faked.** The browser reports which spoken lines were played; the server checks the
   report against the script (real line ids, in order, at a believable pace) and computes attendance itself. Solves:
@@ -205,17 +267,13 @@ and privacy above all), v1 should run only as a pilot with trusted teachers and 
 - **Generation as a proper job queue.** Script generation runs in a background worker with a queue, not a thread
   inside the web server, so a restart or deploy doesn't kill it, and many teachers can generate at once. Solves: today's
   "the job died when the server restarted".
-- **Approved versions never change.** An approved script version is read-only; edits make a new version that
-  needs approval. Attendance and doubts point to the version the student saw. Solves: disputes about what was taught.
+- **Approved versions never change.** *Built in v1:* every approved script is kept as a read-only, numbered
+  version; approving a new script gives it to the class, and the teacher can read any version and roll back. Still
+  to do: attendance per version (see "Found while building v1"). Solves: disputes about what was taught.
 - **Audio served as static files from a CDN.** Generated once per approved version. Solves: the server slowing
   down when a whole class opens a lesson at once.
 - **Limits and budgets.** Doubts per student per lesson, generations per teacher per day, and a monthly AI budget
   per course with an alert. Solves: one user running up a large bill.
-- **Safe answers.** The doubt agent stays on the course topic, refuses to do graded assignments for students,
-  keeps answers age-appropriate, and passes anything about marks, exams or personal issues to the teacher. Every
-  answer is logged. Solves: the AI saying something the teacher would not.
-- **Code runs in a sandbox.** Lesson programs and doubt-answer programs run in an isolated, time- and
-  memory-limited sandbox, never on the main server. Solves: today's server running code it is sent.
 - **Backups and monitoring.** Nightly database and file backups, error tracking, and alerts when generation or
   the voice service fails. Solves: losing a semester of courses, or finding out from students that it's broken.
 - **Privacy.** Collect only what the course needs; students can see their own data; data is deleted when a course
@@ -226,7 +284,26 @@ and privacy above all), v1 should run only as a pilot with trusted teachers and 
   is down, students can still type a doubt and it goes to the teacher's inbox. Solves: a provider outage stopping
   classes.
 
-## 8. What this needs underneath
+### Found while building v1 (v2)
+
+- **Doubts for many students at once.** v1 answers one doubt at a time across all students (a lock, because the doubt
+  agent's tools read one shared board). Give each answer its own board so many students can ask at once. Solves:
+  students waiting on each other's doubts when a whole class watches together.
+- **Doubt threads in the database.** The conversation behind each student's doubts lives in server memory and is lost
+  on a restart. Solves: a student's follow-up question losing its context after a deploy.
+- **Accounts.** Password reset ("forgot password"), email verification, and turning off the demo sign-in buttons
+  (`ERIS_DEMO_LOGINS`) for real use. Solves: locked-out users and fake accounts.
+- **Course management.** Remove a student, archive a course, reorder chapters and topics, move a lesson to another
+  topic. Solves: courses that can only grow, never be tidied.
+- **Attendance by version.** Show which script version each student finished; today "present" carries over when a new
+  version is given to the class. Solves: not knowing who saw the corrected lesson.
+- **Phone layout for the lesson.** The player is built for laptop screens. Solves: students who only have a phone.
+- **Notifications.** A new lesson shared, a due date coming up, a new version given to the class. Solves: students
+  not knowing there is something to watch.
+- **Scale and deployment.** Move from SQLite to Postgres, and a real deployment (HTTPS, a domain, environment
+  settings). Solves: the pilot outgrowing one machine.
+
+## 9. What this needs underneath
 
 v1:
 - Accounts and roles: teacher and student, sign-in, course enrolment by class code. Today there is no login at all.
@@ -235,13 +312,16 @@ v1:
 - File storage for the shared notes and material, and the lessons' audio.
 - Hosting with a persistent database and storage (see the deployment discussion: not Vercel alone).
 
-v2 (from section 7):
-- A background worker and job queue for generation, a code sandbox, a CDN for audio, backups and monitoring.
+v1.1 (section 6):
+- A code sandbox (an isolated runner with time and memory limits).
+
+v2 (from section 8):
+- A background worker and job queue for generation, a CDN for audio, backups and monitoring, Postgres.
 - More roles: TAs and an institution admin.
 
-## 9. Suggested order
+## 10. Suggested order
 
-v1 (sections 1-5):
+v1 (sections 1-5), **built**:
 1. Foundations: accounts and roles, a real database.
 2. Courses with class codes, the course → chapter → topic structure (today's lectures moved into it), and home pages
    (course grids) for teachers and students.
@@ -250,28 +330,33 @@ v1 (sections 1-5):
 5. Attendance: tracking which spoken lines each student played, present at 100%, the teacher's attendance view.
 6. Prerequisite lessons.
 
-v2 (sections 6-7):
-7. Robustness first: the code sandbox, limits and budgets, safe answers, backups and monitoring, privacy, server-checked
-   and network-proof progress, the job queue, read-only approved versions.
-8. Teacher tools: the doubt inbox and FAQ, where students got stuck, export, the doubt summary, students who need
-   attention, lesson feedback, scheduling.
-9. Student tools: self-paced playback (scrubber, rewind, speed, board snapshots), quick checks, catch-up list,
-   transcript and notes, readiness check, study helper, low-data mode.
-10. Later in v2: revision reminders, translated lessons, reuse, co-teachers, CDN for audio, working when AI services
-    are down.
+v1.1 (section 6), **built**:
+7. Safety first: the code sandbox, then safe answers.
+8. Self-paced playback: scrubber, rewind, speed, board snapshots.
+9. Where students got stuck, and students' feedback on a lesson (with regenerating one section).
 
-## 10. Open questions
+v2 (sections 7-8):
+10. Robustness: limits and budgets, backups and monitoring, privacy, server-checked and network-proof progress, the
+    job queue, doubts for many students at once, doubt threads in the database, accounts, attendance by version.
+11. Teacher tools: the doubt inbox and FAQ, export, the doubt summary, students who need attention, scheduling, course
+    management, notifications.
+12. Student tools: point at it and ask, practice after the lesson, catch-up list, transcript and notes, readiness
+    check, study helper, low-data mode, phone layout.
+13. Later in v2: revision reminders, translated lessons, reuse, co-teachers, CDN for audio, working when AI services
+    are down, Postgres and a real deployment.
 
-- Sign-in: a real one (email or Google sign-in), or a demo login to start?
+## 11. Open questions
+
+- Sign-in: v1 uses email and password (plus demo accounts for the pilot). Add Google sign-in later?
 - Course size: roughly how many students per course? This decides how heavy progress tracking needs to be.
 - Prerequisite sources: may Eris teach prerequisites from general knowledge, or always from material the teacher
   provides?
-- Attendance: should a short end-of-lesson check also be required on top of watching 100%?
+- Attendance: should finishing the practice part also be required on top of hearing 100%?
 - Doubt limits: how many questions per student per lesson before a limit applies?
 - Students' ages: are any under 18 (school use)? This changes the privacy and consent requirements.
 - Institutions: will colleges want their own admin view and integration with their systems (e.g. Google Classroom or
   Moodle), or is it teacher-by-teacher at first?
 
-## 11. More points
+## 12. More points
 
 <!-- Add new ideas here. -->

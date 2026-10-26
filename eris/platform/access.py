@@ -1,9 +1,12 @@
 """Who may do what. A lesson (lecture) belongs to the teacher of its course; students may play a lecture only
 through a lesson shared to a course they are enrolled in."""
 
+import json
+
 from fastapi import HTTPException
 
-from eris.platform.db import connect, one
+from eris import config
+from eris.platform.db import all_rows, connect, one
 
 COURSE_OF_LECTURE = """
 SELECT c.id AS course_id, c.teacher_id, c.subject, c.year, t.id AS topic_id, t.title AS topic_title,
@@ -18,13 +21,36 @@ def course_of_lecture(lecture_id):
         return one(conn, COURSE_OF_LECTURE, lecture_id)
 
 
+def lecture_owner(lecture_id):
+    """The teacher who made a lecture (owner_id in its lecture.json), or None for one made before courses existed."""
+    try:
+        return json.loads(config.manifest_path(lecture_id).read_text(encoding="utf-8")).get("owner_id")
+    except (OSError, ValueError):
+        return None
+
+
+def stamp_owner(lecture_id, teacher_id):
+    """Write the owner into lecture.json, so the lecture stays the teacher's even outside every course."""
+    path = config.manifest_path(lecture_id)
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if manifest.get("owner_id") != teacher_id:
+        manifest["owner_id"] = teacher_id
+        path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
 def teacher_owns_lecture(user, lecture_id):
-    """A teacher owns the lectures in their courses. A lecture outside every course (made before courses) is open to
-    any teacher, so older lectures stay reachable until they are moved into a course."""
+    """A teacher owns the lectures in their courses, and the ones they made that are no longer in a course. A lecture
+    with no owner at all (made before courses existed) is open to any teacher until it is moved into a course."""
     if user["role"] != "teacher":
         return False
-    owner = course_of_lecture(lecture_id)
-    return owner is None or owner["teacher_id"] == user["id"]
+    course = course_of_lecture(lecture_id)
+    if course is not None:
+        return course["teacher_id"] == user["id"]
+    owner = lecture_owner(lecture_id)
+    return owner is None or owner == user["id"]
 
 
 def student_can_play_lecture(user, lecture_id):
@@ -61,3 +87,26 @@ def need_course(user, course_id, teacher=False):
     if teacher and role != "teacher":
         raise HTTPException(403, "Only the course's teacher can do this")
     return role
+
+
+def claim_lectures():
+    """Run at startup: every lecture records its teacher. Lectures in a course get their course's teacher; a lecture
+    that left its course (made inside one, then its lesson, topic or course was deleted) is matched by the course name
+    it was made in. Lectures from before courses (no course name) stay open to any teacher."""
+    from pathlib import Path
+    with connect() as conn:
+        for row in all_rows(conn, """SELECT l.lecture_id, c.teacher_id FROM lessons l JOIN topics t ON t.id = l.topic_id
+                                     JOIN chapters ch ON ch.id = t.chapter_id JOIN courses c ON c.id = ch.course_id"""):
+            if lecture_owner(row["lecture_id"]) is None:
+                stamp_owner(row["lecture_id"], row["teacher_id"])
+        courses = all_rows(conn, "SELECT teacher_id, subject, year FROM courses")
+    labels = {" · ".join(x for x in (c["subject"], c["year"]) if x): c["teacher_id"] for c in courses}
+    for folder in Path(config.DATA_ROOT).iterdir():
+        if not folder.is_dir() or lecture_owner(folder.name) is not None or course_of_lecture(folder.name):
+            continue
+        try:
+            label = json.loads(config.manifest_path(folder.name).read_text(encoding="utf-8")).get("course_label")
+        except (OSError, ValueError):
+            continue
+        if label in labels:
+            stamp_owner(folder.name, labels[label])

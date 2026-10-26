@@ -108,6 +108,19 @@ export function modal({ title, text, body, actions, wide = false }) {
 export const confirmDialog = (title, text, label = "Confirm", kind = "primary") =>
   modal({ title, text, actions: [{ label: "Cancel", value: false }, { label, kind, value: true }] });
 
+// The LLM model's name, as a small tag (where a script is written, and where the AI teaches and answers).
+export function modelTag(name, cls = "") {
+  return name ? h("span", { class: `model-tag ${cls}`, title: "LLM model" }, icon("sparkle"), name) : null;
+}
+
+// What kind of lesson: the lecture the AI teaches in the teacher's absence, or a prerequisite to watch before it.
+export function kindTag(kind, topic = "") {
+  const pre = kind === "prerequisite";
+  return h("span", { class: `kind-tag ${pre ? "pre" : "lecture"}`,
+    title: pre ? `Watch before the lecture${topic ? ` on ${topic}` : ""}` : "The class lecture, taught by the AI substitute" },
+    icon(pre ? "layers" : "class"), pre ? "Prerequisite" : "Lecture");
+}
+
 export function badge(status) {
   return h("span", { class: `badge ${status}` }, status);
 }

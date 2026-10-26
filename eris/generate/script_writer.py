@@ -359,6 +359,7 @@ def run_generate(lecture_id):
         "script_md": "script.md",
         "script_json": "script.json",
         "estimated_min": minutes,
+        "llm_model": config.LLM_MODEL,  # the model that wrote this script (the setting may change later)
         "judge": {k: report[k] for k in ("score", "blockers", "failed_minor") if k in report},
     })
     config.save_manifest(lecture_id, manifest)

@@ -14,6 +14,7 @@ from eris.classroom import class_board
 from eris import config
 from eris.classroom import doubt_agent
 from eris.material import figures
+from eris.material.slide_images import slide_images
 from main import LECTURE_ID_RE
 from eris.classroom.recovery import recovery_line
 from eris.generate.script_writer import count_slides
@@ -30,6 +31,8 @@ _answer_extras = {}  # lecture_id or a class run's thread_id -> {"cursor": int, 
 # The doubt agent's tools read one shared board (eris.tools.set_board), so answers are made one at a time: with many
 # students in their own lessons at once, one student's board must never leak into another student's answer.
 _doubt_lock = threading.Lock()
+# At most a few voice clips are made at once, so a burst of requests can't tie up every server thread.
+_tts_slots = threading.BoundedSemaphore(3)
 _slides = {}         # lecture_id -> {slide number: text}
 
 
@@ -84,9 +87,12 @@ def class_data(lecture_id: str):
     manifest = manifest_or_none(lecture_id)
     return {"ready": True, "segments": json.loads(script_json.read_text(encoding="utf-8")),
             "slides": actions.new_board(lecture_id)["slides"], "slide_pictures": _slide_pictures(lecture_id),
+            "slide_images": slide_images(lecture_id),  # the real slides as pictures, when LibreOffice can draw them
             "teacher": manifest["persona"]["Teacher"]["Name"], "topic": manifest["topic"],
             "estimated_min": manifest.get("estimated_min"), "duration_min": config.lecture_times(manifest)[0], "voice": bool(config.GNANI_API_KEY),
-            "language": config.lecture_language(manifest),
+            "language": config.lecture_language(manifest), "voice_name": config.lecture_voice(manifest),
+            "model": config.model_name(manifest.get("llm_model") or config.LLM_MODEL),  # wrote this script
+            "live_model": config.model_name(config.LLM_MODEL),  # answers doubts now
             "avatar": {"enabled": config.AVATAR_ENABLED, "model_url": config.AVATAR_MODEL_URL or None}}
 
 
@@ -137,6 +143,7 @@ def _build_answer_visuals(lecture_id, turn):
 
 
 PICTURE_NAME_RE = re.compile(r"^[0-9a-f]{16}\.(png|jpeg|jpg|gif|webp)$")
+SLIDE_NAME_RE = re.compile(r"^[0-9]{1,3}\.png$")
 
 
 def _slide_pictures(lecture_id):
@@ -160,6 +167,17 @@ def picture_file(lecture_id: str, name: str):
     if not path.exists():
         raise HTTPException(404, "Picture not found")
     return FileResponse(path, headers={"Cache-Control": "max-age=86400"})
+
+
+@router.get("/lectures/{lecture_id}/slides/{name}")
+def slide_file(lecture_id: str, name: str):
+    """One slide of the teacher's deck as a picture (see material/slide_images.py)."""
+    if not SLIDE_NAME_RE.match(name):
+        raise HTTPException(400, "Bad slide name")
+    path = config.lecture_dir(_check_id(lecture_id)) / "slides" / name
+    if not path.exists():
+        raise HTTPException(404, "Slide not found")
+    return FileResponse(path, headers={"Cache-Control": "no-cache"})  # a new deck draws over the same names
 
 
 @router.post("/lectures/{lecture_id}/complete")
@@ -188,12 +206,19 @@ def tts(body: TTSRequest, request: Request):
     _check_user(request, body.lecture_id)
     if not config.GNANI_API_KEY or not body.text.strip():
         return Response(status_code=204)
+    from eris.classroom import voice
+    clip = voice.clip_path(body.lecture_id, body.text)
+    if clip.exists() and clip.stat().st_size > 44:  # made already (shared lessons are made ahead): no waiting
+        return FileResponse(clip, media_type="audio/wav")
+    if not _tts_slots.acquire(timeout=30):
+        return Response(status_code=204, headers={"X-TTS-Error": "voice busy"})
     try:
-        from eris.classroom import voice
         return FileResponse(voice.ensure_clip(body.lecture_id, body.text), media_type="audio/wav")
     except Exception as e:
         print(f"[tts] Gnani failed, browser voice will be used: {e}")
         return Response(status_code=204, headers={"X-TTS-Error": str(e)[:200]})
+    finally:
+        _tts_slots.release()
 
 
 @router.post("/tts/timing")
@@ -264,16 +289,44 @@ def _locked_segments(lecture_id, body):
     return version_segments(body.version_id, lecture_id)
 
 
-def _log(request, lecture_id, lesson, section, question, turn):
-    """Keep every question and answer, for the teacher's view of the lesson."""
+def _log(request, lecture_id, lesson, section, question, turn, flags=()):
+    """Keep every question and answer (and what the guardrails flagged), for the teacher's view of the lesson."""
     if not question:
         return
     from eris.api.server_platform import log_doubt
     try:
         log_doubt(request.state.user, lesson.get("post_id"), lesson.get("version_id"), lecture_id, section, question,
-                  turn.get("reply_text") or turn.get("reply", ""), turn.get("passed"))
+                  turn.get("reply_text") or turn.get("reply", ""), turn.get("passed"), flags)
     except Exception as e:  # a missed log must never cost the student their answer
         print(f"[doubts] could not log: {e}")
+
+
+# ---------- guardrails (eris/guardrails.py): a question is checked before the agent sees it, an answer before
+# the student hears it ----------
+
+def _said(text, passed=False):
+    """A turn that only says `text`: a guardrail's redirect, or passing the question to the teacher."""
+    return {"prompt": None, "reply": text, "reply_text": text, "done": True, "final": "", "passed": passed,
+            "reply_segments": [{"kind": "say", "text": text}], "final_segments": []}
+
+
+def _guard_question(lecture_id, question, section):
+    """(flags, the turn to play instead when the question is blocked, else None)."""
+    from eris import guardrails
+    flags = guardrails.check_question(question, (manifest_or_none(lecture_id) or {}).get("topic", ""), section)
+    return flags, _said(guardrails.redirect(flags)) if guardrails.blocked(flags) else None
+
+
+def _guard_answer(lecture_id, question, turn):
+    """(the turn to play, flags): a blocked answer becomes passing the question to the teacher."""
+    from eris import guardrails
+    manifest = manifest_or_none(lecture_id) or {}
+    answer = " ".join(t for t in (turn.get("reply_text") or turn.get("reply", ""), turn.get("final", "")) if t)
+    flags = guardrails.check_answer(question, answer, manifest.get("topic", ""))
+    if guardrails.blocked(flags):
+        name = manifest.get("persona", {}).get("Teacher", {}).get("Name") or "your teacher"
+        return _said(f"I'll pass this question to {name}.", passed=True), flags
+    return turn, flags
 
 
 def _board_at(lecture_id, cursor, key=None, segments=None):
@@ -328,10 +381,15 @@ def doubts_start(lecture_id: str, body: DoubtStart, request: Request):
     question = body.question.strip()
     if question:
         _doubt_counts[thread_id]["asked"] = 1
-    with _doubt_lock:
-        set_board(board, _slides_for(lecture_id))
-        turn = _start_turn(lecture_id, agent, thread_id, body, question, board)
-    _log(request, lecture_id, body.model_dump(), body.section, question, turn)
+    flags, turn = _guard_question(lecture_id, question, body.section) if question else ([], None)
+    if turn is None:
+        with _doubt_lock:
+            set_board(board, _slides_for(lecture_id))
+            turn = _start_turn(lecture_id, agent, thread_id, body, question, board)
+        if question:
+            turn, answer_flags = _guard_answer(lecture_id, question, turn)
+            flags += answer_flags
+    _log(request, lecture_id, body.model_dump(), body.section, question, turn, flags)
     return {"thread_id": thread_id, "max": limit, "asked": 1 if question else 0, **turn}
 
 
@@ -442,9 +500,13 @@ def doubts_ask(lecture_id: str, body: DoubtAsk, request: Request):
         thread = _class_threads[thread_id] = {"lecture": lecture_id, "cursor": None, "notes": []}
     else:
         thread_id = body.thread_id
-    with _doubt_lock:
-        turn = _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body)
-    _log(request, lecture_id, body.model_dump(), body.section, question, turn)
+    flags, turn = _guard_question(lecture_id, question, body.section)
+    if turn is None:
+        with _doubt_lock:
+            turn = _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body)
+        turn, answer_flags = _guard_answer(lecture_id, question, turn)
+        flags += answer_flags
+    _log(request, lecture_id, body.model_dump(), body.section, question, turn, flags)
     limit = config.MAX_DOUBTS_FINAL if body.final else config.MAX_DOUBTS_PER_CHECK
     return {"thread_id": thread_id, "max": limit, **turn}
 
@@ -490,18 +552,24 @@ def doubts_reply(lecture_id: str, body: DoubtReply, request: Request):
         answer = "no more doubts"  # Limit reached: tell the agent to wrap up.
     elif answer.lower() not in doubt_agent.NO_DOUBT_WORDS:
         count["asked"] += 1
-    with _doubt_lock:
-        set_board(count["board"], _slides_for(lecture_id))
-        try:
-            turn = doubt_agent.with_segments(
-                doubt_agent.turn_reply(agent, body.thread_id, answer, log_path, count["section"]),
-                count_slides(lecture_id), count["board"])
-            turn["_board_files"] = count["board"].get("files", {})
-            _build_answer_visuals(lecture_id, turn)
-            turn.pop("_board_files", None)
-        except Exception as e:
-            raise HTTPException(502, f"Doubt agent failed: {e}")
-        _remember_answer(lecture_id, count["board"], turn, body.thread_id)
-    if answer.lower() not in doubt_agent.NO_DOUBT_WORDS and answer != "no more doubts":
-        _log(request, lecture_id, count, count["section"], answer, turn)
+    asked = answer.lower() not in doubt_agent.NO_DOUBT_WORDS and answer != "no more doubts"
+    flags, turn = _guard_question(lecture_id, answer, count["section"]) if asked else ([], None)
+    if turn is None:
+        with _doubt_lock:
+            set_board(count["board"], _slides_for(lecture_id))
+            try:
+                turn = doubt_agent.with_segments(
+                    doubt_agent.turn_reply(agent, body.thread_id, answer, log_path, count["section"]),
+                    count_slides(lecture_id), count["board"])
+                turn["_board_files"] = count["board"].get("files", {})
+                _build_answer_visuals(lecture_id, turn)
+                turn.pop("_board_files", None)
+            except Exception as e:
+                raise HTTPException(502, f"Doubt agent failed: {e}")
+            _remember_answer(lecture_id, count["board"], turn, body.thread_id)
+        if asked:
+            turn, answer_flags = _guard_answer(lecture_id, answer, turn)
+            flags += answer_flags
+    if asked:
+        _log(request, lecture_id, count, count["section"], answer, turn, flags)
     return {"asked": count["asked"], "max": count["max"], **turn}

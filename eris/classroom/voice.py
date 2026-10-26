@@ -56,8 +56,7 @@ def lecture_speech(lecture_id):
     check) uses the default language."""
     path = config.manifest_path(lecture_id)
     manifest = config.load_manifest(lecture_id) if path.exists() else {}
-    language = config.lecture_language(manifest)
-    return language, config.language_voice(language)
+    return config.lecture_language(manifest), config.lecture_voice(manifest)
 
 
 def _say_code(code):

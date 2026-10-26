@@ -193,12 +193,14 @@ export class Voice {
   // Resolves when the line has been spoken (or stop() was called).
   async speak(text) {
     if (!text.trim()) return;
+    const gen = this._gen;  // stop() moves this on: a line still loading must then never start
     this.seq += 1;
     this._done = 0;
     this._browserFrac = 0;
     this.speaking = true;
     try {
       const url = await this.clip(text);
+      if (gen !== this._gen) return;
       if (url) {
         this.mode = "gnani";
         this._timing = null;
@@ -277,6 +279,7 @@ export class Voice {
   }
 
   stop() {
+    this._gen = (this._gen || 0) + 1;
     this.paused = false;
     this._token = null; this._timing = null;
     this.avatar?.stop();  // interruption: the avatar flushes its audio and closes the mouth
