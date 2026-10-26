@@ -9,7 +9,8 @@ these, and the class screen draws them as a panel the teacher (and the students)
 import re
 
 CONTROLS_LINE_RE = re.compile(r"^\s*controls?\s*:\s*(.*)$", re.I)
-ITEM_RE = re.compile(r"^([A-Za-z][\w-]*)\s*\(\s*(button|slider|toggle|choice)\b\s*([^)]*)\)$", re.I)
+# A name may be several words ("launch angle (slider 0-90)"): it is kept as one key, launch_angle (control_key).
+ITEM_RE = re.compile(r"^([A-Za-z][\w -]{0,39}?)\s*\(\s*(button|slider|toggle|choice)\b\s*([^)]*)\)$", re.I)
 RANGE_RE = re.compile(r"^(-?\d+(?:\.\d+)?)\s*(?:-|to|\.\.)\s*(-?\d+(?:\.\d+)?)(?:\s+step\s+(\d+(?:\.\d+)?))?$", re.I)
 VISUAL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
 CONTROLS_HELP = ('end the description with a line like: controls: step (button), size (slider 1-10), '
@@ -37,7 +38,22 @@ def _split_items(text):
 
 
 BULLET_RE = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
-NAMED_RE = re.compile(r"^([A-Za-z][\w-]*)\s*[:\-–]\s*(.*)$")  # "Step: steps through it" (a list item)
+NAMED_RE = re.compile(r"^([A-Za-z][\w -]{0,39}?)(?:\s*[:–]|\s+-)\s*(.*)$")  # "Step: steps through it" (a list item)
+
+
+def control_key(name):
+    """One spelling for a control's name: "Launch angle", "launch-angle" and "launch_angle" are the same control."""
+    return re.sub(r"[\s-]+", "_", str(name).strip().lower())
+
+
+def find_control(controls, name):
+    """The control a [VISUAL_SET] means: same name, or the only one whose name ends in it ("angle" for launch_angle)."""
+    key = control_key(name)
+    exact = [c for c in controls if c["name"] == key]
+    if exact:
+        return exact[0]
+    ends = [c for c in controls if c["name"].endswith("_" + key) or key.endswith("_" + c["name"])]
+    return ends[0] if len(ends) == 1 else None
 
 
 def parse_controls(body):
@@ -97,9 +113,9 @@ def _parse_item(item):
         if not named:
             return None, f"cannot read the control '{item}'; write it as name (button|slider 1-10|toggle|choice a/b)"
         kind, extra = _guess_kind(named.group(1), named.group(2))
-        name = named.group(1).lower()
+        name = control_key(named.group(1))
     else:
-        name, kind, extra = match.group(1).lower(), match.group(2).lower(), match.group(3).strip()
+        name, kind, extra = control_key(match.group(1)), match.group(2).lower(), match.group(3).strip()
     control = {"name": name, "type": kind, "label": name.replace("_", " ").replace("-", " ").capitalize()}
     if kind == "slider":
         rng = RANGE_RE.match(extra)

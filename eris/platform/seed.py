@@ -39,10 +39,10 @@ DEMO_DIR = Path("templates/demo")
 DEMO_TOPICS = {
     "kadane_max_subarray": ("Kadane's algorithm: the maximum subarray sum", "en-IN"),
     "india_1991_reforms": ("India's 1991 reforms: how opening up changed trade", "en-IN"),
-    "projectile_motion": ("Projectile motion: why a 45 degree throw goes farthest", "hi-IN"),
+    "projectile_motion": ("Projectile motion: why a 45 degree throw goes farthest", "en-IN"),
     "kadane_prereq_arrays": ("Arrays, subarrays and running sums", "en-IN"),
     "india_1991_prereq_basics": ("GDP, trade and exchange rates", "en-IN"),
-    "projectile_prereq_vectors": ("Vectors, sine and cosine", "hi-IN"),
+    "projectile_prereq_vectors": ("Vectors, sine and cosine", "en-IN"),
 }
 MATERIAL_TYPES = {".pptx": "Slides", ".pdf": "Notes", ".docx": "Notes", ".txt": "Notes", ".md": "Notes"}
 

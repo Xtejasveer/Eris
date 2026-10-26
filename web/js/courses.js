@@ -155,7 +155,8 @@ export async function mountCourse(courseId, tab, ctx) {
             lesson ? h("div", { class: "post-kind" }, kindTag(post.lesson?.kind, post.topic_title),
               pre ? h("small", { class: "muted" }, `Watch before the lecture${post.topic_title ? ` on ${post.topic_title}` : ""}`) : null) : null,
             h("h3", {}, post.title),
-            h("small", { class: "muted" }, [lesson ? `v${post.version?.number || 1}` : "Material", post.topic_title, `Posted ${formatDate(post.created_at)}`].filter(Boolean).join(" · "))),
+            h("small", { class: "muted" }, [lesson ? `v${post.version?.number || 1}` : "Material", lesson && post.minutes ? `About ${Math.max(1, Math.round(post.minutes))} min` : null,
+              post.topic_title, `Posted ${formatDate(post.created_at)}`].filter(Boolean).join(" · "))),
           post.due_at ? h("span", { class: "due-chip" }, icon("clock"), `Due ${formatDate(post.due_at)}`) : null,
           teacher ? h("button", { class: "icon-btn sm", title: lesson ? "Stop sharing" : "Delete", onclick: act(async () => {
             if (!await confirmDialog(lesson ? "Stop sharing this lesson?" : "Delete this post?",
@@ -314,24 +315,17 @@ export async function mountCourse(courseId, tab, ctx) {
     const defaults = await api.personaTemplate().catch(() => ({}));
     const prereq = kind === "prerequisite";
     const title = h("input", { class: "input", value: prereq ? `Before ${topic.title}` : topic.title });
-    const duration = h("input", { class: "input", type: "number", min: 5, max: 120, step: 5, value: prereq ? 10 : defaults.duration_min || 15 });
-    const speaking = h("input", { class: "input", type: "number", min: 1, max: 120, value: prereq ? 4 : defaults.speaking_min || 5 });
     const language = languageSelect(defaults.language, defaults.languages);
     const made = await modal({
       title: prereq ? "New prerequisite lesson" : "New lesson",
       text: prereq ? `A short lesson on what students should know before “${topic.title}”. Upload material for it in Studio.`
         : `A lesson in “${topic.title}”. Next, upload its material and describe the teacher in Studio.`,
       body: [h("label", { class: "field" }, h("span", {}, "Lesson title"), title),
-        h("div", { class: "field-row" },
-          h("label", { class: "field" }, h("span", {}, "Total time (min)"), duration),
-          h("label", { class: "field" }, h("span", {}, "Speaking time (min)"), speaking)),
-        h("label", { class: "field" }, h("span", {}, "Teaching language"), language)],
+        h("label", { class: "field" }, h("span", {}, "Teaching language"), language),
+        h("p", { class: "muted small" }, "No time to set: the lesson is as long as your material needs, about 20 minutes at most.")],
       actions: [{ label: "Cancel", value: null }, { label: "Create and open Studio", kind: "primary", value: () => {
         if (!title.value.trim()) return (title.classList.add("invalid"), undefined);
-        const d = +duration.value, sp = +speaking.value;
-        if (!(d >= 5 && d <= 120)) return (duration.classList.add("invalid"), undefined);
-        if (!(sp >= 1 && sp <= d)) return (speaking.classList.add("invalid"), undefined);
-        return { kind, title: title.value.trim(), duration_min: d, speaking_min: sp, language: language.value };
+        return { kind, title: title.value.trim(), language: language.value };
       } }],
     });
     if (!made) return;

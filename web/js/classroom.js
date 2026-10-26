@@ -287,11 +287,11 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
   function renderScrub() {
     scrubMarks.replaceChildren(...points.map((p, k) => {
       const ok = canJump(k), done = p.index <= reachedUpTo();
-      return h("button", { class: `sc-point ${done ? "reached" : ""} ${p.sub ? "sub" : "topic"}`, style: `left:${pctOf(p.at)}`, disabled: !ok,
+      return h("button", { class: `sc-point ${done ? "reached" : ""} ${p.sub ? "sub" : "sc-topic"}`, style: `left:${pctOf(p.at)}`, disabled: !ok,
         "aria-label": p.label, onclick: () => jumpToPoint(k),
         onmouseenter: () => { scrubTip.replaceChildren(h("strong", {}, p.label), ...(ok ? [] : [h("span", {}, "Not reached yet")]));
           scrubTip.style.left = pctOf(p.at); scrubTip.classList.remove("hidden"); },
-        onmouseleave: () => scrubTip.classList.add("hidden") }, p.sub ? null : String(p.topic));
+        onmouseleave: () => scrubTip.classList.add("hidden") });  // no number on the bar: the tooltip names the topic
     }));
     const now = currentTopic();
     topicCount.textContent = now ? `Topic ${now.n} of ${topics.length}` : `${topics.length} topics`;

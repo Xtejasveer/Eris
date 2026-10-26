@@ -11,7 +11,7 @@ import textwrap
 
 from eris import config
 from eris.visuals.flow_diagram import parse_flow
-from eris.visuals.visual_controls import VISUAL_ID_RE, coerce_value, parse_controls
+from eris.visuals.visual_controls import VISUAL_ID_RE, coerce_value, find_control, parse_controls
 
 # Marker name -> required args.
 MARKERS = {
@@ -181,7 +181,7 @@ def _check_marker(name, args, line_no, state, errors):
             err(f"visual '{args['id']}' is not on the board (visuals: {known}); create it with a [VISUAL] block first")
             return False
         if name == "VISUAL_SET":
-            control = next((c for c in controls if c["name"] == str(args["control"]).lower()), None)
+            control = find_control(controls, args["control"])
             if control is None:
                 err(f"visual '{args['id']}' has no control '{args['control']}'; its controls are "
                     f"{', '.join(c['name'] for c in controls) or 'none'}")

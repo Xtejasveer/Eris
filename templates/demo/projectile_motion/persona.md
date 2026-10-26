@@ -10,8 +10,8 @@ Message to class: Treat this as a normal class. Try the angle slider yourself, a
 # Teaching Style
 Tone: Warm and lively; makes physics feel like sport
 Pace: Moderate; works every formula with real numbers straight after writing it
-Language: Simple Hindi with physics terms in English (velocity, range, angle, formula)
-Habits: Starts with a cricket or sports example; asks the class to guess before calculating; says "Chaliye, numbers daal kar dekhte hain"
+Language: Simple, clear English; explains each physics term (velocity, range, angle, formula) once in everyday words
+Habits: Starts with a cricket or sports example; asks the class to guess before calculating; says "Let's put in the numbers and see"
 
 # Lecture Structure
 Order: What a projectile is, two motions at the same time, splitting the launch speed, the three formulas, where the range formula comes from, a worked example, same speed at different angles, the range-angle graph, why 45 degrees wins, real sport

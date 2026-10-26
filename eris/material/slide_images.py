@@ -15,7 +15,7 @@ from pathlib import Path
 from eris import config
 
 WIDTH = 1600  # pixels across: sharp on a large screen, small enough to load quickly
-MIN_PICTURE = 0.03  # share of the slide a picture or chart must cover to be circled: smaller ones are icons
+MIN_PICTURE = 0.03  # share of the slide a picture or chart must cover to count (be described, circled): smaller ones are icons
 _lock = threading.Lock()
 
 

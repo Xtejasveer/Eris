@@ -33,6 +33,21 @@ def language_rule(language, task="lesson"):
 
 
 
+def speaker_rule(language, gender):
+    """The voice that says the script is a woman's or a man's: where the language's grammar marks the speaker's gender,
+    the script must match it. Empty for English, which doesn't."""
+    from eris import config
+    if not language or language == "en-IN" or gender not in ("female", "male"):
+        return ""
+    name, woman = config.language_name(language), gender == "female"
+    example = ("\"मैं आज की क्लास ले रही हूँ\", \"मैं समझाती हूँ\"" if woman else
+               "\"मैं आज की क्लास ले रहा हूँ\", \"मैं समझाता हूँ\"")
+    return (f"\n\n# Who is speaking\nThe class hears a {'woman' if woman else 'man'}'s voice. Wherever {name} grammar "
+            f"marks the speaker's gender (verbs and words about yourself), use the forms a {'woman' if woman else 'man'} "
+            f"uses about {'herself' if woman else 'himself'}, in every line, e.g. in Hindi {example}. Words about the "
+            "absent teacher follow the teacher's own gender.")
+
+
 def prerequisite_rule(manifest):
     """A prerequisite lesson: only the groundwork a student needs before the topic, not the topic itself. Empty for
     an ordinary lecture."""

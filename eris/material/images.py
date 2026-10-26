@@ -47,13 +47,20 @@ def _shapes(shapes):
 
 
 def _pptx_images(path):
+    """The pictures on each slide, except icons: a picture covering less than MIN_PICTURE of the slide is decoration
+    (a bullet icon, a tick), and teaching it as a picture or chart only confuses the lesson and its checks."""
     from pptx import Presentation
+    from eris.material.slide_images import MIN_PICTURE
+    pres = Presentation(path)
+    area = pres.slide_width * pres.slide_height
     out = []
-    for number, slide in enumerate(Presentation(path).slides, start=1):
+    for number, slide in enumerate(pres.slides, start=1):
         texts = [s.text_frame.text.strip() for s in slide.shapes if s.has_text_frame and s.text_frame.text.strip()]
         for shape in _shapes(slide.shapes):
             if getattr(shape, "shape_type", None) != 13:  # MSO_SHAPE_TYPE.PICTURE
                 continue
+            if shape.width and shape.height and shape.width * shape.height < MIN_PICTURE * area:
+                continue  # an icon
             try:
                 blob, ext = shape.image.blob, shape.image.ext.lower()
             except Exception:

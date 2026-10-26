@@ -7,11 +7,12 @@ from datetime import datetime
 from eris import config
 from eris.material import figures
 from eris.persona import persona_to_text
-from eris.prompts import lesson_prompt, prerequisite_rule, research_prompt, staging_prompt
+from eris.prompts import lesson_prompt, prerequisite_rule, research_prompt, speaker_rule, staging_prompt
 from eris.generate.script_parser import estimate_minutes, parse_script, word_budget
 from eris.generate.script_agent import run_research
 from eris.generate.quality_loop import unflag_pairs
 from eris.generate.lesson import length_plan, material_text, write_lesson
+from eris.generate import depth
 from eris.generate.staging import stage_lesson
 from eris.generate.script_fixes import drop_visual
 from eris.tools import program_output, run_code_file, set_lecture
@@ -290,8 +291,25 @@ def run_generate(lecture_id):
 
     set_lecture(lecture_id)
     persona = manifest["persona"]
-    total_min, speaking_min = config.lecture_times(manifest)
-    budget = word_budget(speaking_min)  # only the speaking time reaches the prompts; the total runs the class clock
+    from eris.classroom.actions import _load_slides
+    from eris.material.images import load as load_pictures
+    pictures, slides = load_pictures(lecture_id), _load_slides(lecture_id)
+    material = material_text(lecture_id)
+    # How long the lesson is comes from the material: each sub-topic gets the depth its material gives it (depth.py).
+    # Without a plan (the split failed) the old way is used: the lecture's speaking time, shared out evenly.
+    print("[generate] planning how deep to teach each part of the material ...")
+    plan = depth.plan_depth(lecture_id, manifest["topic"], persona, slides, material)
+    if plan:
+        plan_text, budget = depth.plan_text(plan)
+        speaking_min = plan["speaking_min"]
+        for part in plan["parts"]:
+            print(f"[generate]   {part['depth']:>8}: {part['title']} (score {part['score']}, about {part['words']} words)")
+        if plan["too_long"]:
+            print(f"[generate] the material needs more than {depth.MAX_SPEAKING_MIN} min of speaking: every part is "
+                  "shortened to fit one sitting (split the material into two lessons to teach it all fully)")
+    else:
+        speaking_min = config.lecture_times(manifest)[1]
+        budget = word_budget(speaking_min)
     args = (persona, persona_to_text(persona), manifest["topic"], speaking_min, budget)
     language = config.lecture_language(manifest)  # the lesson is written in it; the voice says it
     if language != "en-IN":
@@ -300,6 +318,7 @@ def run_generate(lecture_id):
     env = figures.lecture_environments(lecture_id, manifest, count_slides(lecture_id))
     env_text = "\n\n# Environments for this class\n" + figures.describe_environments(env)
     prerequisite = prerequisite_rule(manifest)  # a prerequisite lesson teaches only the groundwork
+    speaker = speaker_rule(language, config.voice_gender(manifest))  # "ले रही हूँ" for a woman's voice
     notes = run_research(research_prompt(*args) + prerequisite + env_text, f"script_{lecture_id}")
     figs = figures.load(lecture_id)  # graphs and diagrams found in the material at index time
     notes += env_text
@@ -313,20 +332,18 @@ def run_generate(lecture_id):
     if show:
         notes += ("\n\n# Pictures and charts to show on their slide [show] (show the slide and tell students what to "
                   "notice)\n" + figures.describe(show))
-    from eris.classroom.actions import _load_slides
-    from eris.material.images import load as load_pictures
-    pictures, slides = load_pictures(lecture_id), _load_slides(lecture_id)
     rounds = []  # every round on the way, for Studio
 
     # Step 2: the lesson (teaching only, no markers); code and Jev check the teaching before anything is staged.
     # Speaking time x the voice's speed = the word budget, shared out over the sections (length_plan).
-    plan, concepts = length_plan(budget, persona.get("Lecture Structure", {}).get("Order", ""))
-    print(f"[generate] length plan: {speaking_min} min x {config.SPEAKING_WPM} words/min = {budget} words, "
-          f"{concepts} concept section(s)")
+    if not plan:
+        plan_text, concepts = length_plan(budget, persona.get("Lecture Structure", {}).get("Order", ""))
+        print(f"[generate] length plan: {speaking_min} min x {config.SPEAKING_WPM} words/min = {budget} words, "
+              f"{concepts} concept section(s)")
     print(f"[generate] step 2/3: writing the lesson (~{budget} words), teaching only ...")
     lesson_text, sections, lesson_report, problems = write_lesson(
-        lesson_prompt(*args, plan, language) + prerequisite, notes, budget, persona, manifest["topic"], figs, env, len(slides), pictures, rounds,
-        material_text(lecture_id))
+        lesson_prompt(*args, plan_text, language) + prerequisite + speaker, notes, budget, persona, manifest["topic"], figs, env, len(slides), pictures, rounds,
+        material, plan)
     lesson_file = config.lecture_dir(lecture_id) / "lesson.md"
     lesson_file.write_text(lesson_text + "\n", encoding="utf-8")  # kept for review: what was taught before staging
     if problems:
@@ -335,7 +352,7 @@ def run_generate(lecture_id):
     # Step 3: staging (markers around the lesson's unchanged lines); code and Jev check the staging.
     print("[generate] step 3/3: staging the lesson for the class screen ...")
     text, segments, problems, stage_report, pipe = stage_lesson(
-        lesson_text, sections, staging_prompt(persona, manifest["topic"], language), budget, slides, figs, env, pictures, rounds)
+        lesson_text, sections, staging_prompt(persona, manifest["topic"], language) + speaker, budget, slides, figs, env, pictures, rounds)
     if problems:
         _give_up(lecture_id, text, problems, "script")
     if stage_report and not stage_report["error"]:
@@ -359,16 +376,17 @@ def run_generate(lecture_id):
         "script_md": "script.md",
         "script_json": "script.json",
         "estimated_min": minutes,
+        "word_budget": budget,  # restaging (stage_only.py) keeps to the same length
+        "depth": depth.summary(plan) if plan else None,  # Studio shows how deep each part is taught, and why
+        "duration_min": config.class_minutes(minutes),  # the class clock: the lesson plus time for doubts
         "llm_model": config.LLM_MODEL,  # the model that wrote this script (the setting may change later)
         "judge": {k: report[k] for k in ("score", "blockers", "failed_minor") if k in report},
     })
     config.save_manifest(lecture_id, manifest)
 
     spoken = round(sum(len(s["text"].split()) for s in segments if s["kind"] == "say") / config.SPEAKING_WPM, 1)
-    print(f"[generate] about {spoken} min of speaking (planned {speaking_min}); {minutes} min of teaching with "
-          f"writing and code, in a {total_min}-minute lecture")
+    print(f"[generate] about {spoken} min of speaking (planned {speaking_min}); about {minutes} min of class with "
+          "writing and code")
     if abs(spoken - speaking_min) > 0.15 * speaking_min:
         print("[generate] WARNING: speaking time is more than 15% off the plan. Consider editing script.md.")
-    if minutes > total_min:
-        print("[generate] WARNING: the teaching alone is longer than the lecture; the class clock will skip to the recap.")
     print(f"Script saved as DRAFT. Review script.md, then run: python main.py approve --lecture {lecture_id}")

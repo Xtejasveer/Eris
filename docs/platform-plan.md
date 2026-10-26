@@ -302,6 +302,18 @@ answers and code sandbox), Eris should run only as a pilot with trusted teachers
   not knowing there is something to watch.
 - **Scale and deployment.** Move from SQLite to Postgres, and a real deployment (HTTPS, a domain, environment
   settings). Solves: the pilot outgrowing one machine.
+- **Lessons in the language's own script.** In non-English lessons the writer sometimes drifts into the language
+  written in English letters, although the prompt asks for its own script. A Hindi run had every note and a few
+  spoken lines in English letters ("Projectile kya hai?", "मैं seedha neeche girati hoon"). Add a code check that
+  sends such lines back to the writer, for every taught language (Hindi, Tamil, Telugu, Kannada, Malayalam,
+  Marathi, Bengali, Gujarati, Punjabi). Technical terms the class says in English (loop, GDP, velocity) stay in
+  English. Solves: the voice mispronouncing transliterated lines, and notes students of a regional-language class
+  can't read easily.
+- **The voice's gender in every language.** The script now matches the voice that says it ("ले रही हूँ" for a woman's
+  voice, "ले रहा हूँ" for a man's: `speaker_rule` in `eris/prompts.py`, voices from Gnani's catalog). The rule gives
+  only a Hindi example; check the other languages whose grammar marks the speaker (Marathi, Gujarati, Punjabi)
+  on a real lesson, and add an example in each if the writer gets it wrong. Solves: a woman's voice speaking
+  as a man in a regional language.
 
 ## 9. What this needs underneath
 

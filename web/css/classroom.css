@@ -308,8 +308,8 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .sc-fill { position: absolute; left: 0; top: 9px; height: 3px; border-radius: 2px; background: #2f6a4e; width: 0; }
 /* Checkpoints: reached ones are filled and clickable; the rest are hollow. */
 .sc-point { position: absolute; top: 5px; width: 10px; height: 10px; padding: 0; border-radius: 50%; transform: translateX(-50%); border: 2px solid #c9bda8; background: var(--pill); cursor: pointer; transition: transform .12s; }
-.sc-point.topic { width: 16px; height: 16px; top: 2px; display: grid; place-items: center; font: 700 9px var(--font); color: #8c8276; }
-.sc-point.topic.reached { color: #fff; }
+.sc-point.sc-topic { width: 16px; height: 16px; top: 2px; display: grid; place-items: center; font: 700 9px var(--font); color: #8c8276; }
+.sc-point.sc-topic.reached { color: #fff; }
 .sc-point.sub { width: 8px; height: 8px; top: 6px; border-width: 1.5px; }
 .sc-count { flex: none; padding: 0 6px; font: 600 11px var(--font); color: #8c8276; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .sc-point.reached { background: #2f6a4e; border-color: #2f6a4e; }

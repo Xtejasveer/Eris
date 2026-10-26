@@ -57,7 +57,8 @@ async def auth_gate(request, call_next):
         if m:
             lecture_id, rest = m.group(1), m.group(2) or ""
             if user["role"] == "teacher":
-                if not access.teacher_owns_lecture(user, lecture_id):
+                # A lecture that doesn't exist yet is being made: its maker becomes its owner (_own)
+                if access.lecture_exists(lecture_id) and not access.teacher_owns_lecture(user, lecture_id):
                     return _deny(403, "This lecture belongs to another teacher")
             elif not (STUDENT_LECTURE_ROUTES.match(rest) and access.student_can_play_lecture(user, lecture_id)):
                 return _deny(403, "This lesson hasn't been shared with you")
@@ -112,6 +113,13 @@ def _check_language(code):
     return code
 
 
+def _own(manifest, request):
+    """A lecture records the teacher who made it, so it shows only in their account (access.teacher_owns_lecture)."""
+    if not manifest.get("owner_id") and not access.course_of_lecture(manifest["lecture_id"]):
+        manifest["owner_id"] = request.state.user["id"]
+    return manifest
+
+
 def _check_times(total, speaking):
     if not 5 <= total <= 120:
         raise HTTPException(400, "Total lecture time must be 5 to 120 minutes")
@@ -135,47 +143,49 @@ def list_lectures(request: Request):
 
 class NewLecture(BaseModel):
     topic: str
-    duration_min: int = 30
-    speaking_min: int = 20
+    duration_min: int | None = None  # optional: the lesson's length comes from its material (generate/depth.py)
+    speaking_min: int | None = None
     language: str = config.DEFAULT_LANGUAGE
 
 
 @app.post("/api/lectures/{lecture_id}")
-def create_lecture(lecture_id: str, body: NewLecture):
+def create_lecture(lecture_id: str, body: NewLecture, request: Request):
     """A new lecture: the teacher names its topic and length once, at the start (saved in lecture.json)."""
     _check_id(lecture_id)
     if not body.topic.strip():
         raise HTTPException(400, "Enter the lecture topic")
-    _check_times(body.duration_min, body.speaking_min)
+    if body.duration_min or body.speaking_min:
+        _check_times(body.duration_min or config.LECTURE_DURATION_MIN, body.speaking_min or 1)
     _check_language(body.language)
     if _manifest_or_none(lecture_id) or config.data_dir(lecture_id).is_dir():
         raise HTTPException(409, f"A lecture called {lecture_id} already exists")
     config.data_dir(lecture_id).mkdir(parents=True)
-    config.save_manifest(lecture_id, {"lecture_id": lecture_id, "topic": body.topic.strip(),
-                                      "duration_min": body.duration_min, "speaking_min": body.speaking_min,
-                                      "language": body.language, "status": "new"})
+    times = {k: v for k, v in (("duration_min", body.duration_min), ("speaking_min", body.speaking_min)) if v}
+    config.save_manifest(lecture_id, {"lecture_id": lecture_id, "topic": body.topic.strip(), **times,
+                                      "language": body.language, "status": "new",
+                                      "owner_id": request.state.user["id"]})  # only its maker sees it
     return {"id": lecture_id}
 
 
 class LectureSetup(BaseModel):
     persona: dict
     topic: str = ""
-    duration_min: int = 30
-    speaking_min: int = 20
+    duration_min: int | None = None
+    speaking_min: int | None = None
     language: str = ""
     voice: str = ""   # a Gnani voice for the language ("" = the language's default)
 
 
 @app.put("/api/lectures/{lecture_id}/setup")
-def save_setup(lecture_id: str, body: LectureSetup):
+def save_setup(lecture_id: str, body: LectureSetup, request: Request):
     """Studio saves the teacher's fields as they are typed (also half-filled), so nothing is lost before Generate."""
     folder = config.data_dir(_check_id(lecture_id))
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "persona.md").write_text(persona_to_markdown(body.persona), encoding="utf-8")
-    manifest = _manifest_or_none(lecture_id) or {"lecture_id": lecture_id, "status": "new"}
+    manifest = _own(_manifest_or_none(lecture_id) or {"lecture_id": lecture_id, "status": "new"}, request)
     if body.topic.strip():
         manifest["topic"] = body.topic.strip()
-    if 5 <= body.duration_min <= 120 and 1 <= body.speaking_min <= body.duration_min:  # half-typed values wait
+    if body.duration_min and body.speaking_min and 5 <= body.duration_min <= 120 and 1 <= body.speaking_min <= body.duration_min:
         manifest["duration_min"], manifest["speaking_min"] = body.duration_min, body.speaking_min
     if body.language in config.LANGUAGES:
         manifest["language"] = body.language
@@ -250,20 +260,21 @@ def delete_file(lecture_id: str, name: str):
 class GenerateRequest(BaseModel):
     persona: dict
     topic: str
-    duration_min: int = 30
-    speaking_min: int = 20
+    duration_min: int | None = None
+    speaking_min: int | None = None
     language: str = ""
 
 
 @app.post("/api/lectures/{lecture_id}/generate")
-def generate(lecture_id: str, body: GenerateRequest):
+def generate(lecture_id: str, body: GenerateRequest, request: Request):
     folder = config.data_dir(_check_id(lecture_id))
     folder.mkdir(parents=True, exist_ok=True)
     if not body.topic.strip():
         raise HTTPException(400, "Enter the lecture topic")
-    _check_times(body.duration_min, body.speaking_min)
+    if body.duration_min and body.speaking_min:
+        _check_times(body.duration_min, body.speaking_min)
     if body.language:  # the script is written, said and heard in this language (kept through the re-index)
-        manifest = _manifest_or_none(lecture_id) or {"lecture_id": lecture_id, "status": "new"}
+        manifest = _own(_manifest_or_none(lecture_id) or {"lecture_id": lecture_id, "status": "new"}, request)
         manifest["language"] = _check_language(body.language)
         config.save_manifest(lecture_id, manifest)
     (folder / "persona.md").write_text(persona_to_markdown(body.persona), encoding="utf-8")

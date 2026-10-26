@@ -10,8 +10,8 @@ Message to class: Treat this as a normal class. Try the angle slider yourself, a
 # Teaching Style
 Tone: Warm and lively; makes physics feel like sport
 Pace: Moderate; works every formula with real numbers straight after writing it
-Language: Simple Hindi with physics terms in English (velocity, range, angle, formula)
-Habits: Starts with a cricket or sports example; asks the class to guess before calculating; says "Chaliye, numbers daal kar dekhte hain"
+Language: Simple, clear English; explains each physics term (velocity, range, angle, formula) once in everyday words
+Habits: Starts with a cricket or sports example; asks the class to guess before calculating; says "Let's put in the numbers and see"
 
 # Lecture Structure
 Order: Scalars and vectors, sine and cosine in a right triangle, the values at 0, 30, 45, 60 and 90 degrees, splitting a vector into horizontal and vertical parts, a ball thrown straight up, the equations of motion

@@ -21,6 +21,12 @@ def course_of_lecture(lecture_id):
         return one(conn, COURSE_OF_LECTURE, lecture_id)
 
 
+def lecture_exists(lecture_id):
+    """True once a lecture has a folder or a lecture.json (until then it is being created)."""
+    from pathlib import Path  # not config.manifest_path: it would create the lecture's workspace folder
+    return config.data_dir(lecture_id).is_dir() or (Path(config.WORKSPACE_ROOT) / lecture_id / "lecture.json").exists()
+
+
 def lecture_owner(lecture_id):
     """The teacher who made a lecture (owner_id in its lecture.json), or None for one made before courses existed."""
     try:
@@ -41,16 +47,34 @@ def stamp_owner(lecture_id, teacher_id):
         path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
+def persona_owner(lecture_id):
+    """The teacher a lecture with no recorded owner was made for: the one teacher whose name is the "Name" in its
+    persona.md (a lecture made outside the platform, e.g. from the command line). None if no single teacher matches."""
+    import re
+    path = config.data_dir(lecture_id) / "persona.md"
+    try:
+        match = re.search(r"^Name:\s*(.+)$", path.read_text(encoding="utf-8"), re.M)
+    except OSError:
+        return None
+    if not match or not match.group(1).strip():
+        return None
+    with connect() as conn:
+        rows = all_rows(conn, "SELECT id FROM users WHERE role = 'teacher' AND lower(trim(name)) = lower(?)",
+                        match.group(1).strip())
+    return rows[0]["id"] if len(rows) == 1 else None
+
+
 def teacher_owns_lecture(user, lecture_id):
-    """A teacher owns the lectures in their courses, and the ones they made that are no longer in a course. A lecture
-    with no owner at all (made before courses existed) is open to any teacher until it is moved into a course."""
+    """A teacher owns the lectures in their courses, and the ones they made that are not in a course. A lecture with
+    no recorded owner belongs to the teacher its persona names (persona_owner), else to no one: it is never open to
+    every teacher, so one teacher's lecture can't show up in another's account."""
     if user["role"] != "teacher":
         return False
     course = course_of_lecture(lecture_id)
     if course is not None:
         return course["teacher_id"] == user["id"]
-    owner = lecture_owner(lecture_id)
-    return owner is None or owner == user["id"]
+    owner = lecture_owner(lecture_id) or persona_owner(lecture_id)
+    return owner is not None and owner == user["id"]
 
 
 def student_can_play_lecture(user, lecture_id):
@@ -92,7 +116,7 @@ def need_course(user, course_id, teacher=False):
 def claim_lectures():
     """Run at startup: every lecture records its teacher. Lectures in a course get their course's teacher; a lecture
     that left its course (made inside one, then its lesson, topic or course was deleted) is matched by the course name
-    it was made in. Lectures from before courses (no course name) stay open to any teacher."""
+    it was made in, else by the teacher its persona names. A lecture none of these find belongs to no teacher."""
     from pathlib import Path
     with connect() as conn:
         for row in all_rows(conn, """SELECT l.lecture_id, c.teacher_id FROM lessons l JOIN topics t ON t.id = l.topic_id
@@ -108,5 +132,6 @@ def claim_lectures():
             label = json.loads(config.manifest_path(folder.name).read_text(encoding="utf-8")).get("course_label")
         except (OSError, ValueError):
             continue
-        if label in labels:
-            stamp_owner(folder.name, labels[label])
+        owner = labels.get(label) or persona_owner(folder.name)
+        if owner:
+            stamp_owner(folder.name, owner)

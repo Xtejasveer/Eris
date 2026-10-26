@@ -164,6 +164,17 @@ code.ic { font-size: .88em; padding: 1px 5px; border-radius: 5px; background: va
 .env-note-head { display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .env-note-head svg { width: 15px; height: 15px; color: var(--primary); }
 .env-note p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+/* How deep each part of the material is taught (generate/depth.py) */
+.depth-list { display: grid; gap: 7px; }
+.depth-row { display: grid; grid-template-columns: 74px 1fr; gap: 8px; align-items: start; }
+.depth-tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; text-align: center; white-space: nowrap; }
+.depth-tag.in-depth { background: color-mix(in srgb, var(--violet) 16%, transparent); color: var(--violet); }
+.depth-tag.normal { background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); }
+.depth-tag.brief { background: var(--surface-2); color: var(--text-2); }
+.depth-parts { display: flex; flex-wrap: wrap; gap: 5px; }
+.depth-part { font-size: 12px; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: help; }
+.depth-warn { display: flex; gap: 6px; align-items: flex-start; font-size: 12px !important; color: var(--warn, #b7791f) !important; }
+.depth-warn svg { width: 14px; height: 14px; flex: none; margin-top: 2px; }
 .env-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .env-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 500; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--border); }
 .env-chip svg { width: 13px; height: 13px; }

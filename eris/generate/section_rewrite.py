@@ -7,7 +7,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from eris import config
 from eris.generate.script_parser import parse_script
 from eris.generate.staging import script_sections, splice_script
-from eris.prompts import staging_prompt
+from eris.prompts import speaker_rule, staging_prompt
 
 REWRITE_SECTION = """Students found this section of the class script hard to follow. Here is what they said, and the
 doubts they asked while it played:
@@ -53,7 +53,9 @@ def rewrite_section(lecture_id, title, feedback):
         raise ValueError(f"The current script has no section called \"{title}\" (it may have been renamed in a newer version)")
     manifest = config.load_manifest(lecture_id)
     model = init_chat_model(f"openrouter:{config.LLM_MODEL}")
-    messages = [SystemMessage(staging_prompt(manifest["persona"], manifest.get("topic", ""), config.lecture_language(manifest))),
+    language = config.lecture_language(manifest)
+    messages = [SystemMessage(staging_prompt(manifest["persona"], manifest.get("topic", ""), language)
+                              + speaker_rule(language, config.voice_gender(manifest))),
                 HumanMessage(REWRITE_SECTION.format(feedback=feedback.strip() or "(no comments: they marked it as confusing)",
                                                     current=current))]
     slides = count_slides(lecture_id)

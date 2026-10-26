@@ -56,7 +56,7 @@ def run_stage_only(lecture_id, prompt_fn=None):
     started = time.time()
     text, segments, problems, report, pipe = stage_lesson(
         lesson_text, sections, (prompt_fn or staging_prompt)(persona, manifest["topic"], language),
-        word_budget(speaking_min), slides, figs, env, pictures, rounds)
+        manifest.get("word_budget") or word_budget(speaking_min), slides, figs, env, pictures, rounds)
     first = rounds[0] if rounds and rounds[0]["kind"] == "rules" else None
     envs, slide_changes = screen_switches(segments)
     ok_report = report and not report.get("error")

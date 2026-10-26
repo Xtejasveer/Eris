@@ -13,7 +13,7 @@ from eris.classroom import actions
 from eris import config
 from eris.classroom.doubt_agent import build_doubt_agent, run_checkpoint, type_doubt
 from eris.persona import persona_to_text
-from eris.prompts import doubt_prompt
+from eris.prompts import doubt_prompt, speaker_rule
 from eris.classroom.recovery import recovery_line
 from eris.tools import set_lecture
 
@@ -63,8 +63,9 @@ def start_doubts(lecture_id, manifest):
     """Common setup for session and the `doubts` test command."""
     set_lecture(lecture_id)
     persona = manifest["persona"]
-    agent = build_doubt_agent(doubt_prompt(persona, persona_to_text(persona), manifest["topic"],
-                                           config.lecture_language(manifest)))
+    language = config.lecture_language(manifest)
+    agent = build_doubt_agent(doubt_prompt(persona, persona_to_text(persona), manifest["topic"], language)
+                              + speaker_rule(language, config.voice_gender(manifest)))  # answers in the voice's grammar
     log_path = config.lecture_dir(lecture_id) / "doubts_log.md"
     return agent, log_path
 

@@ -80,9 +80,6 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
 
   const persona = structuredClone(data.persona || template.values);
   const topicInput = h("input", { class: "input", value: data.manifest?.topic || "", placeholder: "e.g. Introduction to recursion" });
-  const durationInput = h("input", { class: "input", type: "number", min: 5, max: 120, step: 5, value: data.manifest?.duration_min || template.duration_min || 15 });
-  const speakingInput = h("input", { class: "input", type: "number", min: 1, max: 120, step: 1,
-    value: Math.min(data.manifest?.speaking_min || template.speaking_min || 5, +durationInput.value) });
   const languageInput = languageSelect(data.manifest?.language || template.language, template.languages);
   const languageName = () => languageInput.selectedOptions[0]?.textContent || "English";
   // The Gnani voice: one of the voices that suit the teaching language (each language lists its own).
@@ -96,8 +93,8 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
   renderVoices(data.manifest?.voice);
   const previewBtn = h("button", { class: "icon-btn voice-play", type: "button", title: "Hear this voice", onclick: () => previewVoice() }, icon("play"));
   const previewAudio = new Audio();
-  const setupBody = () => ({ persona, topic: topicInput.value.trim(), duration_min: +durationInput.value || 15,
-    speaking_min: +speakingInput.value || 5, language: languageInput.value, voice: voiceInput.value });
+  // No lecture or speaking time: the lesson's length comes from how the material treats each part (generate/depth.py).
+  const setupBody = () => ({ persona, topic: topicInput.value.trim(), language: languageInput.value, voice: voiceInput.value });
   async function previewVoice() {
     const sample = languageInfo().sample;
     if (!sample) return;
@@ -120,8 +117,6 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     setupTimer = setTimeout(() => api.saveSetup(lectureId, setupBody()).catch(e => toast(`Could not save: ${e.message}`, "error")), 700);
   }
   topicInput.addEventListener("input", saveSetupSoon);
-  durationInput.addEventListener("input", saveSetupSoon);
-  speakingInput.addEventListener("input", saveSetupSoon);
   languageInput.addEventListener("change", () => { renderVoices(voiceInput.value); saveSetupSoon(); });
   voiceInput.addEventListener("change", saveSetupSoon);
 
@@ -173,6 +168,28 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
       "diagram or a numbered list of steps (like 1. 2. 3. or A → B → C), and an interactive graph only if your slides ",
       "contain a chart. Add code, step lists or charts to your material so the AI teacher can explain them better."),
     env ? envChips(env) : h("small", { class: "muted" }, "Generate the script to see which environments this material unlocks."));
+  // How deep each part is taught comes from the material, so the teacher learns here what earns a part more time.
+  const DEPTH_ORDER = ["in depth", "normal", "brief"];
+  const depthList = (depth) => depth?.parts?.length ? h("div", { class: "depth-list" },
+    DEPTH_ORDER.map(d => {
+      const parts = depth.parts.filter(p => p.depth === d);
+      return parts.length ? h("div", { class: "depth-row" }, h("span", { class: `depth-tag ${d.replace(" ", "-")}` }, d === "in depth" ? "In depth" : d[0].toUpperCase() + d.slice(1)),
+        h("div", { class: "depth-parts" }, parts.map(p => h("span", { class: "depth-part", title: p.why.length ? `Because the material has ${p.why.join(", ")}` : "The material states it without examples or steps" }, p.title)))) : null;
+    }),
+    depth.too_long ? h("p", { class: "depth-warn" }, icon("info"), "This material is more than one sitting (about 20 min), so every part was shortened. ",
+      "Split it into two lessons to teach it all fully.") : null) : null;
+  const depthNote = h("div", { class: "env-note" },
+    h("div", { class: "env-note-head" }, icon("layers"), h("strong", {}, "How your slides set the depth")),
+    h("p", {}, "Each part of your material is taught ", h("strong", {}, "Brief"), ", ", h("strong", {}, "Normal"), " or ",
+      h("strong", {}, "In depth"), ". A part gets more depth when your material gives it more than one slide, an example, ",
+      "steps, a comparison, an exception or a task for students."),
+    h("p", {}, "For example, a definition in one line is Brief; a process over two slides with a worked case (a reaction, a historical event, an algorithm) is In depth."),
+    // The ranges follow DEPTH_MIN and MAX_SPEAKING_MIN in eris/generate/depth.py, with notes and code on top.
+    h("p", {}, h("strong", {}, "How this sets the length: "), "an In depth part takes about four times as long as a Brief one. ",
+      "Material that is mostly short definitions makes a lesson of about 5–8 min; a mix makes about 10–14 min; ",
+      "many worked examples, processes or comparisons make about 18–20 min. Past about 20 min every part is shortened, ",
+      "so split such material into two lessons. There is no time to set."),
+    depthList(data.manifest?.depth) || h("small", { class: "muted" }, "Generate the script to see how deep each part is taught."));
 
   const materialStep = h("span", { class: "step-num" }, "1");
   // Once a script exists, the setup folds into this summary so the script gets the room.
@@ -187,13 +204,11 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     h("div", { class: "setup-full-head" }, h("strong", {}, "Lecture setup"), h("div", { class: "spacer" }), doneBtn),
     h("section", { class: "card" },
       h("div", { class: "card-header" }, materialStep, h("h3", {}, "Study material")),
-      h("div", { class: "card-body stack" }, drop, fileList, envNote)),
+      h("div", { class: "card-body stack" }, drop, fileList, envNote, depthNote)),
     h("section", { class: "card" },
       h("div", { class: "card-header" }, h("span", { class: "step-num" }, "2"), h("h3", {}, "Lecture")),
       h("div", { class: "card-body grid-2" },
         h("label", { class: "field span-2" }, h("span", {}, "Topic"), topicInput),
-        h("label", { class: "field" }, h("span", {}, "Total lecture time (min)"), durationInput),
-        h("label", { class: "field" }, h("span", {}, "Speaking time (min)"), speakingInput),
         h("label", { class: "field" }, h("span", {}, "Teaching language"), languageInput),
         h("div", { class: "field" }, h("span", {}, "Voice"), template.gnani
           ? h("div", { class: "voice-row" }, voiceInput, previewBtn)
@@ -215,8 +230,9 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     summaryBody.replaceChildren(...[
       row("file", files.length ? `${files.length} file${files.length > 1 ? "s" : ""}: ${files.join(", ")}` : "No material yet"),
       row("user", persona.Teacher?.Name || "No teacher yet"),
-      row("clock", `${topicInput.value || "No topic"} · ${durationInput.value} min lecture, ${speakingInput.value} min speaking · ${languageName()}${template.gnani ? ` · ${voiceInput.value} voice` : ""}`),
-      data.manifest?.environments ? envChips(data.manifest.environments) : null].filter(Boolean));
+      row("clock", `${topicInput.value || "No topic"}${data.manifest?.estimated_min ? ` · about ${formatDuration(data.manifest.estimated_min)}` : ""} · ${languageName()}${template.gnani ? ` · ${voiceInput.value} voice` : ""}`),
+      data.manifest?.environments ? envChips(data.manifest.environments) : null,
+      depthList(data.manifest?.depth)].filter(Boolean));
   }
 
   // Folded: the setup is a summary card (default once a script exists); unfolded: everything to edit.
@@ -514,14 +530,9 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
       return toast(`Persona is missing: ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? "…" : ""}`, "error", 6000);
     }
     if (!topicInput.value.trim()) return toast("Enter this lecture's topic.", "error");
-    const duration = +durationInput.value;
-    if (!(duration >= 5 && duration <= 120)) return toast("Total lecture time must be 5 to 120 minutes.", "error");
-    const speaking = +speakingInput.value;
-    if (!(speaking >= 1 && speaking <= duration)) return toast("Speaking time must be 1 minute up to the total lecture time.", "error");
     if (state.segments.length && !await confirmDialog("Regenerate the script?", "This replaces the current script, including any edits.", "Regenerate")) return;
     try {
-      await api.generate(lectureId, { persona, topic: topicInput.value.trim(), duration_min: duration, speaking_min: speaking,
-        language: languageInput.value });
+      await api.generate(lectureId, { persona, topic: topicInput.value.trim(), language: languageInput.value });
       data.job = { status: "running", steps: [], error: "" };
       data.judge = null;  // the old quality result belongs to the old script
       renderQuality(); renderLog(); renderActions(); setTab("log");

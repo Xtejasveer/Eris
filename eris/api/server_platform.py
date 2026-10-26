@@ -256,6 +256,8 @@ def _post_view(conn, post, user, role):
     if post["kind"] == "lesson":
         view["lesson"] = {"id": post["lesson_id"], "kind": post["lesson_kind"], "lecture_id": post["lecture_id"]}
         view["version"] = {"id": post["version_id"], "number": post["version_number"], "say_count": post["say_count"]}
+        manifest = config.manifest_path(post["lecture_id"])  # "About N min": the length the lesson's material gave it
+        view["minutes"] = json.loads(manifest.read_text(encoding="utf-8")).get("estimated_min") if manifest.exists() else None
         if role == "student":
             view["my_progress"] = _progress_of(conn, user["id"], post)
         else:
@@ -429,13 +431,12 @@ def add_lesson(topic_id: int, body: LessonIn, request: Request):
         access.need_course(user, topic["course_id"], teacher=True)
         course = one(conn, "SELECT subject, year FROM courses WHERE id = ?", topic["course_id"])
         lecture_id = f"{_slug(course['subject'], 16)}_{_slug(title, 30)}_{secrets.token_hex(3)}"
-        total = body.duration_min or config.LECTURE_DURATION_MIN
-        speaking = body.speaking_min or config.default_speaking_min(total)
-        if not (5 <= total <= 120 and 1 <= speaking <= total):
+        # Times are optional: a lesson's length comes from its material (generate/depth.py)
+        if body.duration_min and not (5 <= body.duration_min <= 120 and 1 <= (body.speaking_min or 1) <= body.duration_min):
             raise HTTPException(400, "Total time must be 5-120 minutes and speaking time 1 minute up to the total")
+        times = {k: v for k, v in (("duration_min", body.duration_min), ("speaking_min", body.speaking_min)) if v}
         language = body.language if body.language in config.LANGUAGES else config.DEFAULT_LANGUAGE
-        manifest = {"lecture_id": lecture_id, "topic": title, "duration_min": total, "speaking_min": speaking,
-                    "language": language, "status": "new", "kind": body.kind,
+        manifest = {"lecture_id": lecture_id, "topic": title, **times, "language": language, "status": "new", "kind": body.kind,
                     "course_label": " · ".join(x for x in (course["subject"], course["year"]) if x),
                     "topic_title": topic["title"], "owner_id": user["id"]}
         if body.kind == "prerequisite":

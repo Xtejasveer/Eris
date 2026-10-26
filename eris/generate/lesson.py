@@ -288,6 +288,7 @@ def _calc_numbers(text):
 
 
 SOFT_PROBLEM_RE = re.compile(r"works through calculations that are not written|explain each of its \d+ steps"
+                             r"|is (?:brief|normal|in depth) in the plan"
                              r"|writes calculation steps it never explains|already teaches \(the same notes")
 
 
@@ -606,9 +607,11 @@ def jev_feedback(report):
 
 # ---------- step 2 ----------
 
-def write_lesson(prompt, notes, budget, persona, topic, figs, env, slide_count, pictures, rounds, material=""):
+def write_lesson(prompt, notes, budget, persona, topic, figs, env, slide_count, pictures, rounds, material="", plan=None):
     """Write the lesson and loop until code and Jev pass it (CONTENT_ROUNDS revisions). Returns (lesson text,
-    sections, Jev report, problems left). rounds: the pipeline's list of rounds, for Studio."""
+    sections, Jev report, problems left). rounds: the pipeline's list of rounds, for Studio. plan: the depth plan
+    (depth.py); a section far from its planned length goes back to the writer."""
+    from eris.generate.depth import section_problems
     writer = LessonWriter(prompt)
     text = writer.write(notes, budget)
     best = None
@@ -618,6 +621,8 @@ def write_lesson(prompt, notes, budget, persona, topic, figs, env, slide_count, 
             print(f"[lesson] moved {moved} calculation note(s) in front of the sentence that explains them")
         sections, problems = parse_lesson(text)
         problems = lesson_problems(sections, budget, figs, env, slide_count, problems)
+        if plan:
+            problems += section_problems(sections, plan)
         words = word_count(sections)
         report = None
         if problems:

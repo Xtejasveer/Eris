@@ -77,6 +77,11 @@ LANGUAGE_VOICES = {
     "kn-IN": ["Saanvi", "Kavin"], "ml-IN": ["Reshma", "Riyaan"], "mr-IN": ["Zahira", "Ishaan"], "bn-IN": ["Kirra", "Dhruva"],
     "gu-IN": ["Falak", "Veera"], "pa-IN": ["Mehuli", "Zayan"],
 }
+# Which Gnani voices are men's (all others are women's), from Gnani's voice catalog
+# (https://docs.gnani.ai/api/TTS/available-voices). Many languages mark the speaker's gender in the grammar
+# ("मैं पढ़ा रही हूँ" / "पढ़ा रहा हूँ"), so the script must match the voice that says it.
+MALE_VOICES = {"Pranav", "Shlok", "Girish", "Deepak", "Roopesh", "Vikrant", "Hemraj", "Jalaj", "Omkar", "Kavin",
+               "Riyaan", "Ishaan", "Dhruva", "Veera", "Zayan"}
 # What Studio's voice preview says, in the lecture's language.
 VOICE_SAMPLES = {
     "en-IN": "Hello class. Today I'm teaching in place of your teacher.",
@@ -246,12 +251,24 @@ def lecture_voice(manifest):
     return chosen if chosen in LANGUAGE_VOICES.get(language, []) else language_voice(language)
 
 
+def voice_gender(manifest):
+    """"female" or "male": who the lecture's voice sounds like (the browser voice, without Gnani, is a woman's)."""
+    return "male" if lecture_voice(manifest) in MALE_VOICES else "female"
+
+
 def language_voice(code):
     """The Gnani voice for a language: TTS_VOICE_<CODE> in .env, else TTS_VOICE for English, else the default."""
     custom = os.getenv("TTS_VOICE_" + code.replace("-", "_").upper(), "").strip()
     if custom:
         return custom
     return TTS_VOICE if code == "en-IN" else LANGUAGES.get(code, LANGUAGES["en-IN"])[1]
+
+
+def class_minutes(lesson_min):
+    """The class clock for a lesson of lesson_min minutes: the lesson plus room for doubts (a third more, at least 5
+    minutes), so a student who asks questions isn't hurried to the recap."""
+    import math
+    return math.ceil((lesson_min or 0) + max(5, (lesson_min or 0) / 3))
 
 
 def lecture_times(manifest):
