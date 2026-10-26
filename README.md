@@ -55,6 +55,7 @@ You need [uv](https://docs.astral.sh/uv/) and an [OpenRouter](https://openrouter
 uv venv --python 3.12
 source .venv/bin/activate
 uv pip install -r requirements.txt
+uv pip install -r requirements-extras.txt  # optional: teacher video (modal) and better lip sync (faster-whisper)
 cp .env.example .env
 ```
 

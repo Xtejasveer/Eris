@@ -1,0 +1,43 @@
+# Eris on one server: the app, and Caddy in front for HTTPS. See docs/deploy.md.
+#
+#   docker compose up -d --build
+#
+# The data stays on the server in /srv/eris/{data,workspace,chroma_db}, outside the image, so rebuilding or updating
+# never touches courses, lessons, audio or attendance. Clone the repository to /srv/eris so these paths line up.
+services:
+  eris:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      ERIS_SANDBOX: docker              # programs run in throwaway containers on the server's Docker
+      ERIS_SANDBOX_IMAGE: python:3.12-slim
+    volumes:
+      # Same path inside and outside: the sandbox mounts a program's folder by its path on the server.
+      - /srv/eris/data:/srv/eris/data
+      - /srv/eris/workspace:/srv/eris/workspace
+      - /srv/eris/chroma_db:/srv/eris/chroma_db
+      # The server's Docker, for the sandbox. It gives this container control of Docker on the server: keep the
+      # server for Eris only.
+      - /var/run/docker.sock:/var/run/docker.sock
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on: [eris]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # Your domain (e.g. eris.example.com) for automatic HTTPS; ":80" serves plain HTTP on the server's IP.
+      ERIS_DOMAIN: ${ERIS_DOMAIN:-:80}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -48,6 +48,8 @@ GUARDRAILS_ENABLED = os.getenv("GUARDRAILS_ENABLED", "true").strip().lower() in 
 # Where programs run (eris/sandbox.py): auto (docker when SANDBOX_IMAGE is pulled, else the OS sandbox), docker, os, off.
 SANDBOX = os.getenv("ERIS_SANDBOX", "auto").strip().lower()
 SANDBOX_IMAGE = os.getenv("ERIS_SANDBOX_IMAGE", "python:3.12-slim").strip()
+# The sign-in cookie is sent over HTTPS only. Turn on when the site has a domain with HTTPS (deploy/Caddyfile).
+SECURE_COOKIES = os.getenv("ERIS_SECURE_COOKIES", "false").strip().lower() in ("1", "true", "yes")
 # The sign-in page offers the demo accounts (python main.py seed). Local pilots only: turn off for real users.
 DEMO_LOGINS = os.getenv("ERIS_DEMO_LOGINS", "true").strip().lower() in ("1", "true", "yes")
 TTS_VOICE = os.getenv("TTS_VOICE", "Kaveri").strip()

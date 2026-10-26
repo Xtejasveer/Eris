@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, Request
 
+from eris import config
 from eris.platform.db import connect, now, one
 
 COOKIE = "eris_session"
@@ -90,7 +91,8 @@ def user_from_request(request: Request):
 
 
 def set_cookie(response, token):
-    response.set_cookie(COOKIE, token, max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax", path="/")
+    response.set_cookie(COOKIE, token, max_age=SESSION_DAYS * 86400, httponly=True, samesite="lax", path="/",
+                        secure=config.SECURE_COOKIES)  # HTTPS only once the site has one (ERIS_SECURE_COOKIES)
 
 
 def require_user(request: Request):

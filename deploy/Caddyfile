@@ -1,0 +1,11 @@
+# In front of Eris: HTTPS (Caddy gets and renews the certificate when ERIS_DOMAIN is a domain), compression, and
+# room for 25 MB study-material uploads.
+{$ERIS_DOMAIN::80} {
+	encode zstd gzip
+	request_body {
+		max_size 30MB
+	}
+	reverse_proxy eris:8000 {
+		flush_interval -1
+	}
+}

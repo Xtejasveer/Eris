@@ -91,6 +91,7 @@ def build_parser():
 
     p = sub.add_parser("serve", help="start the website (home + class)")
     p.add_argument("--port", type=int, default=8000)
+    p.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to accept connections from outside (in a container)")
 
     p = sub.add_parser("session", help="run the approved lecture with doubts")
     p.add_argument("--lecture", required=True)
@@ -107,7 +108,9 @@ def main():
         config.check_env()
         import uvicorn
         print(f"Open http://127.0.0.1:{args.port}")
-        uvicorn.run("eris.api.server:app", host="127.0.0.1", port=args.port)
+        # One process: running generations and doubt sessions live in its memory. Behind a proxy (Caddy) it trusts
+        # the proxy's X-Forwarded-* headers, so it knows the visitor used HTTPS.
+        uvicorn.run("eris.api.server:app", host=args.host, port=args.port, proxy_headers=True, forwarded_allow_ips="*")
         return
     if args.command == "tutor-video":
         from eris.classroom.tutor_video import prepare

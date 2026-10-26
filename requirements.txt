@@ -15,6 +15,4 @@ numpy
 fastapi
 uvicorn
 python-multipart
-modal  # only for `main.py video` (MuseTalk teacher video on a Modal GPU)
-faster-whisper  # word timings for the 3D teacher's lip sync (falls back to an energy aligner)
 pymupdf  # draws the slides as pictures for the class (with LibreOffice; see material/slide_images.py)

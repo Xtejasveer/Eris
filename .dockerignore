@@ -1,0 +1,22 @@
+# Never baked into the image: secrets, local tools, and the data, which docker-compose.yml mounts from the server.
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+.venv
+.uv-cache
+.claude
+.deepeval
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.DS_Store
+*.log
+node_modules
+
+data
+workspace
+chroma_db
+media
+archive
