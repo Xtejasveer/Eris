@@ -6,9 +6,6 @@ import { api } from "./api.js";
 import { h, icon, toast, modal, confirmDialog, badge, kindTag, avatarTint, initials, formatDate, languageSelect } from "./ui.js";
 import { showVersions } from "./versions.js";
 
-const greeting = () => { const hr = new Date().getHours(); return hr < 12 ? "Good morning" : hr < 17 ? "Good afternoon" : "Good evening"; };
-// "Prof. Ananya Rao" -> "Ananya" (a title is not a name to greet).
-const firstName = (n) => String(n || "").replace(/^(prof|dr|mr|mrs|ms|miss|sir)\.?\s+/i, "").split(" ")[0];
 // What the guardrails flagged on a doubt: red when it was blocked, amber when only flagged.
 const safetyTags = (flags) => flags?.length ? h("div", { class: "safety-tags" }, flags.map(f =>
   h("span", { class: `safety-tag ${f.blocked ? "blocked" : ""}`, title: `Safety check, probability ${f.p}` },
@@ -34,8 +31,7 @@ export function renderHome(main, me, courses, lectures = []) {
   const loose = lectures.filter(l => !l.in_course);
   main.replaceChildren(h("div", { class: "page home" },
     h("div", { class: "home-head" },
-      h("div", {}, h("div", { class: "hero-kicker" }, `${greeting()}, ${firstName(me.name)}`),
-        h("h1", { class: "home-title" }, "Your courses")),
+      h("h1", { class: "home-title" }, "Your courses"),
       h("button", { class: "btn primary", onclick: teacher ? () => newCourse() : () => joinCourse() }, icon("plus"), teacher ? "New course" : "Join a course")),
     courses.length ? null : h("div", { class: "card empty" }, h("div", { class: "empty-icon" }, icon(teacher ? "class" : "book")),
       h("h3", {}, teacher ? "Create your first course" : "Join your first course"),

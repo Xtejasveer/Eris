@@ -309,10 +309,12 @@ answers and code sandbox), Eris should run only as a pilot with trusted teachers
   Marathi, Bengali, Gujarati, Punjabi). Technical terms the class says in English (loop, GDP, velocity) stay in
   English. Solves: the voice mispronouncing transliterated lines, and notes students of a regional-language class
   can't read easily.
-- **The voice's gender in every language.** The script now matches the voice that says it ("ले रही हूँ" for a woman's
-  voice, "ले रहा हूँ" for a man's: `speaker_rule` in `eris/prompts.py`, voices from Gnani's catalog). The rule gives
-  only a Hindi example; check the other languages whose grammar marks the speaker (Marathi, Gujarati, Punjabi)
-  on a real lesson, and add an example in each if the writer gets it wrong. Solves: a woman's voice speaking
+- **The voice's gender in every language.** *Built:* the script matches the voice that says it (`speaker_rule` and
+  `SPEAKER_EXAMPLES` in `eris/prompts.py`, voice genders from Gnani's catalog), with an example in each language whose
+  grammar marks the speaker: Hindi ("ले रही हूँ" / "ले रहा हूँ"), Marathi ("आले आहे" / "आलो आहे"), Gujarati
+  ("આવી છું" / "આવ્યો છું") and Punjabi ("ਲੈ ਰਹੀ ਹਾਂ" / "ਲੈ ਰਿਹਾ ਹਾਂ"). Tamil, Telugu, Kannada, Malayalam and Bengali
+  don't mark it in the first person, so they get the rule without an example. Tested with a woman's and a man's voice
+  in all four: every line used the speaker's own gender, and the absent teacher's. Solves: a woman's voice speaking
   as a man in a regional language.
 
 ## 9. What this needs underneath

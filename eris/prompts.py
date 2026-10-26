@@ -33,6 +33,17 @@ def language_rule(language, task="lesson"):
 
 
 
+# How a woman and a man say "I have come to take your class today" in the languages whose grammar marks who is
+# speaking (the verb changes with the speaker). Tamil, Telugu, Kannada, Malayalam and Bengali don't mark it in the
+# first person, so they get the rule without an example.
+SPEAKER_EXAMPLES = {
+    "hi-IN": ("मैं आज आपकी क्लास ले रही हूँ, मैं समझाती हूँ", "मैं आज आपकी क्लास ले रहा हूँ, मैं समझाता हूँ"),
+    "mr-IN": ("मी आज तुमचा वर्ग घ्यायला आले आहे", "मी आज तुमचा वर्ग घ्यायला आलो आहे"),
+    "gu-IN": ("હું આજે તમારો વર્ગ લેવા આવી છું", "હું આજે તમારો વર્ગ લેવા આવ્યો છું"),
+    "pa-IN": ("ਮੈਂ ਅੱਜ ਤੁਹਾਡੀ ਕਲਾਸ ਲੈ ਰਹੀ ਹਾਂ", "ਮੈਂ ਅੱਜ ਤੁਹਾਡੀ ਕਲਾਸ ਲੈ ਰਿਹਾ ਹਾਂ"),
+}
+
+
 def speaker_rule(language, gender):
     """The voice that says the script is a woman's or a man's: where the language's grammar marks the speaker's gender,
     the script must match it. Empty for English, which doesn't."""
@@ -40,12 +51,13 @@ def speaker_rule(language, gender):
     if not language or language == "en-IN" or gender not in ("female", "male"):
         return ""
     name, woman = config.language_name(language), gender == "female"
-    example = ("\"मैं आज की क्लास ले रही हूँ\", \"मैं समझाती हूँ\"" if woman else
-               "\"मैं आज की क्लास ले रहा हूँ\", \"मैं समझाता हूँ\"")
-    return (f"\n\n# Who is speaking\nThe class hears a {'woman' if woman else 'man'}'s voice. Wherever {name} grammar "
-            f"marks the speaker's gender (verbs and words about yourself), use the forms a {'woman' if woman else 'man'} "
-            f"uses about {'herself' if woman else 'himself'}, in every line, e.g. in Hindi {example}. Words about the "
-            "absent teacher follow the teacher's own gender.")
+    who, self_ = ("woman", "herself") if woman else ("man", "himself")
+    rule = (f"\n\n# Who is speaking\nThe class hears a {who}'s voice. Wherever {name} grammar marks the speaker's "
+            f"gender (verbs and words about yourself), use the forms a {who} uses about {self_}, in every line")
+    example = SPEAKER_EXAMPLES.get(language)
+    if example:
+        rule += f", e.g. \"{example[0 if woman else 1]}\""
+    return rule + ". Words about the absent teacher follow the teacher's own gender."
 
 
 def prerequisite_rule(manifest):
