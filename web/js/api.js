@@ -67,6 +67,7 @@ export const api = {
   // ---------- accounts and courses ----------
   me: () => request("GET", "/api/auth/me"),
   demoLogins: () => request("GET", "/api/auth/demo"),
+  authOptions: () => request("GET", "/api/auth/options"),
   login: (email, password) => request("POST", "/api/auth/login", { email, password }),
   signup: (body) => request("POST", "/api/auth/signup", body),
   logout: () => request("POST", "/api/auth/logout"),

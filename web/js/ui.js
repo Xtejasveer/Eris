@@ -134,13 +134,12 @@ export function formatDuration(minutes) {
   return s ? `${m} min ${s} s` : `${m} min`;
 }
 
-// A warm tint per name, the same every time (sage, terracotta, honey, plum, teal).
-const TINTS = ["primary", "accent", "warning", "violet", "sky"];
+// A pale tint per name, the same every time: identity, not data (green, rose, blue, amber, teal; see --tint-N).
 export function avatarTint(name) {
   let n = 0;
   for (const ch of String(name)) n = (n * 31 + ch.charCodeAt(0)) >>> 0;
-  const t = TINTS[n % TINTS.length];
-  return `background: var(--${t}-soft); color: var(--${t})`;
+  const t = n % 5;
+  return `background: var(--tint-${t}); color: var(--tint-${t}-ink)`;
 }
 
 // "Oct 30, 5:00 PM" from an ISO date or a datetime-local value.

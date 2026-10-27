@@ -22,7 +22,7 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .chat-empty p { margin: 0; }
 .checkpoint { display: flex; flex-direction: column; gap: 8px; }
 .ck-head { display: flex; align-items: center; gap: 7px; font-size: 12.5px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
-.ck-head svg { width: 15px; height: 15px; color: var(--violet); }
+.ck-head svg { width: 15px; height: 15px; color: var(--accent); }
 .ck-head small { color: var(--muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ck-status { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; }
 .ck-status.live { background: var(--danger-soft); color: var(--danger); }
@@ -60,10 +60,10 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .env.active { opacity: 1; visibility: visible; }
 
 /* visual: interactive pictures in sandboxed frames */
-.env-visual { background: radial-gradient(circle at 50% 0, var(--surface-2), var(--surface-3)); padding: 18px; display: flex; }
-.vz-win { flex: 1; min-width: 0; display: flex; flex-direction: column; background: #fbfaf7; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.env-visual { background: var(--surface-2); padding: 18px; display: flex; }
+.vz-win { flex: 1; min-width: 0; display: flex; flex-direction: column; background: #ffffff; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .vz-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #e2ded4; background: #fff; color: #1b1c21; font-size: 13px; font-weight: 600; min-height: 38px; }
-.vz-head svg { width: 15px; height: 15px; color: var(--violet); flex: none; }
+.vz-head svg { width: 15px; height: 15px; color: var(--accent); flex: none; }
 .vz-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vz-tabs { margin-left: auto; display: flex; gap: 4px; overflow: hidden; }
 .vz-tab { font-size: 11.5px; font-weight: 500; color: #74757e; padding: 3px 9px; border-radius: 6px; white-space: nowrap; }
@@ -97,12 +97,12 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 @keyframes flow-fade { to { opacity: 1; } }
 
 /* slides */
-.env-slides { background: radial-gradient(circle at 50% 0, var(--surface-2), var(--surface-3)); display: grid; place-items: center; padding: 28px; }
+.env-slides { background: var(--surface-2); display: grid; place-items: center; padding: 28px; }
 .slide-frame { --ratio: 16 / 9; position: relative; width: min(100%, calc((100vh - 220px) * var(--ratio))); aspect-ratio: var(--ratio); container-type: size; }
 /* Sizes follow the slide (cq units), not the window, so a slide in a narrow panel keeps its proportions.
    --fit (set by Stage.fitSlide) shrinks the text further when a slide still has too much on it. */
 .slide { --fit: 1; position: absolute; inset: 0; background: #fff; color: #1b1c21; border-radius: 10px; box-shadow: 0 10px 40px rgba(20, 20, 40, .18); padding: 5.5cqh 6.5cqw; overflow: hidden; display: flex; flex-direction: column; }
-.slide::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 8px; background: linear-gradient(var(--primary), var(--violet)); }
+.slide::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 8px; background: var(--accent); }
 .slide.enter { animation: slide-in .45s ease; }
 @keyframes slide-in { from { opacity: 0; transform: translateX(16px); } }
 .slide-title { flex: none; font-size: calc(clamp(15px, 4.2cqw, 40px) * var(--fit)); line-height: 1.15; font-weight: 700; letter-spacing: -.02em; margin: 0 0 3.5cqh; color: #14181f; }
@@ -122,7 +122,7 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .slide.as-image::before { display: none; }
 .slide-img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .slide-mark { position: absolute; z-index: 1; border-radius: 4px; pointer-events: none;  /* see-through: readable on light and dark boxes */
-  background: linear-gradient(rgba(255, 214, 10, .42), rgba(255, 214, 10, .42)) no-repeat 0 0 / 0 100%;
+  background: linear-gradient(rgba(255, 214, 10, .42), rgba(255, 214, 10, .42)) no-repeat 0 0 / 0 100%;  /* taste-skill-ignore: a flat marker that sweeps in */
   animation: marker .6s ease forwards; }
 .slide-num { position: absolute; right: 14px; bottom: 10px; font-size: 12px; color: #8b8d96; font-variant-numeric: tabular-nums; }
 
@@ -147,7 +147,7 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .terminal { display: flex; flex-direction: column; min-height: 0; border-top: 1px solid #262a34; background: #0b0d11; }
 .terminal.flash { animation: term-flash 1.1s ease; }
 @keyframes term-flash { 0%, 100% { box-shadow: inset 0 0 0 0 transparent; } 25%, 60% { box-shadow: inset 0 0 0 2px var(--primary); } }
-.term-head { display: flex; align-items: center; gap: 7px; padding: 6px 14px; font: 600 11px var(--font); text-transform: uppercase; letter-spacing: .06em; color: #7d8394; border-bottom: 1px solid #1c1f27; }
+.term-head { display: flex; align-items: center; gap: 7px; padding: 6px 14px; font: 500 12px var(--font); color: #9aa0ad; border-bottom: 1px solid #1c1f27; }
 .term-head svg { width: 14px; height: 14px; }
 .term-cwd { margin-left: auto; text-transform: none; letter-spacing: 0; font: 11.5px var(--mono); color: #525868; }
 .term-body { flex: 1; overflow-y: auto; padding: 10px 14px; font: 13.5px/1.6 var(--mono); color: #d0d4dc; }
@@ -160,11 +160,11 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .term-class { color: #f0a54a; white-space: pre-wrap; }
 
 /* overlays */
-.stage-overlay { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; padding: 24px; background: color-mix(in srgb, var(--surface) 82%, transparent); backdrop-filter: blur(6px); }
-.splash { width: min(520px, 100%); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 30px; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow-lg); animation: toast-in .25s ease; }
+.stage-overlay { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; padding: 24px; background: color-mix(in srgb, var(--surface) 88%, transparent); }
+.splash { width: min(520px, 100%); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 30px; background: var(--surface); border: 1px solid var(--border); border-radius: 22px; box-shadow: var(--shadow-lg); animation: toast-in .25s ease; }
 .splash h2 { font-size: 22px; font-weight: 700; }
 .splash p { margin: 0; }
-.splash-badge { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; margin-bottom: 6px; background: linear-gradient(135deg, var(--primary), var(--violet)); color: #fff; }
+.splash-badge { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; margin-bottom: 6px; background: var(--accent); color: #fff; }
 .splash-badge svg { width: 26px; height: 26px; }
 .splash-badge.ok { background: var(--success); }
 .splash-badge.muted-badge { background: var(--surface-3); color: var(--text-2); }
@@ -188,14 +188,14 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .app.immersive .sidebar { display: none; }
 /* The board is always light, like a real whiteboard, so the lesson keeps the light palette in dark mode too: a warm
    clean board, dark ink, the notebook title in a green marker. */
-.lesson { --ink: #1c1a17; --board: #fbfaf7; --dot: transparent; --pill: #ffffff;
-  --bg: #fbfaf7; --surface: #ffffff; --surface-2: #f5f3ef; --surface-3: #ebe8e2; --border: #ebe7e0; --border-strong: #ddd8cf;
-  --text: #1c1a17; --text-2: #57524a; --muted: #8b857b; --primary: #1f1d1a; --primary-hover: #000000; --primary-soft: #eceae5;
-  --on-primary: #ffffff; --accent: #6b46c1; --accent-soft: #f1ebfb; --success: #2f7d53; --success-soft: #e6f3ea;
-  --warning: #a8660f; --warning-soft: #fbefdc; --danger: #c2412d; --danger-soft: #fbe7e2; --violet: #6b46c1; --violet-soft: #f1ebfb;
-  --sky: #2b6f8a; --sky-soft: #e4f0f4; --marker-ink: #2f6a4e; color-scheme: light;
+.lesson { --ink: #1f201d; --board: #fbfbfa; --dot: #dcdfd8; --pill: #ffffff;
+  --bg: #fbfbfa; --panel: #f5f6f3; --surface: #ffffff; --surface-2: #eef0ec; --surface-3: #e4e7e2; --border: #e6e8e4; --border-strong: #d9dcd6;
+  --text: #1f201d; --text-2: #4a4c48; --muted: #5f625d; --primary: #1d1f20; --primary-hover: #000000; --primary-soft: #eceeea;
+  --on-primary: #ffffff; --accent: #1b6e66; --accent-soft: #e3f0ee; --success: #247b50; --success-soft: #dcfae5;
+  --warning: #92400e; --warning-soft: #fffbeb; --danger: #b42318; --danger-soft: #fdecea; --violet: #3d3d3a; --violet-soft: #eeefec;
+  --sky: #2b6f8a; --sky-soft: #e4f0f4; --marker-ink: #1b6e66; color-scheme: light;
   position: relative; flex: 1; min-height: 0; height: 100vh; overflow: hidden; color: var(--ink);
-  background: var(--board); }
+  background: radial-gradient(circle, var(--dot) 1.2px, transparent 1.4px) 0 0 / 28px 28px, var(--board); }  /* taste-skill-ignore: the board's dot grid */
 .ls-board { position: absolute; inset: 0; }
 .lesson.is-preview .ls-board { top: 44px; }  /* room for the teacher's preview bar under the title */
 .ls-board .stage-envs { position: absolute; inset: 0; }
@@ -222,7 +222,7 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .nb-line.writing::after { content: ""; display: inline-block; width: 3px; height: .9em; margin-left: 3px; background: var(--ink); vertical-align: -2px; animation: blink 1s infinite; }
 .nb-line.nb-focus { animation: nb-focus 2.4s ease; border-radius: 6px; }
 @keyframes nb-focus { 0%, 70% { background: color-mix(in srgb, var(--primary) 12%, transparent); box-shadow: 0 0 0 6px color-mix(in srgb, var(--primary) 12%, transparent); } 100% { background: transparent; box-shadow: none; } }
-.hl-mark { color: inherit; background: linear-gradient(transparent 18%, color-mix(in srgb, #ffe14d 85%, transparent) 18%, color-mix(in srgb, #ffe14d 85%, transparent) 88%, transparent 88%) no-repeat 0 0 / 0 100%; animation: marker .6s ease forwards; border-radius: 3px; padding: 0 2px; }
+.hl-mark { color: inherit; background: linear-gradient(transparent 18%, color-mix(in srgb, #ffe14d 85%, transparent) 18%, color-mix(in srgb, #ffe14d 85%, transparent) 88%, transparent 88%) no-repeat 0 0 / 0 100%; animation: marker .6s ease forwards; border-radius: 3px; padding: 0 2px; }  /* taste-skill-ignore: a flat highlighter stroke; a gradient only so its width can sweep in */
 @keyframes marker { to { background-size: 100% 100%; } }
 .ink-layer { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; z-index: 2; }
 .ink-stroke { fill: none; stroke: #e5484d; stroke-width: 3.5; stroke-linecap: round; stroke-linejoin: round; }
@@ -233,7 +233,7 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .ls-board .env.env-code { inset: 96px 0 140px; width: min(1080px, calc(100% - 112px)); margin: 0 auto; border-radius: 16px; overflow: hidden; box-shadow: 0 12px 40px rgba(20, 20, 40, .18); }
 .ls-board .env.env-visual { inset: 96px 56px 150px; background: none; padding: 0; }
 .ls-board .vz-win { border-radius: 16px; box-shadow: 0 12px 40px rgba(20, 20, 40, .14); }
-.ls-board .stage-overlay { z-index: 3; background: color-mix(in srgb, var(--board) 55%, transparent); backdrop-filter: blur(3px); }
+.ls-board .stage-overlay { z-index: 3; background: color-mix(in srgb, var(--board) 72%, transparent); }
 
 /* top: where we are (left); the teacher, playback and End (right) */
 .ls-top-left { position: absolute; top: 18px; left: 22px; z-index: 4; display: flex; align-items: center; gap: 12px; max-width: calc(50vw - 230px); }
@@ -280,7 +280,7 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .ls-script { position: absolute; right: 0; top: 0; bottom: 0; z-index: 7; width: min(560px, 92vw); display: flex; flex-direction: column; background: var(--surface); color: var(--text); border-left: 1px solid var(--border); box-shadow: var(--shadow-lg); transform: translateX(105%); transition: transform .25s ease; }
 .lesson.script-open .ls-script { transform: none; }
 .ls-script-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 18px 20px 6px; }
-.ls-script-head strong { display: block; font: 600 20px var(--display); }
+.ls-script-head strong { display: block; font: 600 18px var(--font); }
 .ls-script-head small { color: var(--muted); font-size: 12.5px; }
 .ls-script-note { margin: 4px 20px 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); color: var(--text-2); font-size: 12.5px; line-height: 1.5; }
 .ls-script-body { flex: 1; min-height: 0; overflow-y: auto; }
@@ -329,12 +329,12 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 /* The caption runs straight on the whiteboard, beside the tutor: no card behind it. */
 .ls-caption { flex: 1; min-width: 0; max-width: 760px; display: flex; align-items: center; gap: 16px; }
 .ls-tutor { --level: 0; position: relative; width: 84px; height: 84px; flex: none; border-radius: 50%; overflow: hidden; background: #e9ecf6; box-shadow: 0 2px 10px rgba(28, 26, 23, .14); }
-.ls-tutor-orb { width: 100%; height: 100%; display: grid; place-items: center; font: 700 24px var(--font); color: #fff; background: radial-gradient(circle at 30% 30%, #8cc4a2, #2f6a4e 60%, #234d39); }
+.ls-tutor-orb { width: 100%; height: 100%; display: grid; place-items: center; font: 600 24px var(--font); color: #fff; background: var(--accent); }
 .ls-tutor.with-3d .ls-tutor-orb, .ls-tutor.with-video .ls-tutor-orb { display: none; }
 .ls-tutor-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .18s ease; pointer-events: none; }
 .ls-tutor-video.on { opacity: 1; }
 .ls-tutor:not(.with-video) .ls-tutor-video { display: none; }
-.ls-tutor-3d { position: absolute; inset: 0; background: radial-gradient(circle at 50% 30%, #fbfaf7, #ebe8e2); }
+.ls-tutor-3d { position: absolute; inset: 0; background: #eef0ec; }
 .ls-tutor-3d canvas { width: 100% !important; height: 100% !important; }
 .ls-tutor-ring { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; box-shadow: inset 0 0 0 calc(2px + var(--level) * 4px) color-mix(in srgb, var(--primary) calc(12% + var(--level) * 50%), transparent); transition: box-shadow .08s linear; }
 .lesson.paused .ls-tutor { filter: grayscale(.6); }

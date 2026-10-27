@@ -329,7 +329,7 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     const tipText = tips ? ` (${tips} suggestion${tips > 1 ? "s" : ""})` : "";
     return { ok: !failed, failed, total,
       text: failed ? `Quality check: ${failed} thing${failed > 1 ? "s" : ""} to fix${tipText}` : `Quality check: passed${tipText}`,
-      badge: failed ? `${failed} to fix` : tips ? `✓ ${tips} tip${tips > 1 ? "s" : ""}` : `✓ ${total}/${total}` };
+      badge: failed ? `${failed} to fix` : tips ? `${tips} tip${tips > 1 ? "s" : ""}` : `${total}/${total}` };
   }
 
   function renderQuality() {

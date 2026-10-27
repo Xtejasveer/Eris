@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Eris palettes</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 32px; font: 14px/1.5 "Instrument Sans", sans-serif; background: #ffffff; color: #1f201d; }
+h1 { font: 400 34px/1.1 "Instrument Serif", serif; margin: 0 0 4px; }
+.lede { color: #5f625d; margin: 0 0 22px; max-width: 900px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.theme { border-radius: 18px; overflow: hidden; border: 1px solid #e6e8e4; }
+.ui { display: grid; grid-template-columns: 150px 1fr; height: 300px; }
+.side { background: var(--side); padding: 14px 10px; display: flex; flex-direction: column; gap: 4px; }
+.mark { width: 22px; height: 22px; border-radius: 6px; background: var(--accent); margin: 0 6px 12px; }
+.nav { height: 28px; border-radius: 7px; padding: 0 8px; display: flex; align-items: center; color: var(--muted); font-size: 13px; }
+.nav.on { background: var(--active); color: var(--text); }
+.canvas { padding: 20px 22px; color: var(--text);
+  background: radial-gradient(circle, var(--dot) 1.1px, transparent 1.3px) 0 0 / 22px 22px, var(--bg); }
+.greet { font: 400 30px/1.05 "Instrument Serif", serif; }
+.sub { color: var(--muted); font-size: 12.5px; margin: 4px 0 14px; }
+.panel { background: var(--panel); border-radius: 16px; padding: 12px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; }
+.card b { font-weight: 600; font-size: 13px; } .card small { color: var(--muted); font-size: 11.5px; }
+.btn { grid-row: 1 / span 2; grid-column: 2; align-self: center; height: 28px; padding: 0 12px; border-radius: 999px; background: var(--primary); color: var(--onprimary); font-size: 12px; font-weight: 500; display: grid; place-items: center; }
+.path { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; margin-top: 7px; }
+.path i { height: 5px; border-radius: 3px; background: var(--track); } .path i.d { background: var(--accent); }
+.pill { display: inline-block; font-size: 11px; padding: 0 7px; border-radius: 999px; background: var(--accentsoft); color: var(--accent); margin-left: 6px; font-weight: 500; }
+.sw { display: grid; grid-template-columns: repeat(8, 1fr); background: #fff; }
+.sw div { padding: 8px 8px 10px; font-size: 11px; color: #3c3e3a; border-top: 1px solid #ecedea; }
+.sw div + div { border-left: 1px solid #ecedea; }
+.sw span { display: block; height: 30px; border-radius: 6px; margin-bottom: 6px; border: 1px solid rgba(0,0,0,.06); }
+.sw code { font: 11px "Instrument Sans", sans-serif; color: #6b6d68; }
+.label { font-size: 12px; color: #5f625d; padding: 8px 12px; background: #fff; border-top: 1px solid #ecedea; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const P = {
+  chalk: {
+    name: "Chalk and slate", idea: "The school blackboard: slate-green board, chalk-white writing, the wooden ledge. The teal moves to a deep board green; dark mode is the board itself, a green-black, written on in chalk.",
+    light: { bg: "#fafaf7", side: "#eff0eb", active: "#e2e5dd", panel: "#f3f4ef", surface: "#ffffff", border: "#e3e6df", dot: "#d8dcd2", text: "#1d211d", muted: "#5a6058", accent: "#2e5a4b", accentsoft: "#e1ebe5", primary: "#1d211d", onprimary: "#ffffff", track: "#e6e9e2" },
+    dark:  { bg: "#131613", side: "#0f120f", active: "#20251f", panel: "#1b1f1b", surface: "#232823", border: "#2c322c", dot: "#262b25", text: "#eceee7", muted: "#a8afa4", accent: "#8cc0a8", accentsoft: "#1f3029", primary: "#eceee7", onprimary: "#131613", track: "#2c322c" },
+  },
+  book: {
+    name: "Exercise book", idea: "An Indian school notebook: off-white ruled paper, the blue of a ballpoint pen, the red margin line kept for mistakes only. Dark mode is blue-black ink on a desk at night.",
+    light: { bg: "#fbfbf9", side: "#efeff0", active: "#e2e3e6", panel: "#f4f4f3", surface: "#ffffff", border: "#e4e4e6", dot: "#d6d9e0", text: "#1b1c21", muted: "#5b5e66", accent: "#2b4c96", accentsoft: "#e6ebf6", primary: "#1b1c21", onprimary: "#ffffff", track: "#e7e8eb" },
+    dark:  { bg: "#121317", side: "#0e0f12", active: "#202128", panel: "#1a1b20", surface: "#24252b", border: "#2e3037", dot: "#25272e", text: "#f0f0ec", muted: "#a7aab3", accent: "#94abe2", accentsoft: "#1f2741", primary: "#f0f0ec", onprimary: "#121317", track: "#2e3037" },
+  },
+  brass: {
+    name: "Library", idea: "An old college library: paper the colour of a catalogue card, cloth-bound spines, a brass reading lamp. One brass hue on the data; dark mode is the reading room after hours.",
+    light: { bg: "#fbfaf8", side: "#f0eee9", active: "#e4e1da", panel: "#f4f2ee", surface: "#ffffff", border: "#e6e2da", dot: "#dcd7cd", text: "#211f1b", muted: "#605b53", accent: "#80621a", accentsoft: "#f3ecda", primary: "#211f1b", onprimary: "#ffffff", track: "#e9e6df" },
+    dark:  { bg: "#141311", side: "#100f0d", active: "#24221e", panel: "#1c1b18", surface: "#25231f", border: "#302d28", dot: "#29271f", text: "#f1eee7", muted: "#aea89c", accent: "#d2b15e", accentsoft: "#322a17", primary: "#f1eee7", onprimary: "#141311", track: "#302d28" },
+  },
+};
+const key = location.hash.slice(1) || "chalk";
+const p = P[key];
+const vars = (t) => Object.entries(t).map(([k, v]) => `--${k}:${v}`).join(";");
+const ui = (t, mode) => `
+  <div class="theme">
+    <div class="ui" style="${vars(t)}">
+      <div class="side"><div class="mark"></div><div class="nav on">Home</div><div class="nav">Algorithms</div><div class="nav">Physics</div></div>
+      <div class="canvas">
+        <div class="greet">Good afternoon, Prof. Rao</div>
+        <div class="sub">Kadane's algorithm is approved but not shared yet.</div>
+        <div class="panel"><div class="card"><b>Kadane's algorithm <span class="pill">Approved</span></b><small>Maximum subarray · about 18 min</small><div class="btn">Share lesson</div>
+          <div class="path"><i class="d"></i><i class="d"></i><i class="d"></i><i></i><i></i></div></div></div>
+      </div>
+    </div>
+    <div class="label">${mode}</div>
+    <div class="sw">${[["Page", t.bg], ["Sidebar", t.side], ["Panel", t.panel], ["Line", t.border], ["Text", t.text], ["Muted", t.muted], ["Accent", t.accent], ["Accent tint", t.accentsoft]]
+      .map(([n, c]) => `<div><span style="background:${c}"></span>${n}<br><code>${c}</code></div>`).join("")}</div>
+  </div>`;
+document.getElementById("root").innerHTML = `<h1>${p.name}</h1><p class="lede">${p.idea}</p><div class="pair">${ui(p.light, "Light")}${ui(p.dark, "Dark")}</div>`;
+</script>
+</body>
+</html>

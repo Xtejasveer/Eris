@@ -170,6 +170,20 @@ name to confirm). That removes the VM, its disk, the IP and the firewall rules, 
 
 ---
 
+## Security settings (a small pilot, not a public product)
+
+- **Code runs only in the Docker sandbox.** If its image is missing, running code is switched off rather than run
+  unprotected: `docker pull python:3.12-slim`. Programs get no network, no secrets and only their own folder.
+- **Students never trigger code runs** (`ERIS_STUDENT_CODE_RUNS=false`): their doubt answers explain code in words.
+- **Only students can sign up** (`ERIS_TEACHER_SIGNUP=false`); teachers are the seeded accounts.
+- **Demo accounts** (one-click on the sign-in page, password visible to anyone) can look, teach and generate, but not
+  delete or reset. Turn them off with `ERIS_DEMO_LOGINS=false` when the judging is over.
+- **Keys stay on the server:** `chmod 600 /srv/eris/.env`. Set a monthly spending limit on your OpenRouter key
+  (openrouter.ai → Keys → edit the key → credit limit), so a misuse can't run up a large bill.
+- **SSH:** Azure → VM → Networking → the SSH rule → Source: **My IP address**.
+
+After changing `.env`: `docker compose up -d` (in `/srv/eris`).
+
 ## If something is wrong
 
 | What you see | Why, and the fix |

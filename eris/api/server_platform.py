@@ -57,8 +57,16 @@ class Login(BaseModel):
     password: str
 
 
+@router.get("/auth/options")
+def auth_options():
+    """What the sign-in page may offer: teacher sign-up only while ERIS_TEACHER_SIGNUP is on."""
+    return {"teacher_signup": config.TEACHER_SIGNUP}
+
+
 @router.post("/auth/signup")
 def signup(body: Signup, response: Response):
+    if body.role == "teacher" and not config.TEACHER_SIGNUP:  # the role is the browser's claim: only students
+        raise HTTPException(403, "Teacher accounts are created by the admin. Sign up as a student.")
     try:
         user = auth.create_user(body.email, body.name, body.password, body.role)
     except ValueError as e:
@@ -932,8 +940,19 @@ def post_doubts(post_id: int, request: Request, user_id: int | None = None):
 def log_doubt(user, post_id, version_id, lecture_id, section, question, answer, passed, flags=()):
     """Called by the doubt route after every answer to a signed-in user. flags: what the guardrails flagged."""
     with connect() as conn:
-        if post_id is not None and not one(conn, "SELECT id FROM posts WHERE id = ?", post_id):
-            post_id = None
+        # The post and version come from the browser: kept only when the post shares this lecture in a course this
+        # person is in, and the version is that lesson's. Otherwise the doubt is logged without them.
+        post = one(conn, """SELECT p.id, p.course_id, p.lesson_id FROM posts p JOIN lessons l ON l.id = p.lesson_id
+                            WHERE p.id = ? AND p.kind = 'lesson' AND l.lecture_id = ?""", post_id, lecture_id) \
+            if post_id is not None else None
+        if post and not one(conn, """SELECT 1 AS x FROM enrollments WHERE course_id = ? AND user_id = ?
+                                     UNION SELECT 1 FROM courses WHERE id = ? AND teacher_id = ?""",
+                            post["course_id"], user["id"], post["course_id"], user["id"]):
+            post = None
+        post_id = post["id"] if post else None
+        if version_id is not None and not (post and one(conn, "SELECT id FROM versions WHERE id = ? AND lesson_id = ?",
+                                                        version_id, post["lesson_id"])):
+            version_id = None
         conn.execute("""INSERT INTO doubts (user_id, post_id, version_id, lecture_id, section, question, answer, passed, flags,
                                             created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                      (user["id"], post_id, version_id, lecture_id, section[:200], question[:2000], (answer or "")[:8000],

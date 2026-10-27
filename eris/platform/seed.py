@@ -22,7 +22,6 @@ STUDENTS = [("aarav@eris.test", "Aarav Mehta"), ("diya@eris.test", "Diya Sharma"
 # matches the teacher the lesson speaks as.
 LESSONS = [
     ("dp_coin_change", "ananya@eris.test", "Dynamic programming", "Coin change", "The coin change problem"),
-    ("napoleon", "meera@eris.test", "Revolution and empire", "Napoleon Bonaparte", "Napoleon: rise and fall"),
     ("globalisation_stats", "rohan@eris.test", "Presenting data", "Line, bar and pie charts", "Globalisation in numbers"),
     # One topic each, taught in depth (templates/demo/<id>: the slides, a worksheet and the teacher's persona).
     ("kadane_max_subarray", "ananya@eris.test", "Arrays", "Maximum subarray", "Kadane's algorithm"),

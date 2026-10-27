@@ -10,6 +10,7 @@ import sys
 import textwrap
 
 from eris import config
+from eris.sandbox import CODE_FILE_RE
 from eris.visuals.flow_diagram import parse_flow
 from eris.visuals.visual_controls import VISUAL_ID_RE, coerce_value, find_control, parse_controls
 
@@ -133,8 +134,8 @@ def _check_marker(name, args, line_no, state, errors):
         err(f"slide {args['n']} does not exist; the deck has {state['slide_count']} slide(s)")
         return False
 
-    if name == "WRITE_CODE" and not args["file"].endswith(".py"):
-        err(f"file must end in .py, got '{args['file']}'")
+    if name == "WRITE_CODE" and not CODE_FILE_RE.match(args["file"]):
+        err(f"file must be a plain name ending in .py, like countdown.py (no folders), got '{args['file']}'")
         return False
 
     if name == "HIGHLIGHT":

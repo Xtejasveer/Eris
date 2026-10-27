@@ -23,7 +23,8 @@ from eris.generate.script_writer import approve_script, count_slides
 from eris.platform import access
 from eris.platform.auth import user_from_request
 
-app = FastAPI(title="AI Substitute Teacher")
+# No public API explorer (/docs, /redoc, /openapi.json): they would list every route to anyone, signed in or not.
+app = FastAPI(title="AI Substitute Teacher", docs_url=None, redoc_url=None, openapi_url=None)
 
 
 @app.on_event("startup")
@@ -35,7 +36,7 @@ def _claim_lectures():
 
 # Every /api route needs a signed-in user, except signing in itself. Lecture routes need the lecture's teacher;
 # a student may use only the class-time routes, and only for a lecture shared with a course they are in.
-PUBLIC_API = re.compile(r"^/api/auth/(login|signup|logout|demo)$")
+PUBLIC_API = re.compile(r"^/api/auth/(login|signup|logout|demo|options)$")
 LECTURE_PATH = re.compile(r"^/api/lectures/([^/]+)(/.*)?$")
 STUDENT_LECTURE_ROUTES = re.compile(r"^/(visuals/[^/]+|images/[^/]+|slides/[^/]+|doubts/(start|ask|reply)|recovery)$")
 TEACHER_ONLY = re.compile(r"^/api/(lectures|persona/template)$")
@@ -43,6 +44,22 @@ TEACHER_ONLY = re.compile(r"^/api/(lectures|persona/template)$")
 
 def _deny(status, message):
     return JSONResponse({"detail": message}, status_code=status)
+
+
+# While the sign-in page offers the demo accounts, anyone can sign in as them (their password is on the page), so they
+# may look, teach and generate but not delete or reset anything.
+DEMO_BLOCKED = re.compile(r"^/api/lectures/[^/]+/reset$")
+
+
+def _demo_emails():
+    from eris.platform.seed import LESSONS, STUDENTS
+    return {e for _, e, *_ in LESSONS} | {e for e, _ in STUDENTS}
+
+
+def _demo_limited(user, request):
+    if not config.DEMO_LOGINS or user["email"] not in _demo_emails():
+        return False
+    return request.method == "DELETE" or bool(DEMO_BLOCKED.match(request.url.path))
 
 
 @app.middleware("http")
@@ -53,6 +70,8 @@ async def auth_gate(request, call_next):
         if not user:
             return _deny(401, "Please sign in")
         request.state.user = user
+        if _demo_limited(user, request):
+            return _deny(403, "Demo accounts can't delete or reset anything. Create your own account for that.")
         m = LECTURE_PATH.match(path)
         if m:
             lecture_id, rest = m.group(1), m.group(2) or ""

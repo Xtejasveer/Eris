@@ -2,6 +2,7 @@
 
 import subprocess
 import time
+from pathlib import Path
 
 from langchain.tools import tool
 
@@ -32,15 +33,6 @@ def _tmp_dir():
     return (config.lecture_dir(_lecture_id) / "tmp").resolve()
 
 
-def safe_path(rel):
-    """Resolve `rel` inside the lecture's tmp/ folder. Raises ValueError if it escapes."""
-    base = _tmp_dir()
-    path = (base / rel).resolve()
-    if not path.is_relative_to(base):
-        raise ValueError(f"path escapes the tmp folder: {rel}")
-    return path
-
-
 def _cut(text, limit=3000):
     return text if len(text) <= limit else text[:limit] + "\n...(truncated)"
 
@@ -61,12 +53,22 @@ def run_code_file(code, filename="dry_run.py", folder=None):
     OUTPUT_LIMIT_BYTES. Output goes to files, not memory, so an endless print loop can never fill up the server's memory.
     """
     from eris import sandbox
-    path = safe_path(filename) if folder is None else (folder / filename)
+    # Whatever the file name came from (a script, a model, a request), it is a plain name inside its folder.
+    if not sandbox.CODE_FILE_RE.match(str(filename)):
+        return -1, "", f"ERROR: '{filename}' is not a plain program name like countdown.py"
+    base = _tmp_dir() if folder is None else Path(folder).resolve()
+    path = (base / filename).resolve()
+    if path.parent != base:
+        return -1, "", f"ERROR: '{filename}' is not a plain program name like countdown.py"
+    try:
+        argv, options, stop = sandbox.command(path)
+    except sandbox.SandboxUnavailable as e:
+        print(f"[sandbox] {e}")
+        return -1, "", "ERROR: running code is turned off on this server (no secure sandbox)"
     path.write_text(code, encoding="utf-8")
     out_path, err_path = path.with_suffix(".out"), path.with_suffix(".err")
     limit, reason = config.OUTPUT_LIMIT_BYTES, None
     with open(out_path, "wb") as out, open(err_path, "wb") as err:
-        argv, options, stop = sandbox.command(path)
         proc = subprocess.Popen(argv, stdout=out, stderr=err, **options)
         started = time.monotonic()
         while proc.poll() is None:

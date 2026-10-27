@@ -13,9 +13,12 @@ export function renderAuth(root, onSignedIn) {
   const switchLink = h("button", { class: "link-btn", type: "button", onclick: () => { mode = mode === "login" ? "signup" : "login"; render(); } });
   const roleBtn = (value, label, ic, text) => h("button", { type: "button", class: "role-card", dataset: { role: value },
     onclick: () => { role = value; render(); } }, icon(ic), h("strong", {}, label), h("small", {}, text));
+  const teacherRole = roleBtn("teacher", "I'm a teacher", "class", "Create courses and lessons");
   const roles = h("div", { class: "role-pick" },
-    roleBtn("student", "I'm a student", "book", "Join a course with a class code"),
-    roleBtn("teacher", "I'm a teacher", "class", "Create courses and lessons"));
+    roleBtn("student", "I'm a student", "book", "Join a course with a class code"), teacherRole);
+  // Teacher accounts may be made by the admin only: then the form offers students alone.
+  let teacherSignup = false;
+  api.authOptions().then((o) => { teacherSignup = !!o?.teacher_signup; render(); }, () => {});
   const nameField = h("label", { class: "field" }, h("span", {}, "Name"), name);
   const title = h("h1", {});
   const sub = h("p", { class: "muted" });
@@ -60,8 +63,10 @@ export function renderAuth(root, onSignedIn) {
   function render() {
     const signup = mode === "signup";
     title.textContent = signup ? "Create your account" : "Welcome back";
-    sub.textContent = signup ? "Pick who you are; you can't change it later." : "Sign in to your courses.";
-    roles.classList.toggle("hidden", !signup);
+    if (!teacherSignup) role = "student";
+    sub.textContent = !signup ? "Sign in to your courses."
+      : teacherSignup ? "Pick who you are; you can't change it later." : "Join your course with the class code your teacher gives you.";
+    roles.classList.toggle("hidden", !signup || !teacherSignup);
     nameField.classList.toggle("hidden", !signup);
     roles.querySelectorAll(".role-card").forEach(b => b.classList.toggle("on", b.dataset.role === role));
     password.autocomplete = signup ? "new-password" : "current-password";

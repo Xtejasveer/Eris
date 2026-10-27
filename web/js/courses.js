@@ -13,36 +13,179 @@ const safetyTags = (flags) => flags?.length ? h("div", { class: "safety-tags" },
 const courseName = (c) => `${c.subject}${c.year ? ` · ${c.year}` : ""}`;
 
 // ---------- home ----------
+// A greeting that names today's one fact, four counts, then the lessons that need the person next (each with its
+// path from material to watched) beside their courses. Course details load after the frame is up.
+
+const PATH = ["Material", "Script", "Approved", "Shared", "Watched"];
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+function greetingFor(name) {
+  const hour = new Date().getHours();
+  const part = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const words = String(name || "").trim().split(/\s+/);
+  const titled = /^(prof|dr|mr|ms|mrs)\.?$/i.test(words[0] || "") && words.length > 1;
+  return `${part}, ${titled ? `${words[0]} ${words[words.length - 1]}` : words[0] || "there"}`;
+}
+
+// How far a lesson has come: the index of the first step not done (5 when every step is).
+function lessonSteps(l, post) {
+  const a = post?.attendance || { present: 0, total: 0 };
+  const done = [l.status !== "new", l.status !== "new" && l.status !== "indexed", l.versions > 0 || ["approved", "completed"].includes(l.status),
+    !!l.post_id, !!l.post_id && a.total > 0 && a.present === a.total];
+  const next = done.indexOf(false);
+  return { done, next: next < 0 ? 5 : next, a };
+}
+
+function pathEl(steps) {
+  return h("div", { class: "path", role: "img",
+    "aria-label": steps.done.map((d, i) => `${PATH[i]} ${d ? "done" : "not done"}`).join(", ") },
+    steps.done.map((d, i) => h("i", { class: d ? "done" : i === steps.next ? "next" : "" })),
+    PATH.map((label, i) => h("span", { class: i === steps.next ? "next" : "" },
+      i === 4 && steps.a.total ? `Watched ${steps.a.present}/${steps.a.total}` : label)));
+}
 
 export function renderHome(main, me, courses, lectures = []) {
   const teacher = me.role === "teacher";
-  const card = (c) => h("a", { class: "card course-card", href: `#/course/${c.id}` },
-    h("div", { class: "course-band", style: avatarTint(c.subject) }, h("span", { class: "course-initials" }, initials(c.subject))),
-    h("div", { class: "course-body" },
-      h("h3", {}, c.subject), h("p", { class: "muted" }, c.year || " "),
-      h("div", { class: "course-foot" }, teacher
-        ? [h("span", {}, icon("user"), `${c.students} student${c.students === 1 ? "" : "s"}`),
-           h("span", {}, icon("class"), `${c.lessons} lesson${c.lessons === 1 ? "" : "s"}`),
-           h("span", { class: "code-chip", title: "Class code" }, c.code)]
-        : [h("span", {}, icon("user"), c.teacher),
-           c.to_watch ? h("span", { class: "todo-chip" }, `${c.to_watch} to watch`) : h("span", { class: "done-chip" }, icon("check"), "All caught up")])));
-  const addCard = h("button", { class: "card course-card new-card", onclick: teacher ? () => newCourse() : () => joinCourse() },
-    icon("plus"), teacher ? "Create a course" : "Join a course");
-  const loose = lectures.filter(l => !l.in_course);
-  main.replaceChildren(h("div", { class: "page home" },
-    h("div", { class: "home-head" },
-      h("h1", { class: "home-title" }, "Your courses"),
-      h("button", { class: "btn primary", onclick: teacher ? () => newCourse() : () => joinCourse() }, icon("plus"), teacher ? "New course" : "Join a course")),
-    courses.length ? null : h("div", { class: "card empty" }, h("div", { class: "empty-icon" }, icon(teacher ? "class" : "book")),
-      h("h3", {}, teacher ? "Create your first course" : "Join your first course"),
-      h("p", {}, teacher ? "A course is a subject you teach to a year, like DSA for 4th year. Students join it with its class code."
-        : "Ask your teacher for the class code, then join the course to see its lessons.")),
-    h("div", { class: "course-grid" }, courses.map(card), addCard),
-    teacher && loose.length ? [
-      h("div", { class: "loose-head" }, h("h2", {}, "Lectures not in a course"),
-        h("p", { class: "muted" }, "Only you can see these. Students can't until a lecture is part of a course.")),
-      h("div", { class: "loose-list" }, loose.map(l => h("a", { class: "loose-item", href: `#/lecture/${encodeURIComponent(l.id)}/studio` },
-        h("span", { class: "lecture-avatar", style: avatarTint(l.id) }, initials(l.id)), h("span", { class: "name" }, l.id), badge(l.status))))] : null));
+  const head = h("div", { class: "home-head" },
+    h("div", {}, h("h1", { class: "greeting" }, greetingFor(me.name)), h("p", { class: "home-sub" }, " ")),
+    h("span"));
+  const grid = h("div", { class: "home-grid" });
+  main.replaceChildren(h("div", { class: "page home" }, head, grid));
+
+  const courseRow = (c) => h("a", { class: "course-row", href: `#/course/${c.id}` },
+    h("span", { class: "lecture-avatar", style: avatarTint(c.subject) }, initials(c.subject)),
+    h("span", { class: "cr-text" }, h("strong", {}, c.subject),
+      h("small", {}, teacher ? [c.year, plural(c.students, "student")].filter(Boolean).join(" · ") : [c.year, c.teacher].filter(Boolean).join(" · "))),
+    teacher ? h("span", { class: "cr-code", title: "Class code" }, c.code)
+      : c.to_watch ? h("span", { class: "todo-chip" }, `${c.to_watch} to watch`) : h("span", { class: "done-chip" }, "All caught up"));
+  const coursesPanel = h("section", { class: "card span-4" },
+    h("div", { class: "panel-head" }, h("h2", {}, "Your courses"), h("span", { class: "chip" }, courses.length)),
+    courses.length ? h("div", { class: "course-list" }, courses.map(courseRow)) : null,
+    h("button", { class: `btn ${courses.length ? "" : "primary"} add-row`, style: "width:100%", onclick: teacher ? () => newCourse() : () => joinCourse() },
+      icon("plus"), teacher ? "New course" : "Join a course"));
+
+  const loose = teacher ? lectures.filter(l => !l.in_course) : [];
+  const loosePanel = loose.length ? h("section", { class: "card span-12" },
+    h("div", { class: "panel-head" }, h("h2", {}, "Lectures not in a course"), h("span", { class: "chip" }, loose.length),
+      h("small", { class: "muted", style: "margin-left:8px" }, "Only you can see these until a lecture is part of a course.")),
+    h("div", { class: "loose-list" }, loose.map(l => h("a", { class: "loose-item", href: `#/lecture/${encodeURIComponent(l.id)}/studio` },
+      h("span", { class: "lecture-avatar", style: avatarTint(l.id) }, initials(l.id)), h("span", { class: "name" }, l.id), badge(l.status))))) : null;
+
+  const count = (label, value, of, caption) => h("div", { class: "count" }, h("span", {}, label),
+    h("strong", {}, String(value), of != null ? h("small", {}, `/${of}`) : null), h("em", {}, caption));
+  const sub = head.querySelector(".home-sub");
+  const action = head.lastChild;
+  const setFinding = (text, btn) => { sub.textContent = text; action.replaceWith(btn || h("span")); };
+
+  if (!courses.length) {
+    setFinding(teacher ? "Start with a course: a subject you teach to one class. Students join it with its class code."
+      : "Ask your teacher for the class code, then join the course to see its lessons.",
+      h("button", { class: "btn primary", onclick: teacher ? () => newCourse() : () => joinCourse() }, icon("plus"), teacher ? "New course" : "Join a course"));
+    grid.replaceChildren(h("section", { class: "card span-8" },
+      h("div", { class: "panel-head" }, h("h2", {}, teacher ? "Lessons" : "Up next")),
+      h("div", { class: "home-empty" }, h("p", {}, teacher ? "Lessons you build show up here with how far each has come, from material to watched."
+        : "Lessons your teacher shares show up here, newest first."))), ...[coursesPanel, loosePanel].filter(Boolean));
+    return;
+  }
+
+  grid.replaceChildren(h("section", { class: "card span-8" },
+    h("div", { class: "panel-head" }, h("h2", {}, teacher ? "Lessons" : "Up next")),
+    h("div", { class: "home-empty" }, h("div", { class: "spinner" }))), ...[coursesPanel, loosePanel].filter(Boolean));
+
+  Promise.all(courses.map(c => api.course(c.id).catch(() => null))).then(details => {
+    if (!main.contains(grid)) return;  // the person moved on
+    details = details.filter(Boolean);
+    teacher ? teacherHome(details) : studentHome(details);
+  });
+
+  function teacherHome(details) {
+    const rows = details.flatMap(c => c.chapters.flatMap(ch => ch.topics.flatMap(t => t.lessons.map(l => {
+      const post = c.posts.find(p => p.id === l.post_id);
+      return { l, post, course: c, topic: t.title, steps: lessonSteps(l, post) };
+    }))));
+    const shared = rows.filter(r => r.l.post_id);
+    const present = shared.reduce((n, r) => n + r.steps.a.present, 0);
+    const seats = shared.reduce((n, r) => n + r.steps.a.total, 0);
+    const students = courses.reduce((n, c) => n + c.students, 0);
+    const approved = rows.filter(r => r.steps.done[2]).length;
+
+    // The one finding, in order of what blocks students most.
+    const studio = (r) => `#/lecture/${encodeURIComponent(r.l.lecture_id)}/studio`;
+    const classwork = (r) => `#/course/${r.course.id}/classwork`;
+    const update = rows.find(r => r.l.post_id && r.l.update_available);
+    const unshared = rows.find(r => r.steps.done[2] && !r.l.post_id);
+    const draft = rows.find(r => !r.l.post_id && !r.steps.done[2]);
+    const partway = shared.find(r => r.steps.a.started > r.steps.a.present);
+    if (update) setFinding(`A newer approved script of ${update.l.title} is ready; students still get the old one.`,
+      h("a", { class: "btn primary", href: classwork(update) }, icon("upload"), "Share update"));
+    else if (unshared) setFinding(`${unshared.l.title} is approved, but your ${plural(unshared.course.students.length, "student")} can't see it until you share it.`,
+      h("a", { class: "btn primary", href: classwork(unshared) }, icon("send"), "Share lesson"));
+    else if (draft) setFinding(`${draft.l.title} is still a draft, so your ${plural(draft.course.students.length, "student")} can't open it yet.`,
+      h("a", { class: "btn primary", href: studio(draft) }, icon("edit"), "Review script"));
+    else if (partway) setFinding(`${plural(partway.steps.a.started - partway.steps.a.present, "student is", "students are")} partway through ${partway.l.title}; ${partway.steps.a.present} of ${partway.steps.a.total} have finished.`,
+      h("a", { class: "btn", href: `#/course/${partway.course.id}` }, icon("user"), "See attendance"));
+    else if (!rows.length) setFinding("Add a chapter and a topic, then build your first lesson in Studio.",
+      h("a", { class: "btn primary", href: `#/course/${details[0].id}/classwork` }, icon("plus"), "Plan a lesson"));
+    else setFinding(`Every lesson is shared; ${present} of ${seats} watches are finished.`, null);
+
+    const order = [...rows].sort((x, y) => x.steps.next - y.steps.next);
+    const lessonCard = (r) => h("div", { class: "lesson-card" },
+      h("div", { class: "lc-title" }, r.l.title, kindTag(r.l.kind),
+        r.l.post_id ? null : badge(r.l.status)),
+      h("div", { class: "lc-meta" }, [details.length > 1 ? r.course.subject : null, r.topic,
+        r.post?.minutes ? `about ${Math.max(1, Math.round(r.post.minutes))} min` : null,
+        r.post ? `v${r.post.version?.number || 1} shared` : r.l.versions ? plural(r.l.versions, "version") : null,
+        r.l.post_id && r.l.status === "draft" ? "new draft in Studio" : null].filter(Boolean).join(" · ")),
+      h("div", { class: "lc-actions" }, h("a", { class: "btn sm", href: r.l.post_id && r.steps.next >= 4 ? `#/course/${r.course.id}` : studio(r) },
+        r.l.post_id && r.steps.next >= 4 ? "Attendance" : "Open in Studio")),
+      pathEl(r.steps));
+    const cap = 5;
+    grid.firstChild.replaceWith(h("section", { class: "card span-8" },
+      h("div", { class: "panel-head" }, h("h2", {}, "Lessons"), h("span", { class: "chip" }, rows.length),
+        h("a", { href: `#/course/${details[0].id}/classwork` }, details.length > 1 ? "Classwork" : `Classwork in ${details[0].subject}`)),
+      rows.length ? h("div", { class: "lesson-cards" }, order.slice(0, cap).map(lessonCard))
+        : h("div", { class: "home-empty" }, h("p", {}, "No lessons yet. Add a topic in Classwork, then build a lesson in Studio."))));
+    // With one or two courses the side panel has room for the class itself: who has joined, and how far along.
+    if (details.length <= 2) for (const c of details) coursesPanel.querySelector(".add-row").before(h("div", { class: "class-list" },
+      h("div", { class: "panel-head" }, h("h2", {}, details.length > 1 ? `Students in ${c.subject}` : "Students"), h("span", { class: "chip" }, c.students.length)),
+      c.students.length ? c.students.slice(0, 6).map(st => {
+        return h("div", { class: "class-person" }, h("span", { class: "lecture-avatar", style: avatarTint(st.name) }, initials(st.name)),
+          h("span", {}, st.name), h("small", {}, `joined ${formatDate(st.joined_at).split(",")[0]}`));
+      }) : h("p", { class: "muted", style: "margin:0;font-size:13px" }, `No one yet. Share the code ${c.code}.`)));
+    grid.prepend(h("div", { class: "counts" },
+      count("Students", students, null, `in ${plural(courses.length, "course")}`),
+      count("Lessons", rows.length, null, `${approved} approved`),
+      count("Shared", shared.length, rows.length, "lessons students can open"),
+      count("Watched to the end", present, seats, seats ? "across shared lessons" : "nothing shared yet")));
+  }
+
+  function studentHome(details) {
+    const rows = details.flatMap(c => c.posts.filter(p => p.kind === "lesson").map(p => ({ p, course: c, prog: p.my_progress || {} })));
+    const todo = rows.filter(r => !r.prog.completed).sort((x, y) => (y.prog.started ? 1 : 0) - (x.prog.started ? 1 : 0));
+    const done = rows.length - todo.length;
+    const first = todo[0];
+    if (first) setFinding(first.prog.started ? `You're ${first.prog.percent || 0}% through ${first.p.title}.`
+      : `${first.p.title} is waiting for you in ${first.course.subject}.`,
+      h("a", { class: "btn primary", href: `#/lesson/${first.p.id}` }, icon("play"), first.prog.started ? "Continue" : "Start lesson"));
+    else setFinding(rows.length ? "You've finished every lesson shared with you." : "Your teachers haven't shared a lesson yet.", null);
+    const card = (r) => h("div", { class: "lesson-card" },
+      h("div", { class: "lc-title" }, r.p.title, kindTag(r.p.lesson?.kind)),
+      h("div", { class: "lc-meta" }, [r.course.subject, r.p.topic_title, r.p.minutes ? `about ${Math.max(1, Math.round(r.p.minutes))} min` : null,
+        r.p.due_at ? `due ${formatDate(r.p.due_at)}` : null].filter(Boolean).join(" · ")),
+      h("div", { class: "lc-actions" }, h("a", { class: "btn sm", href: `#/lesson/${r.p.id}` },
+        r.prog.completed ? "Watch again" : r.prog.started ? "Continue" : "Start")),
+      h("div", { class: "progress-line", style: "grid-column:1/-1;margin-top:8px", title: `${r.prog.percent || 0}% heard` },
+        h("i", { style: `width:${r.prog.completed ? 100 : r.prog.percent || 0}%` })));
+    grid.firstChild.replaceWith(h("section", { class: "card span-8" },
+      h("div", { class: "panel-head" }, h("h2", {}, "Up next"), h("span", { class: "chip" }, todo.length)),
+      todo.length ? h("div", { class: "lesson-cards" }, todo.slice(0, 5).map(card))
+        : h("div", { class: "home-empty" }, h("p", {}, rows.length ? "Nothing left to watch. Lessons you've finished stay in each course." : "Lessons your teacher shares show up here."))));
+    grid.prepend(h("div", { class: "counts" },
+      count("Courses", courses.length, null, "you've joined"),
+      count("To watch", todo.length, null, todo.length ? "lessons not finished" : "all caught up"),
+      count("In progress", todo.filter(r => r.prog.started).length, null, "started, not finished"),
+      count("Finished", done, rows.length || null, "lessons heard to the end")));
+  }
 }
 
 export async function newCourse() {
@@ -144,7 +287,6 @@ export async function mountCourse(courseId, tab, ctx) {
       h("a", { class: "file-chip", href: api.fileUrl(post.id, f.id), target: "_blank", rel: "noopener" }, icon("file"), f.name))) : null;
     const pre = lesson && post.lesson?.kind === "prerequisite";
     return h("article", { class: `card post ${lesson ? "is-lesson" : "is-material"} ${pre ? "is-pre" : ""}` },
-      h("div", { class: "post-icon" }, icon(!lesson ? "book" : pre ? "layers" : "class")),
       h("div", { class: "post-main" },
         h("div", { class: "post-top" },
           h("div", { class: "post-title" },
@@ -184,14 +326,12 @@ export async function mountCourse(courseId, tab, ctx) {
     if (!teacher) {
       const p = post?.my_progress || {};
       return h("li", { class: "lesson-row" },
-        h("span", { class: "lesson-icon" }, icon("class")),
         h("div", { class: "lesson-name" }, h("strong", {}, l.title), kind),
         h("span", { class: `att-tag ${p.completed ? "present" : p.started ? "started" : ""}` }, p.completed ? "Present" : p.started ? `${p.percent}%` : "Not started"),
         h("a", { class: "btn sm", href: `#/lesson/${l.post_id}` }, icon("play"), p.completed ? "Again" : p.started ? "Continue" : "Start"));
     }
     const approved = ["approved", "completed"].includes(l.status);
     return h("li", { class: "lesson-row" },
-      h("span", { class: "lesson-icon" }, icon("class")),
       h("div", { class: "lesson-name" }, h("strong", {}, l.title), kind, badge(l.status)),
       shared ? h("span", { class: "att-tag present" }, icon("check"), `Shared v${post?.version?.number || 1}`) : null,
       l.versions ? h("button", { class: "btn sm ghost", title: "Every approved script of this lesson",
@@ -227,7 +367,7 @@ export async function mountCourse(courseId, tab, ctx) {
             await api.deleteTopic(t.id); await reload();
           }) }, icon("trash"))) : null),
       t.lessons.length || materials.length ? h("ul", { class: "lesson-list" }, t.lessons.map(lessonRow),
-        materials.map(m => h("li", { class: "lesson-row" }, h("span", { class: "lesson-icon material" }, icon("book")),
+        materials.map(m => h("li", { class: "lesson-row" },
           h("div", { class: "lesson-name" }, h("strong", {}, m.title), h("small", { class: "muted" }, `${m.files.length} file${m.files.length === 1 ? "" : "s"}`)),
           m.files.map(f => h("a", { class: "file-chip", href: api.fileUrl(m.id, f.id), target: "_blank", rel: "noopener" }, icon("file"), f.name)))))
         : h("p", { class: "topic-empty" }, "No lessons yet. Add one, then build it in Studio."));

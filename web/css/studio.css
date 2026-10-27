@@ -23,12 +23,12 @@
 .dropzone:hover, .dropzone.over { border-color: var(--primary); background: var(--primary-soft); }
 .dropzone.busy { opacity: .6; pointer-events: none; }
 .dropzone small { color: var(--muted); font-size: 12px; }
-.dz-icon { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); color: var(--primary); box-shadow: var(--shadow-sm); margin-bottom: 4px; }
+.dz-icon { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); color: var(--text-2); margin-bottom: 4px; }
 .file-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .file-list li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
 .file-list li.file-empty { border-style: dashed; justify-content: center; color: var(--muted); font-size: 12.5px; }
 .file-type { width: 40px; height: 24px; border-radius: var(--radius); display: grid; place-items: center; font-size: 9.5px; font-weight: 700; letter-spacing: .03em; background: var(--surface-3); color: var(--text-2); flex: none; }
-.file-type.pptx { background: var(--accent-soft); color: var(--accent); }
+.file-type.pptx { background: var(--tint-3); color: var(--tint-3-ink); }
 .file-type.pdf { background: var(--danger-soft); color: var(--danger); }
 .file-type.docx { background: var(--sky-soft); color: var(--sky); }
 :root[data-theme="dark"] .file-type.pptx, :root[data-theme="dark"] .file-type.pdf, :root[data-theme="dark"] .file-type.docx { background: var(--surface-3); }
@@ -50,7 +50,7 @@
 .persona-count.ok { color: var(--success); background: var(--success-soft); }
 .persona-fields { display: flex; flex-direction: column; gap: 10px; padding: 2px 18px 16px; }
 
-.generate-bar { position: sticky; bottom: 0; padding: 16px; border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 8px; }
+.generate-bar { position: sticky; bottom: 0; padding: 16px; border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
 .generate-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 
 .studio-right { position: sticky; top: 84px; display: flex; flex-direction: column; height: calc(100vh - 104px); min-height: 520px; overflow: hidden; }
@@ -68,7 +68,7 @@
 .judge-card summary::-webkit-details-marker { display: none; }
 .judge-card.ok summary svg { color: var(--success); } .judge-card.bad summary svg { color: var(--warning); }
 .judge-meta { color: var(--muted); }
-.judge-by { margin-left: auto; font: 11px var(--mono); color: var(--muted); }
+.judge-by { margin-left: auto; font: 12px var(--font); color: var(--muted); }
 .judge-list { list-style: none; margin: 0; padding: 0 12px 10px; display: flex; flex-direction: column; gap: 8px; max-height: 180px; overflow: auto; }
 .judge-list li { display: flex; gap: 10px; align-items: flex-start; }
 .judge-list li > div { display: flex; flex-direction: column; }
@@ -85,8 +85,8 @@
 .script-doc { max-width: 1100px; margin: 0 auto; padding: 22px 32px 48px; display: flex; flex-direction: column; gap: 12px; }
 .doc-section { display: flex; flex-direction: column; gap: 12px; padding-top: 14px; }
 .doc-section + .doc-section { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 24px; }
-.doc-section h2 { display: flex; align-items: center; gap: 10px; font: 600 21px var(--display); }
-.doc-sec-num { width: 28px; height: 28px; border-radius: var(--radius); display: grid; place-items: center; font: 600 14px var(--display); color: var(--primary); background: var(--primary-soft); }
+.doc-section h2 { display: flex; align-items: center; gap: 10px; font: 600 20px var(--font); }
+.doc-sec-num { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font: 500 13px var(--font); font-variant-numeric: tabular-nums; color: var(--muted); background: var(--surface-2); }
 .doc-say { display: flex; gap: 12px; }
 .doc-say p { margin: 0; font-size: 15px; line-height: 1.7; color: var(--text); }
 .doc-speaker { width: 26px; height: 26px; border-radius: 50%; flex: none; display: grid; place-items: center; background: var(--surface-2); color: var(--muted); margin-top: 2px; }
@@ -114,7 +114,7 @@
 .doc-run-cmd { display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--surface-2); font-size: 12.5px; }
 .doc-run-cmd svg { width: 14px; height: 14px; color: var(--muted); }
 .doc-run pre { padding: 8px 14px; background: var(--surface); color: var(--text-2); white-space: pre-wrap; }
-.doc-break { display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-radius: var(--radius); background: var(--violet-soft); color: var(--violet); font-weight: 500; font-size: 13px; }
+.doc-break { display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-radius: var(--radius); background: var(--accent-soft); color: var(--accent); font-weight: 500; font-size: 13px; }
 
 code.ic { font-size: .88em; padding: 1px 5px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--border); }
 
@@ -168,7 +168,7 @@ code.ic { font-size: .88em; padding: 1px 5px; border-radius: 5px; background: va
 .depth-list { display: grid; gap: 7px; }
 .depth-row { display: grid; grid-template-columns: 74px 1fr; gap: 8px; align-items: start; }
 .depth-tag { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: var(--radius); text-align: center; white-space: nowrap; }
-.depth-tag.in-depth { background: color-mix(in srgb, var(--violet) 16%, transparent); color: var(--violet); }
+.depth-tag.in-depth { background: var(--accent-soft); color: var(--accent); }
 .depth-tag.normal { background: color-mix(in srgb, var(--primary) 14%, transparent); color: var(--primary); }
 .depth-tag.brief { background: var(--surface-2); color: var(--text-2); }
 .depth-parts { display: flex; flex-wrap: wrap; gap: 5px; }

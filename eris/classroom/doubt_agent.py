@@ -16,11 +16,13 @@ NO_DOUBT_WORDS = {"", "no", "none", "no doubts", "nope", "n"}
 PASS_PHRASE = "i'll pass this question to"
 
 
-def build_doubt_agent(system_prompt):
-    """Build once per session and reuse it for every checkpoint."""
+def build_doubt_agent(system_prompt, run_code=True):
+    """Build once per session and reuse it for every checkpoint. run_code=False: no tool that runs programs (the
+    agent answering students; see config.STUDENT_CODE_RUNS)."""
+    tools = [read_board, search_material, ask_class_for_doubts] + ([dry_run_python] if run_code else [])
     return create_agent(
         model=f"openrouter:{config.LLM_MODEL}",
-        tools=[read_board, search_material, dry_run_python, ask_class_for_doubts],
+        tools=tools,
         system_prompt=system_prompt,
         middleware=[HumanInTheLoopMiddleware(
             interrupt_on={"ask_class_for_doubts": {"allowed_decisions": ["respond"]}},

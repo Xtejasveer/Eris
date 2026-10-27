@@ -48,6 +48,12 @@ GUARDRAILS_ENABLED = os.getenv("GUARDRAILS_ENABLED", "true").strip().lower() in 
 # Where programs run (eris/sandbox.py): auto (docker when SANDBOX_IMAGE is pulled, else the OS sandbox), docker, os, off.
 SANDBOX = os.getenv("ERIS_SANDBOX", "auto").strip().lower()
 SANDBOX_IMAGE = os.getenv("ERIS_SANDBOX_IMAGE", "python:3.12-slim").strip()
+# A student's doubt may get an answer with a program that runs on the server (in the sandbox). Off: answers to students
+# explain code in words and notes but never run it; teachers previewing still get runnable answers.
+STUDENT_CODE_RUNS = os.getenv("ERIS_STUDENT_CODE_RUNS", "false").strip().lower() in ("1", "true", "yes")
+# Anyone may create a teacher account on the sign-in page. Off: only students sign up; teachers are made by the
+# admin (python main.py seed, or a new account switched to teacher in the database).
+TEACHER_SIGNUP = os.getenv("ERIS_TEACHER_SIGNUP", "false").strip().lower() in ("1", "true", "yes")
 # The sign-in cookie is sent over HTTPS only. Turn on when the site has a domain with HTTPS (deploy/Caddyfile).
 SECURE_COOKIES = os.getenv("ERIS_SECURE_COOKIES", "false").strip().lower() in ("1", "true", "yes")
 # The sign-in page offers the demo accounts (python main.py seed). Local pilots only: turn off for real users.

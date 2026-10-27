@@ -44,7 +44,7 @@ export function renderScriptDoc(segments, teacher = "Teacher", { lectureId = nul
       case "SECTION":
         n += 1;
         section = h("section", { class: "doc-section", id: `doc-sec-${n}` },
-          h("h2", {}, h("span", { class: "doc-sec-num" }, String(n).padStart(2, "0")), a.title));
+          h("h2", {}, h("span", { class: "doc-sec-num" }, String(n)), a.title));
         doc.append(section);
         break;
       case "NOTE_TITLE":

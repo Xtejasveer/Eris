@@ -59,13 +59,14 @@ def snapshot(state, board):
 
 # ---------- setup ----------
 
-def start_doubts(lecture_id, manifest):
-    """Common setup for session and the `doubts` test command."""
+def start_doubts(lecture_id, manifest, run_code=True):
+    """Common setup for session and the `doubts` test command. run_code=False: the agent can't run programs."""
     set_lecture(lecture_id)
     persona = manifest["persona"]
     language = config.lecture_language(manifest)
     agent = build_doubt_agent(doubt_prompt(persona, persona_to_text(persona), manifest["topic"], language)
-                              + speaker_rule(language, config.voice_gender(manifest)))  # answers in the voice's grammar
+                              + speaker_rule(language, config.voice_gender(manifest)),  # answers in the voice's grammar
+                              run_code=run_code)
     log_path = config.lecture_dir(lecture_id) / "doubts_log.md"
     return agent, log_path
 

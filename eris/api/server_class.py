@@ -14,6 +14,7 @@ from eris.classroom import class_board
 from eris import config
 from eris.classroom import doubt_agent
 from eris.material import figures
+from eris.sandbox import CODE_FILE_RE
 from eris.material.slide_images import slide_images
 from main import LECTURE_ID_RE
 from eris.classroom.recovery import recovery_line
@@ -23,7 +24,6 @@ from eris.tools import program_output, run_code_file, set_board, set_lecture
 from eris.visuals import visual_builder
 router = APIRouter(prefix="/api")
 
-CODE_FILE_RE = re.compile(r"^[A-Za-z0-9_-]+\.py$")
 _agents = {}        # lecture_id -> (doubt agent, log path); built once per server run
 _doubt_counts = {}  # thread_id -> {"asked": int, "max": int, "section": str, "board": dict}
 # What earlier doubt answers added to the screen in the current class run (notes, answer1.py, ...).
@@ -215,8 +215,8 @@ def tts(body: TTSRequest, request: Request):
     try:
         return FileResponse(voice.ensure_clip(body.lecture_id, body.text), media_type="audio/wav")
     except Exception as e:
-        print(f"[tts] Gnani failed, browser voice will be used: {e}")
-        return Response(status_code=204, headers={"X-TTS-Error": str(e)[:200]})
+        print(f"[tts] Gnani failed, browser voice will be used: {e}")  # the details stay in the server log
+        return Response(status_code=204, headers={"X-TTS-Error": "voice unavailable"})
     finally:
         _tts_slots.release()
 
@@ -263,12 +263,28 @@ def recovery(lecture_id: str, body: RecoveryRequest):
     return {"line": recovery_line(teacher, body.state_text, body.segment, body.error)}
 
 
-def _agent(lecture_id):
-    if lecture_id not in _agents:
+def _runs_code(request):
+    """May this person's doubts get answers whose programs run on the server? Teachers yes; students only when
+    ERIS_STUDENT_CODE_RUNS is on (a student could word a doubt to make the agent run code)."""
+    return request.state.user["role"] == "teacher" or config.STUDENT_CODE_RUNS
+
+
+def _agent(lecture_id, run_code=True):
+    """The lecture's doubt agent; one without the tool that runs programs for those who may not run code."""
+    key = (lecture_id, run_code)
+    if key not in _agents:
         from eris.classroom.session import start_doubts
-        _agents[lecture_id] = start_doubts(lecture_id, manifest_or_404(lecture_id))
+        _agents[key] = start_doubts(lecture_id, manifest_or_404(lecture_id), run_code=run_code)
     set_lecture(lecture_id)  # search_material reads the current lecture
-    return _agents[lecture_id]
+    return _agents[key]
+
+
+def _owned(thread, request):
+    """A doubt thread belongs to the person who started it; nobody else may continue it, whatever id they send."""
+    return thread is not None and thread.get("user") == request.state.user["id"]
+
+
+AGENT_DOWN = "The doubt helper is unavailable right now. Please try again in a moment."
 
 
 class DoubtStart(BaseModel):
@@ -329,7 +345,7 @@ def _guard_answer(lecture_id, question, turn):
     return turn, flags
 
 
-def _board_at(lecture_id, cursor, key=None, segments=None):
+def _board_at(lecture_id, cursor, key=None, segments=None, run_code=True):
     """The class screen at `cursor`: the script so far plus earlier doubt answers in this run. segments: the locked
     version a student is playing (default: the lecture's current approved script). key: one student's class run."""
     if segments is None:
@@ -348,6 +364,8 @@ def _board_at(lecture_id, cursor, key=None, segments=None):
     # Doubts use only what this class used: notebook and slides always, code and graphs if the lecture had them.
     used = figures.env_from_segments(segments)
     board["environments"] = {**used, "notebook": True, "slides": bool(_slides_for(lecture_id))}
+    if not run_code:  # no programs in answers at all: code is explained in words and notes
+        board["environments"]["code"] = False
     return class_board.add_segments(board, extras["segments"])
 
 
@@ -372,12 +390,14 @@ class DoubtReply(BaseModel):
 
 @router.post("/lectures/{lecture_id}/doubts/start")
 def doubts_start(lecture_id: str, body: DoubtStart, request: Request):
-    agent, _ = _agent(_check_id(lecture_id))
-    thread_id = f"web_{lecture_id}_{uuid.uuid4().hex[:8]}"
+    run_code = _runs_code(request)
+    agent, _ = _agent(_check_id(lecture_id), run_code)
+    thread_id = f"web_{uuid.uuid4().hex}"  # unguessable, and bound to this person below
     limit = config.MAX_DOUBTS_FINAL if body.final else config.MAX_DOUBTS_PER_CHECK
-    board = _board_at(lecture_id, body.cursor, thread_id, _locked_segments(lecture_id, body))
+    board = _board_at(lecture_id, body.cursor, thread_id, _locked_segments(lecture_id, body), run_code)
     _doubt_counts[thread_id] = {"asked": 0, "max": limit, "section": body.section, "board": board,
-                                "post_id": body.post_id, "version_id": body.version_id}
+                                "post_id": body.post_id, "version_id": body.version_id, "lecture": lecture_id,
+                                "user": request.state.user["id"], "run_code": run_code}
     question = body.question.strip()
     if question:
         _doubt_counts[thread_id]["asked"] = 1
@@ -385,7 +405,7 @@ def doubts_start(lecture_id: str, body: DoubtStart, request: Request):
     if turn is None:
         with _doubt_lock:
             set_board(board, _slides_for(lecture_id))
-            turn = _start_turn(lecture_id, agent, thread_id, body, question, board)
+            turn = _start_turn(lecture_id, agent, thread_id, body, question, board, run_code)
         if question:
             turn, answer_flags = _guard_answer(lecture_id, question, turn)
             flags += answer_flags
@@ -393,10 +413,10 @@ def doubts_start(lecture_id: str, body: DoubtStart, request: Request):
     return {"thread_id": thread_id, "max": limit, "asked": 1 if question else 0, **turn}
 
 
-def _start_turn(lecture_id, agent, thread_id, body, question, board):
+def _start_turn(lecture_id, agent, thread_id, body, question, board, run_code=True):
     try:
         if question:
-            _, log_path = _agent(lecture_id)
+            _, log_path = _agent(lecture_id, run_code)
             turn = doubt_agent.turn_question(agent, thread_id, body.context, question, log_path, body.section)
         else:
             turn = doubt_agent.turn_start(agent, thread_id, body.context + "\n\nNow ask the class for doubts.")
@@ -404,8 +424,9 @@ def _start_turn(lecture_id, agent, thread_id, body, question, board):
         turn["_board_files"] = board.get("files", {})
         _build_answer_visuals(lecture_id, turn)
         turn.pop("_board_files", None)
-    except Exception as e:
-        raise HTTPException(502, f"Doubt agent failed: {e}")
+    except Exception as e:  # the details stay in the server log: provider errors are not for students
+        print(f"[doubts] agent failed: {type(e).__name__}: {e}")
+        raise HTTPException(502, AGENT_DOWN)
     _remember_answer(lecture_id, board, turn, thread_id)
     return turn
 
@@ -490,14 +511,16 @@ def _output_notes(turn):
 def doubts_ask(lecture_id: str, body: DoubtAsk, request: Request):
     """One student question. The whole class run shares ONE agent conversation (thread_id), so the agent
     remembers its earlier answers, programs and outputs across questions and question breaks."""
-    agent, log_path = _agent(_check_id(lecture_id))
+    run_code = _runs_code(request)
+    agent, log_path = _agent(_check_id(lecture_id), run_code)
     question = body.question.strip()
     if not question:
         raise HTTPException(400, "Empty question")
     thread = _class_threads.get(body.thread_id or "")
-    if thread is None or thread["lecture"] != lecture_id:
-        thread_id = f"class_{lecture_id}_{uuid.uuid4().hex[:8]}"
-        thread = _class_threads[thread_id] = {"lecture": lecture_id, "cursor": None, "notes": []}
+    if not _owned(thread, request) or thread["lecture"] != lecture_id:  # someone else's thread: start a new one
+        thread_id = f"class_{uuid.uuid4().hex}"
+        thread = _class_threads[thread_id] = {"lecture": lecture_id, "cursor": None, "notes": [],
+                                              "user": request.state.user["id"], "run_code": run_code}
     else:
         thread_id = body.thread_id
     flags, turn = _guard_question(lecture_id, question, body.section)
@@ -512,7 +535,7 @@ def doubts_ask(lecture_id: str, body: DoubtAsk, request: Request):
 
 
 def _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body):
-    board = _board_at(lecture_id, body.cursor, thread_id, _locked_segments(lecture_id, body))
+    board = _board_at(lecture_id, body.cursor, thread_id, _locked_segments(lecture_id, body), thread["run_code"])
     set_board(board, _slides_for(lecture_id))
     parts = []
     if thread["cursor"] != body.cursor:  # a new question break: where the class is now
@@ -534,7 +557,8 @@ def _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body):
         _build_answer_visuals(lecture_id, turn)
         turn.pop("_board_files", None)
     except Exception as e:
-        raise HTTPException(502, f"Doubt agent failed: {e}")
+        print(f"[doubts] agent failed: {type(e).__name__}: {e}")
+        raise HTTPException(502, AGENT_DOWN)
     _show_slide_if_asked(question, board, turn, _slides_for(lecture_id))
     _remember_answer(lecture_id, board, turn, thread_id)
     thread["notes"] += _output_notes(turn)
@@ -543,10 +567,10 @@ def _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body):
 
 @router.post("/lectures/{lecture_id}/doubts/reply")
 def doubts_reply(lecture_id: str, body: DoubtReply, request: Request):
-    agent, log_path = _agent(_check_id(lecture_id))
     count = _doubt_counts.get(body.thread_id)
-    if count is None:
+    if not _owned(count, request) or count["lecture"] != _check_id(lecture_id):
         raise HTTPException(404, "Unknown doubt session")
+    agent, log_path = _agent(lecture_id, count["run_code"])
     answer = body.answer.strip()
     if count["asked"] >= count["max"]:
         answer = "no more doubts"  # Limit reached: tell the agent to wrap up.
@@ -565,7 +589,8 @@ def doubts_reply(lecture_id: str, body: DoubtReply, request: Request):
                 _build_answer_visuals(lecture_id, turn)
                 turn.pop("_board_files", None)
             except Exception as e:
-                raise HTTPException(502, f"Doubt agent failed: {e}")
+                print(f"[doubts] agent failed: {type(e).__name__}: {e}")
+                raise HTTPException(502, AGENT_DOWN)
             _remember_answer(lecture_id, count["board"], turn, body.thread_id)
         if asked:
             turn, answer_flags = _guard_answer(lecture_id, answer, turn)
