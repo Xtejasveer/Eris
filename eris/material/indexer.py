@@ -115,7 +115,10 @@ def _outline_items(docs):
 
 
 def load_folder(folder):
-    """Load every supported file. Returns (docs, outline). persona.md is always included."""
+    """Load every supported file. Returns (docs, outline). persona.md is always included.
+    The deck (eris.material.deck) is marked in the outline with its slide count; a PDF deck's pages are its slides."""
+    from eris.material.deck import deck_in, slide_count
+    deck = deck_in(folder)
     docs, outline = [], []
     for path in sorted(Path(folder).iterdir()):
         if path.name.startswith(".") or path.is_dir():
@@ -130,11 +133,17 @@ def load_folder(folder):
             print(f"[index] could not read {path.name}: {e} (skipped)")
             continue
         print(f"[index] loaded {path.name}: {len(file_docs)} part(s)")
+        is_deck = deck is not None and path.name == deck.name
         for d in file_docs:
             d.metadata["order"] = len(docs)
+            if is_deck and "page" in d.metadata:
+                d.metadata["slide"] = d.metadata["page"]  # lecture notes as a PDF: each page is a slide
             docs.append(d)
         file_type = path.suffix.lower().lstrip(".")
-        outline.append({"source": path.name, "type": file_type, "items": _outline_items(file_docs)})
+        entry = {"source": path.name, "type": file_type, "items": _outline_items(file_docs)}
+        if is_deck:
+            entry.update(deck=True, count=slide_count(path))
+        outline.append(entry)
     return docs, outline
 
 

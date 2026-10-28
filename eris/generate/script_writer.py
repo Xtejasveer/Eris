@@ -51,11 +51,15 @@ def build_visuals(lecture_id, topic, text, segments):
 
 
 def count_slides(lecture_id):
-    """Total PPTX slides listed in outline.json (0 if unknown)."""
+    """Slides in the lesson's deck (a PowerPoint, or a PDF whose pages are slides), from outline.json (0 if unknown).
+    An outline written before decks were marked counts its PowerPoint's slides with text, as it always did."""
     try:
         outline = json.loads((config.lecture_dir(lecture_id) / "outline.json").read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return 0
+    decks = [entry for entry in outline if entry.get("deck")]
+    if decks:
+        return decks[0].get("count") or len(decks[0]["items"])
     return sum(len(entry["items"]) for entry in outline if entry.get("type") == "pptx")
 
 

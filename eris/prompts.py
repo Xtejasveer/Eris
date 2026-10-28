@@ -218,9 +218,10 @@ def lesson_prompt(persona, persona_text, topic, speaking_min, word_budget, lengt
   step (number them "First... Second..." only if you count them all). Skip none: each step is drawn as you say it.
   "interactive": say what it plots; then visit 2-3 telling points (e.g. a low point, a turning point, the peak): ask
   the class to predict, then say what they now see there and why. Never list values you don't visit.
-  "show" (and every picture): say once what it shows and why it suits this data or idea (e.g. a pie for parts of one
-  whole), then point the class at what to notice, talking to them ("Look at...", "Notice...", never "students should
-  notice"); the descriptions in the notes are for you, not to read out.
+  "show" (and every picture): say once what it shows, then point the class at what to notice, talking to them
+  ("Look at...", "Notice...", never "students should notice"). Only for a chart, say in passing why its kind fits the
+  data (e.g. a pie for parts of one whole); never say why a diagram or photo "suits the idea". The descriptions in the
+  notes are for you, not to read out.
 - Show first, then talk: put each NOTE, CODE and FIGURE before every sentence about it, including the one that
   introduces it: that sentence comes right after it and speaks of it as already there ("Here is the key point.",
   "Here is the program.", "Now a bar chart."), never "Let me write..." or "Let me show...". The class must see the

@@ -1,6 +1,6 @@
 // App shell: sign-in, hash router, sidebar (the person's courses), home and course pages, Studio and the lesson.
 //   #/                      home: course grid
-//   #/course/<id>[/<tab>]   a course (stream, classwork, people)
+//   #/course/<id>[/<tab>]   a course (classwork, people)
 //   #/lesson/<postId>       a shared lesson (a student's own session, or the teacher's preview)
 //   #/lecture/<id>/studio   build a lesson (teachers);  #/lecture/<id>/class  run its current script (teachers)
 

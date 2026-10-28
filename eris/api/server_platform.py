@@ -55,6 +55,7 @@ class Signup(BaseModel):
 class Login(BaseModel):
     email: str
     password: str
+    role: str | None = None  # who the person says they are on the sign-in form; must match the account
 
 
 @router.get("/auth/options")
@@ -80,6 +81,8 @@ def login(body: Login, response: Response):
     user = auth.check_login(body.email, body.password)
     if not user:
         raise HTTPException(401, "Wrong email or password")
+    if body.role and body.role != user["role"]:
+        raise HTTPException(403, f"This is a {user['role']} account. Choose “I'm a {user['role']}” and sign in again.")
     auth.set_cookie(response, auth.new_session(user["id"]))
     return user
 

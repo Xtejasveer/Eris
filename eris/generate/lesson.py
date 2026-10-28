@@ -289,7 +289,8 @@ def _calc_numbers(text):
 
 SOFT_PROBLEM_RE = re.compile(r"works through calculations that are not written|explain each of its \d+ steps"
                              r"|is (?:brief|normal|in depth) in the plan"
-                             r"|writes calculation steps it never explains|already teaches \(the same notes")
+                             r"|writes calculation steps it never explains|writes calculation steps back to back"
+                             r"|already teaches \(the same notes")
 
 
 def _results(note_lines):
@@ -372,13 +373,17 @@ def drop_repeated_sections(text):
 
 def unexplained_steps_said(sections):
     """Write first, then explain: every calculation step written as a one-line note (no title) must have its result
-    said after it in the same section ("so the range is 38"). Returns one problem per section."""
+    said after it in the same section ("so the range is 38"), before the next step is written. Returns one problem per
+    section for each rule broken."""
     problems = []
     for s in sections:
-        items, missing = s["items"], []
+        items, missing, stacked = s["items"], [], []
         for k, it in enumerate(items):
             if it["kind"] != "note" or it.get("title"):
                 continue
+            nxt = items[k + 1] if k + 1 < len(items) else None
+            if nxt and nxt["kind"] == "note" and not nxt.get("title"):
+                stacked.append(" | ".join(it["lines"])[:60])
             result = _results(it["lines"])
             later = " ".join(x["text"] for x in items[k + 1:] if x["kind"] == "say")
             if result and not (result & _calc_numbers(later)):
@@ -387,6 +392,11 @@ def unexplained_steps_said(sections):
             problems.append(f'section "{s["title"]}" writes calculation steps it never explains: '
                             + "; ".join(f'"{m}"' for m in missing[:4])
                             + ". After writing each step, say what it does and its result (\"so the range is 38\")")
+        if stacked:
+            problems.append(f'section "{s["title"]}" writes calculation steps back to back: '
+                            + "; ".join(f'"{m}"' for m in stacked[:4])
+                            + ". Say each step once, right after its note and before the next note is written; "
+                              "never announce a step twice")
     return problems
 
 

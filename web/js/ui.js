@@ -121,6 +121,12 @@ export function kindTag(kind, topic = "") {
     icon(pre ? "layers" : "class"), pre ? "Prerequisite" : "Lecture");
 }
 
+// The lecture workspace (#/lecture/<id>/studio: write the script, review and edit it) is named for what the teacher
+// does there next: "Create lecture" until it has a script, then "Edit lecture".
+export const hasScript = (status, versions = 0) => versions > 0 || ["draft", "approved", "completed"].includes(status);
+export const lectureLabel = (status, versions = 0) => hasScript(status, versions) ? "Edit lecture" : "Create lecture";
+export const lectureHref = (lectureId) => `#/lecture/${encodeURIComponent(lectureId)}/studio`;
+
 export function badge(status) {
   return h("span", { class: `badge ${status}` }, status);
 }

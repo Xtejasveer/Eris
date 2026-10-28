@@ -6,10 +6,9 @@ Every action returns {"ok": bool, "error": str}. Actions never raise.
 
 import re
 import time
-from pathlib import Path
 
 from eris import config
-from eris.material.indexer import load_pptx
+from eris.material.deck import deck_path, slide_texts
 from eris.tools import program_output, run_code_file
 
 BAR = "─" * 60
@@ -24,12 +23,12 @@ def new_board(lecture_id):
 
 
 def _load_slides(lecture_id):
-    """{slide number: text} from the first PPTX in the data folder."""
-    for path in sorted(Path(config.data_dir(lecture_id)).glob("*.pptx")):
-        try:
-            return {d.metadata["slide"]: d.page_content for d in load_pptx(path)}
-        except Exception as e:
-            print(f"[board] could not read slides from {path.name}: {e}")
+    """{slide number: text} from the lesson's deck (its PowerPoint, or a PDF whose pages are slides)."""
+    path = deck_path(lecture_id)
+    try:
+        return slide_texts(path)
+    except Exception as e:
+        print(f"[board] could not read slides from {path.name}: {e}")
     return {}
 
 

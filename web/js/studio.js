@@ -176,7 +176,7 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
       return parts.length ? h("div", { class: "depth-row" }, h("span", { class: `depth-tag ${d.replace(" ", "-")}` }, d === "in depth" ? "In depth" : d[0].toUpperCase() + d.slice(1)),
         h("div", { class: "depth-parts" }, parts.map(p => h("span", { class: "depth-part", title: p.why.length ? `Because the material has ${p.why.join(", ")}` : "The material states it without examples or steps" }, p.title)))) : null;
     }),
-    depth.too_long ? h("p", { class: "depth-warn" }, icon("info"), "This material is more than one sitting (about 20 min), so every part was shortened. ",
+    depth.too_long ? h("p", { class: "depth-warn" }, icon("info"), "This material needs more than 30 min of speaking (about 35 min of lesson), so every part was shortened. ",
       "Split it into two lessons to teach it all fully.") : null) : null;
   const depthNote = h("div", { class: "env-note" },
     h("div", { class: "env-note-head" }, icon("layers"), h("strong", {}, "How your slides set the depth")),
@@ -187,7 +187,7 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     // The ranges follow DEPTH_MIN and MAX_SPEAKING_MIN in eris/generate/depth.py, with notes and code on top.
     h("p", {}, h("strong", {}, "How this sets the length: "), "an In depth part takes about four times as long as a Brief one. ",
       "Material that is mostly short definitions makes a lesson of about 5–8 min; a mix makes about 10–14 min; ",
-      "many worked examples, processes or comparisons make about 18–20 min. Past about 20 min every part is shortened, ",
+      "many worked examples, processes or comparisons make about 18–30 min. Past about 30 min every part is shortened, ",
       "so split such material into two lessons. There is no time to set."),
     depthList(data.manifest?.depth) || h("small", { class: "muted" }, "Generate the script to see how deep each part is taught."));
 

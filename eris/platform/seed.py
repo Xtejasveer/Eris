@@ -17,6 +17,9 @@ from eris.platform.db import connect, now, one
 
 DEMO_PASSWORD = "eris-demo-2026"
 STUDENTS = [("aarav@eris.test", "Aarav Mehta"), ("diya@eris.test", "Diya Sharma"), ("kabir@eris.test", "Kabir Singh")]
+# A teacher and a student with nothing at all (no course, no class), to try every feature from the start: make a
+# course, create a lecture, share it, join with the class code and watch it.
+BLANK = [("test.teacher@eris.test", "Test Teacher", "teacher"), ("test.student@eris.test", "Test Student", "student")]
 # lecture id (a folder in data/), teacher's email, chapter, topic, lesson title and, optionally, the lesson's kind
 # (a lecture unless it says "prerequisite"). Name, subject and class come from the lecture's persona.md, so the course
 # matches the teacher the lesson speaks as.
@@ -48,7 +51,7 @@ MATERIAL_TYPES = {".pptx": "Slides", ".pdf": "Notes", ".docx": "Notes", ".txt": 
 
 def demo_accounts():
     """The demo accounts that exist, for the sign-in page's one-click demo buttons."""
-    emails = list(dict.fromkeys([e for _, e, *_ in LESSONS] + [e for e, _ in STUDENTS]))  # a teacher may have two courses
+    emails = list(dict.fromkeys([e for _, e, *_ in LESSONS] + [e for e, _ in STUDENTS] + [e for e, _, _ in BLANK]))  # a teacher may have two courses
     with connect() as conn:
         rows = [one(conn, "SELECT u.email, u.name, u.role, (SELECT subject FROM courses c WHERE c.teacher_id = u.id "
                           "ORDER BY c.id LIMIT 1) AS subject FROM users u WHERE u.email = ?", e) for e in emails]
@@ -115,6 +118,8 @@ def run():
     from eris.api.server_platform import _lock_version, _new_code
     from eris.platform.access import stamp_owner
     students = [_user(email, name, "student") for email, name in STUDENTS]
+    for email, name, role in BLANK:
+        _user(email, name, role)
     for lecture_id, email, chapter, topic, title, *kind in LESSONS:
         kind = kind[0] if kind else "lecture"
         _install_demo(lecture_id, kind, topic)
@@ -158,4 +163,5 @@ def run():
                     print(f"[seed] {lecture_id} not shared: {getattr(e, 'detail', e)}")
             code = one(conn, "SELECT code FROM courses WHERE id = ?", course_id)["code"]
         print(f"[seed] {p['name']}: {subject} ({year}), class code {code}")
-    print(f"[seed] students: {', '.join(e for e, _ in STUDENTS)}. Passwords: see eris/platform/seed.py")
+    print(f"[seed] students: {', '.join(e for e, _ in STUDENTS)}; blank accounts: {', '.join(e for e, _, _ in BLANK)}. "
+          "Passwords: see eris/platform/seed.py")

@@ -43,7 +43,7 @@ export async function showVersions(lessonId, { onChange } = {}) {
         h("button", { class: "btn sm ghost", onclick: () => read(v) }, icon("eye"), "Read"),
         !shared && data.post_id ? h("button", { class: "btn sm", onclick: () => share(v) }, icon("send"), "Give the class this") : null);
     }));
-    if (!data.versions.length) list.append(h("li", { class: "muted" }, "No versions yet. Approve the script in Studio to make version 1."));
+    if (!data.versions.length) list.append(h("li", { class: "muted" }, "No versions yet. Create the lecture and approve its script to make version 1."));
   }
   render();
   await modal({

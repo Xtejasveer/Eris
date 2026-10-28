@@ -71,19 +71,27 @@ def _pptx_images(path):
     return out
 
 
-def _pdf_images(path):
-    from pypdf import PdfReader
+def _pdf_images(path, as_slides=False):
+    """The pictures drawn on each page, except icons and flat colour (a box's shadow or fill stored as an image).
+    as_slides: the PDF is the lesson's deck (eris.material.deck), so each picture sits on the slide of its page."""
+    import pymupdf
+    from eris.material.deck import page_pictures
+    from eris.material.slide_images import MIN_PICTURE
     out = []
-    for number, page in enumerate(PdfReader(path).pages, start=1):
-        try:
-            images = list(page.images)
-        except Exception:
-            continue
-        text = (page.extract_text() or "")[:400]
-        for img in images:
-            ext = Path(img.name).suffix.lstrip(".").lower() or "png"
-            out.append({"blob": img.data, "ext": ext, "where": f"{path.name} page {number}",
-                        "ref": f"{path.name} page {number}", "slide": None, "context": text, "alt": ""})
+    with pymupdf.open(path) as pdf:
+        for number, page in enumerate(pdf, start=1):
+            real = page_pictures(pdf, page, MIN_PICTURE)
+            text = page.get_text().strip()[:400]
+            for info in page.get_image_info(xrefs=True):
+                if not info.get("xref") or info["bbox"] not in real:
+                    continue
+                try:
+                    image = pdf.extract_image(info["xref"])
+                except Exception:
+                    continue
+                where = f"slide {number}" if as_slides else f"{path.name} page {number}"
+                out.append({"blob": image["image"], "ext": image.get("ext", "png").lower(), "where": where, "ref": where,
+                            "slide": number if as_slides else None, "context": text, "alt": ""})
     return out
 
 
@@ -127,13 +135,15 @@ def _web_image(blob, ext):
 
 def extract_images(folder):
     """Every picture worth looking at in the folder's files, each once (by content), with where it sits."""
+    from eris.material.deck import deck_in, is_pdf
+    deck = deck_in(folder)
     found, seen = [], {}  # key -> the picture as recorded (once per content)
     for path in sorted(Path(folder).iterdir()):
         extract = EXTRACTORS.get(path.suffix.lower())
         if extract is None or path.name.startswith("."):
             continue
         try:
-            items = extract(path)
+            items = _pdf_images(path, as_slides=True) if is_pdf(deck) and path == deck else extract(path)
         except Exception as e:
             print(f"[index] could not read the pictures in {path.name}: {e}")
             continue

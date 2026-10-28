@@ -1,8 +1,9 @@
 """The teacher's slides as pictures, so the class sees the real deck (shapes, code boxes, charts) instead of its text.
 
-LibreOffice turns the deck into a PDF and PyMuPDF draws each page. Beside each picture we keep where things are, as
-fractions of the slide: every line of text (to highlight the line the teacher reads) and every picture or chart (to
-circle it). Without LibreOffice the player keeps its text view of the slides.
+LibreOffice turns a PowerPoint deck into a PDF and PyMuPDF draws each page; a PDF deck (lecture notes, see
+eris.material.deck) is drawn as it is. Beside each picture we keep where things are, as fractions of the slide: every
+line of text (to highlight the line the teacher reads) and every picture or chart (to circle it). Without LibreOffice
+a PowerPoint deck keeps the player's text view of the slides.
 """
 
 import json
@@ -13,6 +14,7 @@ import threading
 from pathlib import Path
 
 from eris import config
+from eris.material.deck import deck_path, is_pdf, page_pictures
 
 WIDTH = 1600  # pixels across: sharp on a large screen, small enough to load quickly
 MIN_PICTURE = 0.03  # share of the slide a picture or chart must cover to count (be described, circled): smaller ones are icons
@@ -26,8 +28,8 @@ def soffice():
 
 
 def _deck(lecture_id):
-    """The deck the slides come from: the first PPTX in the data folder, as actions._load_slides reads it."""
-    return next(iter(sorted(Path(config.data_dir(lecture_id)).glob("*.pptx"))), None)
+    """The deck the slides come from, as actions._load_slides reads it."""
+    return deck_path(lecture_id)
 
 
 def _folder(lecture_id):
@@ -52,18 +54,32 @@ def _boxes(deck):
     return {n: walk(slide.shapes, []) for n, slide in enumerate(pres.slides, 1)}
 
 
+def _pdf_boxes(pdf):
+    """{page number: [box]}: where each real picture on a PDF page sits, as fractions of the page."""
+    out = {}
+    for n, page in enumerate(pdf, 1):
+        w, h = page.rect.width, page.rect.height
+        out[n] = [[round(v, 4) for v in (b[0] / w, b[1] / h, b[2] / w, b[3] / h)] for b in page_pictures(pdf, page, MIN_PICTURE)]
+    return out
+
+
 def _render(lecture_id, deck):
     import pymupdf
     folder = _folder(lecture_id)
     with tempfile.TemporaryDirectory() as tmp:
-        # A private profile: a LibreOffice the teacher has open doesn't block the conversion.
-        subprocess.run([soffice(), f"-env:UserInstallation=file://{tmp}/profile", "--headless", "--convert-to", "pdf",
-                        "--outdir", tmp, str(deck)], check=True, capture_output=True, timeout=180)
-        pdf = pymupdf.open(Path(tmp) / f"{deck.stem}.pdf")
+        if is_pdf(deck):
+            pdf = pymupdf.open(deck)
+            pictures = _pdf_boxes(pdf)
+        else:
+            # A private profile: a LibreOffice the teacher has open doesn't block the conversion.
+            subprocess.run([soffice(), f"-env:UserInstallation=file://{tmp}/profile", "--headless", "--convert-to", "pdf",
+                            "--outdir", tmp, str(deck)], check=True, capture_output=True, timeout=180)
+            pdf = pymupdf.open(Path(tmp) / f"{deck.stem}.pdf")
+            pictures = _boxes(deck)
         if folder.exists():
             shutil.rmtree(folder)
         folder.mkdir(parents=True)
-        pictures, slides = _boxes(deck), {}
+        slides = {}
         for n, page in enumerate(pdf, 1):
             w, h = page.rect.width, page.rect.height
             page.get_pixmap(matrix=pymupdf.Matrix(WIDTH / w, WIDTH / w)).save(folder / f"{n}.png")
@@ -73,13 +89,15 @@ def _render(lecture_id, deck):
                      for block in page.get_text("dict")["blocks"] if block.get("type") == 0 for line in block["lines"]]
             slides[str(n)] = {"ratio": round(w / h, 4), "lines": [l for l in lines if l["text"]],
                               "pictures": pictures.get(n, [])}
+        pdf.close()
     info = {"deck": deck.name, "mtime": deck.stat().st_mtime, "slides": slides}
     (folder / "slides.json").write_text(json.dumps(info), encoding="utf-8")
     return info
 
 
 def slide_images(lecture_id, render=True):
-    """{slide number: {url, ratio, lines, pictures}} for the player, or {} (no deck, no LibreOffice, or it failed).
+    """{slide number: {url, ratio, lines, pictures}} for the player, or {} (no deck, no LibreOffice for a PowerPoint,
+    or it failed).
     Drawn once per deck and kept until the deck changes; render=False only reads what is already drawn."""
     deck = _deck(lecture_id)
     if not deck:
@@ -88,7 +106,7 @@ def slide_images(lecture_id, render=True):
     with _lock:  # one drawing at a time: the class page and an approval can ask together
         info = json.loads(meta.read_text(encoding="utf-8")) if meta.exists() else None
         if not info or info.get("deck") != deck.name or info.get("mtime") != deck.stat().st_mtime:
-            if not render or not soffice():
+            if not render or not (is_pdf(deck) or soffice()):
                 return {}
             try:
                 info = _render(lecture_id, deck)

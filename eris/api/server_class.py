@@ -3,7 +3,9 @@
 import json
 import re
 import threading
+import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
@@ -33,6 +35,8 @@ _answer_extras = {}  # lecture_id or a class run's thread_id -> {"cursor": int, 
 _doubt_lock = threading.Lock()
 # At most a few voice clips are made at once, so a burst of requests can't tie up every server thread.
 _tts_slots = threading.BoundedSemaphore(3)
+# Jev checks on a doubt answer that run side by side (see _ask_turn).
+_checks = ThreadPoolExecutor(max_workers=4, thread_name_prefix="doubt-check")
 _slides = {}         # lecture_id -> {slide number: text}
 
 
@@ -78,12 +82,12 @@ def class_data(lecture_id: str):
     status = (manifest_or_none(lecture_id) or {}).get("status", "new")
     if status not in ("approved", "completed") or not script_json.exists():
         reasons = {
-            "new": "No script yet. Go to Home, upload material and click Generate.",
-            "indexed": "The material is indexed but there is no approved script. On Home, generate "
-                       "(or fix the failed draft) and click Approve.",
-            "draft": "The script is a draft. Review it on Home and click Approve.",
+            "new": "No script yet. Create the lecture: upload its material and generate the script.",
+            "indexed": "The material is ready but there is no approved script yet. Create the lecture: generate the "
+                       "script (or fix the failed draft) and approve it.",
+            "draft": "The script is a draft. Edit the lecture to review it, then approve it.",
         }
-        return {"ready": False, "status": status, "message": reasons.get(status, "Approve the script on Home first.")}
+        return {"ready": False, "status": status, "message": reasons.get(status, "Approve the lecture's script first.")}
     manifest = manifest_or_none(lecture_id)
     return {"ready": True, "segments": json.loads(script_json.read_text(encoding="utf-8")),
             "slides": actions.new_board(lecture_id)["slides"], "slide_pictures": _slide_pictures(lecture_id),
@@ -535,11 +539,14 @@ def doubts_ask(lecture_id: str, body: DoubtAsk, request: Request):
                                               "user": request.state.user["id"], "run_code": run_code}
     else:
         thread_id = body.thread_id
+    if doubt_agent.is_no_doubt(question):  # "no doubts" in any language: nothing to answer, no model call
+        return {"thread_id": thread_id, "max": config.MAX_DOUBTS_FINAL if body.final else config.MAX_DOUBTS_PER_CHECK,
+                "prompt": None, "reply": "", "reply_text": "", "done": True, "final": "", "passed": False,
+                "reply_segments": [], "final_segments": []}
     flags, turn = _guard_question(lecture_id, question, body.section)
     if turn is None:
         with _doubt_lock:
-            turn = _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body)
-        turn, answer_flags = _guard_answer(lecture_id, question, turn)
+            turn, answer_flags = _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body)
         flags += answer_flags
     _log(request, lecture_id, body.model_dump(), body.section, question, turn, flags)
     limit = config.MAX_DOUBTS_FINAL if body.final else config.MAX_DOUBTS_PER_CHECK
@@ -547,6 +554,8 @@ def doubts_ask(lecture_id: str, body: DoubtAsk, request: Request):
 
 
 def _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body):
+    """(the turn to play, the answer's guardrail flags)."""
+    started = time.monotonic()
     board = _board_at(lecture_id, body.cursor, thread_id, _locked_segments(lecture_id, body), thread["run_code"])
     set_board(board, _slides_for(lecture_id))
     parts = []
@@ -564,7 +573,14 @@ def _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body):
     try:
         turn = doubt_agent.turn_ask(agent, thread_id, question, log_path, body.section, "\n\n".join(parts))
         turn = doubt_agent.with_segments(turn, count_slides(lecture_id), board)
+        answered = time.monotonic()
+        # The safety check and the quality check are separate Jev calls: run them at the same time. Only an
+        # answer the quality check replaced is checked again.
+        first, guard = turn, _checks.submit(_guard_answer, lecture_id, question, turn)
         turn = _judged_answer(lecture_id, agent, thread_id, question, turn, board, body, log_path)
+        turn, answer_flags = guard.result() if turn is first else _guard_answer(lecture_id, question, turn)
+        print(f"[doubts] answered in {time.monotonic() - started:.1f}s "
+              f"(agent {answered - started:.1f}s, checks {time.monotonic() - answered:.1f}s)")
         turn["_board_files"] = board.get("files", {})
         _build_answer_visuals(lecture_id, turn)
         turn.pop("_board_files", None)
@@ -574,7 +590,7 @@ def _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body):
     _show_slide_if_asked(question, board, turn, _slides_for(lecture_id))
     _remember_answer(lecture_id, board, turn, thread_id)
     thread["notes"] += _output_notes(turn)
-    return turn
+    return turn, answer_flags
 
 
 @router.post("/lectures/{lecture_id}/doubts/reply")
@@ -586,9 +602,9 @@ def doubts_reply(lecture_id: str, body: DoubtReply, request: Request):
     answer = body.answer.strip()
     if count["asked"] >= count["max"]:
         answer = "no more doubts"  # Limit reached: tell the agent to wrap up.
-    elif answer.lower() not in doubt_agent.NO_DOUBT_WORDS:
+    elif not doubt_agent.is_no_doubt(answer):
         count["asked"] += 1
-    asked = answer.lower() not in doubt_agent.NO_DOUBT_WORDS and answer != "no more doubts"
+    asked = not doubt_agent.is_no_doubt(answer) and answer != "no more doubts"
     flags, turn = _guard_question(lecture_id, answer, count["section"]) if asked else ([], None)
     if turn is None:
         with _doubt_lock:

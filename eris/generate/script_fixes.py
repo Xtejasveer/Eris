@@ -358,6 +358,10 @@ if __name__ == "__main__":
 PICTURE_WORD_RE = re.compile(r"\b(pictures?|photos?|photographs?|images?|paintings?|portraits?|maps?|charts?|graphs?|"
                              r"diagrams?|figures?|illustrations?|drawings?|flowcharts?|screenshots?|tables?|sketch(?:es)?|"
                              r"timelines?|posters?|cartoons?)\b", re.I)
+# The same words as verbs name no picture: "now picture a ball", "imagine", "figure out", "map out", "chart a course".
+PICTURE_VERB_RE = re.compile(r"\b(?:picture|imagine|visuali[sz]e)\s+(?:a|an|the|this|that|it|yourself|how|what|some|your|"
+                             r"two|one|each|every|being)\b|\b(?:figure|map|chart|table)\s+(?:it\s+|them\s+)?out\b|"
+                             r"\bchart\s+a\s+course\b", re.I)
 SLIDE_NAMED_RE = re.compile(r"\bslide\s+(\d+)\b", re.I)
 STAY_AFTER = {"NOTE", "NOTE_TITLE", "WRITE_CODE", "NOTE_HIGHLIGHT", "HIGHLIGHT", "LOOK_BACK", "FLOW_HIGHLIGHT",
               "SLIDE_HIGHLIGHT", "SLIDE_CIRCLE",
@@ -406,6 +410,15 @@ def _slide_pictures(pictures, slide_count=None, figs=None):
             continue  # a slide with a picture is matched by its picture
         by_slide[n] = (_words(f"{f['title']} {f['details']}"), "chart" if f["kind"] == "graph" else "diagram", False,
                        _data_numbers(f["details"]) if f["kind"] == "graph" else set())
+    # Words in most of the deck's pictures are the topic's own vocabulary ("metal", "tool" in a machining lesson):
+    # they say which lesson a sentence is from, not which picture, so only the rarer words can match a picture.
+    if len(by_slide) >= 3:
+        counts = {}
+        for words, *_ in by_slide.values():
+            for w in words:
+                counts[w] = counts.get(w, 0) + 1
+        common = {w for w, c in counts.items() if c > len(by_slide) / 2}
+        by_slide = {n: (words - common, *rest) for n, (words, *rest) in by_slide.items()}
     return by_slide
 
 
@@ -445,7 +458,7 @@ def _mentioned_slide(line, by_slide, screen, current=None, how=None):
         if how is not None:
             how.append("values")
         return by_values[1]
-    if not PICTURE_WORD_RE.search(line):
+    if not PICTURE_WORD_RE.search(PICTURE_VERB_RE.sub(" ", line)):
         return None
     said = _words(line)
     best, score = None, MIN_SHARED_WORDS - 1

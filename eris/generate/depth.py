@@ -29,8 +29,9 @@ DEPTHS = ("brief", "normal", "in depth")
 # Speaking minutes per sub-topic of each depth; writing, code and pauses come on top in class.
 DEPTH_MIN = {"brief": 0.6, "normal": 1.2, "in depth": 2.2}
 FRAMING_MIN = {"Opening": 0.6, "Recap": 0.5, "Closing": 0.3}
-MAX_SPEAKING_MIN = 17  # about 20 minutes of class (class time runs ~1.15x the speaking): past this, every part is
-                       # shortened by the same share and Studio suggests splitting the material into two lessons
+MAX_SPEAKING_MIN = 30  # about 35 minutes of lesson (it runs ~1.15x the speaking), room for a full university
+                       # lecture's slides: past this, every part is shortened by the same share and Studio suggests
+                       # splitting the material into two lessons
 MATERIAL_CHARS = 2500  # of a sub-topic's material that Jev reads
 # A section shorter than this share of its planned words goes back to the writer: stricter for in-depth parts, since
 # rushing a hard part is the failure that matters (writers run ~25% short everywhere; normal and brief may).
@@ -90,12 +91,14 @@ Return ONLY JSON: [{{"title": "...", "slides": [2, 3], "main": false, "must_cove
 
 def _slide_things(lecture_id):
     """{slide number: ["a chart", "a table", ...]}: what is on each slide besides text, from the deck."""
-    from pathlib import Path
     from pptx import Presentation
     from pptx.enum.shapes import MSO_SHAPE_TYPE
-    deck = next(iter(sorted(Path(config.data_dir(lecture_id)).glob("*.pptx"))), None)
+    from eris.material.deck import deck_path, is_pdf
+    deck = deck_path(lecture_id)
     if not deck:
         return {}
+    if is_pdf(deck):
+        return _page_things(deck)
     pres = Presentation(deck)
     area = pres.slide_width * pres.slide_height
 
@@ -114,6 +117,25 @@ def _slide_things(lecture_id):
                 found.add("code")
         return found
     return {n: sorted(walk(slide.shapes, set())) for n, slide in enumerate(pres.slides, 1)}
+
+
+def _page_things(deck):
+    """{page number: ["a picture", "a table"]} for a PDF deck: pictures that aren't icons, and tables PyMuPDF finds."""
+    import pymupdf
+    from eris.material.deck import page_pictures
+    out = {}
+    with pymupdf.open(deck) as pdf:
+        for n, page in enumerate(pdf, 1):
+            found = set()
+            if page_pictures(pdf, page, 0.03):
+                found.add("a picture")
+            try:
+                if page.find_tables().tables:
+                    found.add("a table")
+            except Exception:
+                pass
+            out[n] = sorted(found)
+    return out
 
 
 def _json_list(text):

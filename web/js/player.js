@@ -15,7 +15,19 @@ const needsDwell = (seg, next) => SLIDE_MARKERS.has(seg.name) && next && next.ki
 // Level 2 sync: a while_speaking action runs during the narration right after it.
 const isPair = (seg, next) => seg.kind === "action" && !!seg.args?.while_speaking && next?.kind === "say";
 
-const NO_DOUBT_WORDS = new Set(["", "no", "none", "no doubts", "nope", "n"]);  // as in doubt_agent.py
+// "No (doubts), sir" in every class language: only these words, with at least one "no". As in doubt_agent.py.
+const NO_WORDS = new Set(["n", "na", "nah", "nahi", "nahin", "nai", "nil", "no", "none", "nope", "nothing", "नको", "नही", "नहीं", "ना", "नाही", "नो", "না", "নেই", "নো", "ਨਹੀ", "ਨਹੀਂ", "ਨਾ", "ਨੋ", "નથી", "નહીં", "ના", "નો", "இல்ல", "இல்லை", "நோ", "నో", "లేదు", "లేవు", "ಇಲ್ಲ", "ನೋ", "ഇല്ല", "നോ"]);
+const FILLER_WORDS = new Set(["any", "aur", "bhaiya", "didi", "doubt", "doubts", "ji", "koi", "kuch", "am", "ma", "maam", "madam", "mam", "miss", "more", "paaji", "please", "query", "question", "questions", "sawal", "sir", "teacher", "thank", "thanks", "veer", "veere", "you", "आणखी", "और", "काही", "कुछ", "कोई", "जी", "डाउट", "प्रश्न", "मैडम", "शंका", "सर", "सवाल", "আর", "কিছু", "কোনো", "ডাউট", "প্রশ্ন", "স্যার", "ਕੁਝ", "ਕੋਈ", "ਜੀ", "ਡਾਉਟ", "ਡਾਊਟ", "ਮੈਡਮ", "ਵੀਰੇ", "ਸਰ", "ਸਵਾਲ", "ਹੋਰ", "કંઈ", "કોઈ", "ડાઉટ", "પ્રશ્ન", "વધુ", "સર", "સવાલ", "எதுவும்", "கேள்வி", "சார்", "டவுட்", "மேலும்", "ఇంకా", "ఏమీ", "డౌట్", "ప్రశ్న", "సార్", "ಇನ್ನೂ", "ಏನೂ", "ಡೌಟ್", "ಪ್ರಶ್ನೆ", "ಸರ್", "ഒന്നും", "കൂടുതൽ", "ചോദ്യം", "ഡൗട്ട്", "സാർ"]);
+const isNoDoubt = (text) => {
+  const words = text.toLowerCase().replace(/[.,!?।॥'"]+/g, " ").split(/\s+/).filter(Boolean);
+  return !words.length || (words.length <= 6 && words.every(w => NO_WORDS.has(w) || FILLER_WORDS.has(w)) && words.some(w => NO_WORDS.has(w)));
+};
+// Sentences of a spoken line; a very short one ("Right.") stays with the next, as the server's voice does.
+const sentences = (text) => text.split(/(?<=[.!?।॥])\s+/).reduce((out, s) => {
+  if (out.length && out[out.length - 1].length < 20 && !/[?!]$/.test(out[out.length - 1])) out[out.length - 1] += " " + s;
+  else out.push(s);
+  return out;
+}, []).filter(Boolean);
 const BREATH_MS = 500;          // a short breath after each spoken line, before the next step
 const SECTION_BREATH_MS = 1100; // a longer one when a new part of the lesson starts
 const SLIDE_DWELL_MS = 3000;    // a slide nobody talks about stays this long before the next workspace opens
@@ -395,11 +407,18 @@ export class Player {
 
   // Answers and closing lines from the doubt agent can write notes and code too. They are not approved,
   // so a failing step is shown and skipped without a recovery line.
+  // A doubt answer is new, so none of its voice is cached. It is spoken a sentence at a time, and the next
+  // sentence's clip is made while this one plays, so the class hears the first sentence after one clip,
+  // not after the whole answer. A line spoken while an action runs (a pair) stays whole.
   async playAnswer(segments) {
+    segments = segments.flatMap((seg, j) => seg.kind === "say" && !isPair(segments[j - 1] || {}, seg)
+      ? sentences(seg.text).map(text => ({ ...seg, text })) : [seg]);
+    const nextSay = (from) => segments.slice(from).find(s => s.kind === "say")?.text;
+    this.voice.prefetch(nextSay(0));
     for (let j = 0; j < segments.length; j++) {
       const seg = segments[j];
       await this.gate();
-      if (seg.kind === "say") { await this.say(seg.text); continue; }
+      if (seg.kind === "say") { this.voice.prefetch(nextSay(j + 1)); await this.say(seg.text); continue; }
       const pair = isPair(seg, segments[j + 1]);
       const err = pair ? await this.pair(seg, segments[j + 1]) : await this.action(seg);
       if (!err && !pair && needsDwell(seg, segments[j + 1])) await this.tick(SLIDE_DWELL_MS);
@@ -438,7 +457,7 @@ export class Player {
         const question = first != null ? first.trim() : (await chk.ask(followUp ? ANSWER_WAIT_S : DOUBT_WAIT_S)).trim();
         first = null;
         await this.gate();
-        if (NO_DOUBT_WORDS.has(question.toLowerCase())) break;  // nobody asked in time, or "no questions"
+        if (isNoDoubt(question)) break;  // nobody asked in time, or "no questions"
         chk.student(question);
         chk.thinking(true);
         let turn;

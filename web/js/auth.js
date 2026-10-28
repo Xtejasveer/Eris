@@ -28,7 +28,7 @@ export function renderAuth(root, onSignedIn) {
     error.classList.add("hidden");
     submitBtn.disabled = true;
     try {
-      const user = mode === "login" ? await api.login(email.value, password.value)
+      const user = mode === "login" ? await api.login(email.value, password.value, role)
         : await api.signup({ name: name.value, email: email.value, password: password.value, role });
       onSignedIn(user);
     } catch (err) {
@@ -47,7 +47,7 @@ export function renderAuth(root, onSignedIn) {
   api.demoLogins().then((accounts) => {
     if (!accounts?.length) return;
     const chip = (a) => h("button", { type: "button", class: "demo-chip", title: `Sign in as ${a.name}`, onclick: () => {
-      mode = "login"; render();
+      mode = "login"; role = a.role; render();
       email.value = a.email; password.value = a.password;
       form.requestSubmit();
     } }, h("span", { class: "lecture-avatar", style: avatarTint(a.name) }, initials(a.name)),
@@ -63,10 +63,10 @@ export function renderAuth(root, onSignedIn) {
   function render() {
     const signup = mode === "signup";
     title.textContent = signup ? "Create your account" : "Welcome back";
-    if (!teacherSignup) role = "student";
-    sub.textContent = !signup ? "Sign in to your courses."
+    if (signup && !teacherSignup) role = "student";
+    sub.textContent = !signup ? "Choose who you are, then sign in to your courses."
       : teacherSignup ? "Pick who you are; you can't change it later." : "Join your course with the class code your teacher gives you.";
-    roles.classList.toggle("hidden", !signup || !teacherSignup);
+    roles.classList.toggle("hidden", signup && !teacherSignup);  // sign-in always asks; sign-up only when teachers may
     nameField.classList.toggle("hidden", !signup);
     roles.querySelectorAll(".role-card").forEach(b => b.classList.toggle("on", b.dataset.role === role));
     password.autocomplete = signup ? "new-password" : "current-password";

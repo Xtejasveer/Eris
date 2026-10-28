@@ -12,8 +12,39 @@ from langgraph.types import Command
 from eris import config
 from eris.tools import ask_class_for_doubts, dry_run_python, read_board, search_material
 
-NO_DOUBT_WORDS = {"", "no", "none", "no doubts", "nope", "n"}
+# "No (doubts), sir" in every class language. A reply made only of these words, with at least one "no", means the
+# student has nothing to ask, so it never costs a model call. Mirrored in web/js/player.js.
+NO_WORDS = {
+    "no", "none", "nope", "nah", "n", "nothing", "nil", "nahi", "nahin", "nai", "na",
+    "नहीं", "नही", "ना", "नो", "नाही", "नको",                 # Hindi, Marathi
+    "ਨਹੀਂ", "ਨਹੀ", "ਨਾ", "ਨੋ",                               # Punjabi
+    "ના", "નહીં", "નથી", "નો",                                 # Gujarati
+    "না", "নেই", "নো",                                         # Bengali
+    "இல்லை", "இல்ல", "நோ", "లేదు", "లేవు", "నో",              # Tamil, Telugu
+    "ಇಲ್ಲ", "ನೋ", "ഇല്ല", "നോ",                               # Kannada, Malayalam
+}
+FILLER_WORDS = {
+    "sir", "maam", "ma", "am", "madam", "mam", "miss", "teacher", "ji", "bhaiya", "didi", "veere", "veer", "paaji",
+    "please", "thanks", "thank", "you", "doubt", "doubts", "question", "questions", "query", "more", "any", "koi",
+    "kuch", "aur", "sawal",
+    "सर", "जी", "मैडम", "डाउट", "सवाल", "प्रश्न", "कोई", "कुछ", "और", "शंका", "काही", "आणखी",
+    "ਸਰ", "ਜੀ", "ਵੀਰੇ", "ਮੈਡਮ", "ਡਾਊਟ", "ਡਾਉਟ", "ਸਵਾਲ", "ਕੋਈ", "ਕੁਝ", "ਹੋਰ",
+    "સર", "ડાઉટ", "સવાલ", "પ્રશ્ન", "કોઈ", "કંઈ", "વધુ",
+    "স্যার", "ডাউট", "প্রশ্ন", "কোনো", "কিছু", "আর",
+    "சார்", "டவுட்", "கேள்வி", "எதுவும்", "மேலும்",
+    "సార్", "డౌట్", "ప్రశ్న", "ఏమీ", "ఇంకా",
+    "ಸರ್", "ಡೌಟ್", "ಪ್ರಶ್ನೆ", "ಏನೂ", "ಇನ್ನೂ",
+    "സാർ", "ഡൗട്ട്", "ചോദ്യം", "ഒന്നും", "കൂടുതൽ",
+}
 PASS_PHRASE = "i'll pass this question to"
+
+
+def is_no_doubt(text):
+    """True for an empty reply or "no doubts" in any class language ("ਨਹੀਂ ਵੀਰੇ ਨੋ ਡਾਊਟ", "नहीं सर जी")."""
+    words = re.sub(r"[.,!?।॥'\"]+", " ", text.lower()).split()
+    if not words:
+        return True
+    return len(words) <= 6 and all(w in NO_WORDS or w in FILLER_WORDS for w in words) and any(w in NO_WORDS for w in words)
 
 
 def build_doubt_agent(system_prompt, run_code=True):
@@ -96,7 +127,7 @@ def run_checkpoint(agent, thread_id, context_text, max_doubts, log_path, section
         else:
             answer = listen()
 
-        last_question = None if answer.lower() in NO_DOUBT_WORDS else answer
+        last_question = None if is_no_doubt(answer) else answer
         if last_question:
             asked += 1
 
@@ -357,7 +388,7 @@ def turn_ask(agent, thread_id, question, log_path, section, context_text=""):
 def turn_reply(agent, thread_id, answer, log_path, section):
     """Send one student answer ('' = no doubts). Logs real questions. Adds 'passed' to the result."""
     cfg = {"configurable": {"thread_id": thread_id}, "recursion_limit": 60}
-    question = None if answer.strip().lower() in NO_DOUBT_WORDS else answer.strip()
+    question = None if is_no_doubt(answer) else answer.strip()
     before = len(agent.get_state(cfg).values.get("messages", []))
     decision = {"decisions": [{"type": "respond", "message": answer.strip() or "no doubts"}]}
     result = agent.invoke(Command(resume=decision), cfg, version="v2")

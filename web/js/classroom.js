@@ -8,7 +8,7 @@
 // tab in view) is reported, so the teacher sees attendance: present once every line has been heard.
 
 import { api } from "./api.js";
-import { h, icon, toast, modal, initials, formatDuration, modelTag, kindTag } from "./ui.js";
+import { h, icon, toast, modal, initials, formatDuration, modelTag, kindTag, lectureHref, lectureLabel } from "./ui.js";
 import { Stage } from "./stage.js";
 import { Voice, createDictation } from "./voice.js";
 import { Player, Stopped, ClassClock } from "./player.js";
@@ -40,15 +40,15 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
   }
   const student = info.role === "student";
   const lessonKind = info.post?.kind || info.kind || null;  // a shared lesson: "lecture" or "prerequisite"
-  // Where "back" goes: the course for a shared lesson, Studio otherwise.
-  const studio = postId ? `#/course/${info.course.id}` : `#/lecture/${encodeURIComponent(lectureId)}/studio`;
-  const backLabel = postId ? "Back to course" : "Back to Studio";
+  // Where "back" goes: the course for a shared lesson, the lecture workspace otherwise.
+  const studio = postId ? `#/course/${info.course.id}` : lectureHref(lectureId);
+  const backLabel = postId ? "Back to course" : "Edit lecture";
   const lessonMeta = postId ? { post_id: postId, version_id: info.version_id } : {};
   if (!info.ready) {
     main.replaceChildren(h("div", { class: "page" },
       h("div", { class: "card empty not-ready" }, h("div", { class: "empty-icon" }, icon("class")),
         h("h3", {}, "This class isn't ready yet"), h("p", {}, info.message),
-        h("a", { class: "btn primary", href: studio }, icon("edit"), "Open Studio"))));
+        h("a", { class: "btn primary", href: postId ? studio : lectureHref(lectureId) }, icon("edit"), postId ? "Back to course" : lectureLabel(info.status)))));
     return null;
   }
 
@@ -86,7 +86,7 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
   const preview = postId && !student;
   const scriptBtn = preview ? h("button", { class: "pv-btn", title: "Read the script students get",
     onclick: () => toggleScript() }, icon("book"), h("span", {}, "Script")) : null;
-  const regenBtn = preview ? h("button", { class: "pv-btn primary", title: "Write this lesson's script again, in Studio",
+  const regenBtn = preview ? h("button", { class: "pv-btn primary", title: "Write this lesson's script again, in its lecture workspace",
     onclick: () => regenerate() }, icon("sparkle"), h("span", {}, "Regenerate")) : null;
   const topRight = h("div", { class: "ls-top-right" },
     h("div", { class: "ls-controls" }, playBtn),
@@ -175,7 +175,7 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
     h("div", { class: "ls-script-head" },
       h("div", {}, h("strong", {}, "Script"), h("small", {}, `Version ${info.version_number || 1} · what students get`)),
       h("button", { class: "ls-mini", onclick: () => toggleScript(false) }, "Close")),
-    h("p", { class: "ls-script-note" }, "Regenerating writes a new script in Studio. Students keep this version until you approve the new one and share the update."),
+    h("p", { class: "ls-script-note" }, "Regenerating writes a new script in the lecture workspace. Students keep this version until you approve the new one and share the update."),
     h("div", { class: "ls-script-body" }, renderScriptDoc(segments, info.teacher, { lectureId }))) : null;
   function toggleScript(on) {
     lesson.classList.toggle("script-open", on);

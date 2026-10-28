@@ -131,13 +131,15 @@ def _first_words(text, n=8):
     return " ".join(line.split()[:n])
 
 
-def pdf_figures(path):
+def pdf_figures(path, as_slides=False):
+    """as_slides: the PDF is the lesson's deck (eris.material.deck), so a figure is found "on slide N", like a deck's."""
     from pypdf import PdfReader
     out = []
     for number, page in enumerate(PdfReader(path).pages, start=1):
         text = page.extract_text() or ""
-        out += _flow_figures(text, f"{path.name} page {number}", f"{path.name} page {number}",
-                             _first_words(text) or f"page {number}")
+        here = f"slide {number}" if as_slides else f"{path.name} page {number}"
+        where = f"slide {number} ({_first_words(text) or 'page ' + str(number)})" if as_slides else here
+        out += _flow_figures(text, where, here, _first_words(text) or f"page {number}")
         captions = [m.group(1).strip() for line in text.splitlines() if (m := CAPTION_RE.match(line))]
         try:
             images = len(page.images)
@@ -145,13 +147,12 @@ def pdf_figures(path):
             images = 0
         for cap in captions:
             kind = _kind(cap) or "diagram"
-            out.append({"kind": kind, "title": cap[:120], "where": f"{path.name} page {number}",
-                        "ref": f"{path.name} page {number}", "details": f"caption: {cap[:200]}"})
+            out.append({"kind": kind, "title": cap[:120], "where": where, "ref": here, "details": f"caption: {cap[:200]}"})
         if images and not captions:
             kind = _kind(text[:400])
             if kind:
-                out.append({"kind": kind, "title": f"image on page {number}", "where": f"{path.name} page {number}",
-                            "ref": f"{path.name} page {number}", "details": f"{images} image(s); page text: {text[:200]}"})
+                out.append({"kind": kind, "title": f"image on page {number}", "where": where, "ref": here,
+                            "details": f"{images} image(s); page text: {text[:200]}"})
     return out
 
 
@@ -183,14 +184,16 @@ FINDERS = {".pptx": pptx_figures, ".pdf": pdf_figures, ".docx": docx_figures}
 def find_figures(folder, pictures=None):
     """Charts, diagrams and step lists found from the files' text and structure. pictures: the vision model's
     descriptions; when they exist they decide what each picture is, so guesses from alt text are left out."""
+    from eris.material.deck import deck_in, is_pdf
     described = bool([p for p in pictures or [] if p.get("description")])
+    deck = deck_in(folder)
     figures = []
     for path in sorted(Path(folder).iterdir()):
         finder = FINDERS.get(path.suffix.lower())
         if finder is None or path.name.startswith("."):
             continue
         try:
-            for fig in finder(path):
+            for fig in (pdf_figures(path, as_slides=True) if is_pdf(deck) and path == deck else finder(path)):
                 guessed = fig["details"].startswith("picture") or "image(s); page text" in fig["details"]
                 if described and guessed:
                     continue  # the vision model says what this picture really is
@@ -289,7 +292,7 @@ def environments(docs, figures, chunks=()):
     code_lines = sum(1 for d in docs for ln in d.page_content.splitlines() if CODE_LINE_RE.match(ln))
     from eris import config
     return {"notebook": True,
-            "slides": any(d.metadata.get("type") == "pptx" for d in docs),
+            "slides": any("slide" in d.metadata for d in docs),  # a PowerPoint, or a PDF deck (eris.material.deck)
             "code": any(c.metadata.get("has_code") for c in chunks) or code_lines >= CODE_MIN_LINES,
             "flows": bool(flows(figures)),
             "graphs": config.VISUALS_ENABLED and bool(graphs(figures))}

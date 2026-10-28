@@ -1,9 +1,10 @@
 // Courses: the home page (a grid of the person's courses) and a course's page.
-// A course has a Stream (everything shared, newest first), Classwork (chapters > topics > lessons and material)
-// and People. Teachers build lessons in topics, open them in Studio, and share approved ones; students play them.
+// A course has Classwork (chapters > topics > lessons and study material, everything in one place) and People. Teachers add lessons to topics, create each lesson's lecture (its script), and share approved ones;
+// students play them.
 
 import { api } from "./api.js";
-import { h, icon, toast, modal, confirmDialog, badge, kindTag, avatarTint, initials, formatDate, languageSelect } from "./ui.js";
+import { h, icon, toast, modal, confirmDialog, badge, kindTag, avatarTint, initials, formatDate, languageSelect,
+  hasScript, lectureLabel, lectureHref } from "./ui.js";
 import { showVersions } from "./versions.js";
 
 // What the guardrails flagged on a doubt: red when it was blocked, amber when only flagged.
@@ -68,7 +69,7 @@ export function renderHome(main, me, courses, lectures = []) {
   const loosePanel = loose.length ? h("section", { class: "card span-12" },
     h("div", { class: "panel-head" }, h("h2", {}, "Lectures not in a course"), h("span", { class: "chip" }, loose.length),
       h("small", { class: "muted", style: "margin-left:8px" }, "Only you can see these until a lecture is part of a course.")),
-    h("div", { class: "loose-list" }, loose.map(l => h("a", { class: "loose-item", href: `#/lecture/${encodeURIComponent(l.id)}/studio` },
+    h("div", { class: "loose-list" }, loose.map(l => h("a", { class: "loose-item", href: lectureHref(l.id) },
       h("span", { class: "lecture-avatar", style: avatarTint(l.id) }, initials(l.id)), h("span", { class: "name" }, l.id), badge(l.status))))) : null;
 
   const count = (label, value, of, caption) => h("div", { class: "count" }, h("span", {}, label),
@@ -110,41 +111,41 @@ export function renderHome(main, me, courses, lectures = []) {
     const approved = rows.filter(r => r.steps.done[2]).length;
 
     // The one finding, in order of what blocks students most.
-    const studio = (r) => `#/lecture/${encodeURIComponent(r.l.lecture_id)}/studio`;
+    const studio = (r) => lectureHref(r.l.lecture_id);
+    const finished = (n, of) => n === 0 ? "No one has finished it yet." : n === of ? `All ${of} have finished.` : `${n} of ${of} have finished.`;
     const classwork = (r) => `#/course/${r.course.id}/classwork`;
     const update = rows.find(r => r.l.post_id && r.l.update_available);
     const unshared = rows.find(r => r.steps.done[2] && !r.l.post_id);
     const draft = rows.find(r => !r.l.post_id && !r.steps.done[2]);
     const partway = shared.find(r => r.steps.a.started > r.steps.a.present);
-    if (update) setFinding(`A newer approved script of ${update.l.title} is ready; students still get the old one.`,
+    if (update) setFinding(`A newer approved script of ${update.l.title} is ready. Students still get the old one until you share it.`,
       h("a", { class: "btn primary", href: classwork(update) }, icon("upload"), "Share update"));
     else if (unshared) setFinding(`${unshared.l.title} is approved, but your ${plural(unshared.course.students.length, "student")} can't see it until you share it.`,
       h("a", { class: "btn primary", href: classwork(unshared) }, icon("send"), "Share lesson"));
     else if (draft) setFinding(`${draft.l.title} is still a draft, so your ${plural(draft.course.students.length, "student")} can't open it yet.`,
-      h("a", { class: "btn primary", href: studio(draft) }, icon("edit"), "Review script"));
-    else if (partway) setFinding(`${plural(partway.steps.a.started - partway.steps.a.present, "student is", "students are")} partway through ${partway.l.title}; ${partway.steps.a.present} of ${partway.steps.a.total} have finished.`,
-      h("a", { class: "btn", href: `#/course/${partway.course.id}` }, icon("user"), "See attendance"));
-    else if (!rows.length) setFinding("Add a chapter and a topic, then build your first lesson in Studio.",
+      h("a", { class: "btn primary", href: studio(draft) }, icon("edit"), "Edit lecture"));
+    else if (partway) setFinding(`${plural(partway.steps.a.started - partway.steps.a.present, "student is", "students are")} partway through ${partway.l.title}. ${finished(partway.steps.a.present, partway.steps.a.total)}`, null);
+    else if (!rows.length) setFinding("Add a chapter and a topic, then create your first lecture.",
       h("a", { class: "btn primary", href: `#/course/${details[0].id}/classwork` }, icon("plus"), "Plan a lesson"));
-    else setFinding(`Every lesson is shared; ${present} of ${seats} watches are finished.`, null);
+    else setFinding(`Every lesson is shared. Students have finished ${present} of ${seats} watches.`, null);
 
     const order = [...rows].sort((x, y) => x.steps.next - y.steps.next);
-    const lessonCard = (r) => h("div", { class: "lesson-card" },
+    // The whole card opens the lesson's lecture workspace: what the teacher does next is there.
+    const lessonCard = (r) => h("a", { class: "lesson-card", href: studio(r), title: `${lectureLabel(r.l.status, r.l.versions)}: ${r.l.title}` },
       h("div", { class: "lc-title" }, r.l.title, kindTag(r.l.kind),
         r.l.post_id ? null : badge(r.l.status)),
       h("div", { class: "lc-meta" }, [details.length > 1 ? r.course.subject : null, r.topic,
         r.post?.minutes ? `about ${Math.max(1, Math.round(r.post.minutes))} min` : null,
         r.post ? `v${r.post.version?.number || 1} shared` : r.l.versions ? plural(r.l.versions, "version") : null,
-        r.l.post_id && r.l.status === "draft" ? "new draft in Studio" : null].filter(Boolean).join(" · ")),
-      h("div", { class: "lc-actions" }, h("a", { class: "btn sm", href: r.l.post_id && r.steps.next >= 4 ? `#/course/${r.course.id}` : studio(r) },
-        r.l.post_id && r.steps.next >= 4 ? "Attendance" : "Open in Studio")),
+        r.l.post_id && r.l.status === "draft" ? "new draft to review" : null].filter(Boolean).join(" · ")),
+      h("span", { class: "lc-go" }, lectureLabel(r.l.status, r.l.versions), icon("chevron")),
       pathEl(r.steps));
     const cap = 5;
     grid.firstChild.replaceWith(h("section", { class: "card span-8" },
       h("div", { class: "panel-head" }, h("h2", {}, "Lessons"), h("span", { class: "chip" }, rows.length),
         h("a", { href: `#/course/${details[0].id}/classwork` }, details.length > 1 ? "Classwork" : `Classwork in ${details[0].subject}`)),
       rows.length ? h("div", { class: "lesson-cards" }, order.slice(0, cap).map(lessonCard))
-        : h("div", { class: "home-empty" }, h("p", {}, "No lessons yet. Add a topic in Classwork, then build a lesson in Studio."))));
+        : h("div", { class: "home-empty" }, h("p", {}, "No lessons yet. Add a topic in Classwork, then create its lecture."))));
     // With one or two courses the side panel has room for the class itself: who has joined, and how far along.
     if (details.length <= 2) for (const c of details) coursesPanel.querySelector(".add-row").before(h("div", { class: "class-list" },
       h("div", { class: "panel-head" }, h("h2", {}, details.length > 1 ? `Students in ${c.subject}` : "Students"), h("span", { class: "chip" }, c.students.length)),
@@ -231,7 +232,7 @@ export async function mountCourse(courseId, tab, ctx) {
     return null;
   }
   const teacher = course.role === "teacher";
-  tab = ["stream", "classwork", "people"].includes(tab) ? tab : teacher && !course.posts.length ? "classwork" : "stream";
+  tab = tab === "people" ? "people" : "classwork";
   const reload = async () => { course = await api.course(courseId); render(); ctx.refreshCourses?.(); };
   const act = (fn) => async (...a) => { try { await fn(...a); } catch (e) { toast(e.message, "error", 6000); } };
 
@@ -256,69 +257,25 @@ export async function mountCourse(courseId, tab, ctx) {
       codeEl);
   }
 
-  // ---------- stream ----------
-  function lessonActions(post) {
-    if (!teacher) {
-      const p = post.my_progress || {};
-      const label = p.completed ? "Watch again" : p.started ? "Continue" : "Start lesson";
-      return h("div", { class: "post-lesson" },
-        h("div", { class: "progress-line", title: `${p.percent || 0}% heard` }, h("i", { style: `width:${p.percent || 0}%` })),
-        h("span", { class: `att-tag ${p.completed ? "present" : p.started ? "started" : ""}` },
-          p.completed ? "Present" : p.started ? `${p.percent}% heard` : "Not started"),
-        h("a", { class: `btn sm ${p.completed ? "" : "primary"}`, href: `#/lesson/${post.id}` }, icon("play"), label));
-    }
-    const a = post.attendance || { present: 0, total: 0 };
-    return h("div", { class: "post-lesson" },
-      h("div", { class: "progress-line", title: `${a.present} of ${a.total} present` }, h("i", { style: `width:${a.total ? (100 * a.present) / a.total : 0}%` })),
-      h("span", { class: "att-tag" }, `${a.present}/${a.total} present${a.started > a.present ? ` · ${a.started - a.present} watching` : ""}`),
-      h("button", { class: "btn sm", onclick: () => showAttendance(post) }, icon("user"), "Attendance"),
-      h("button", { class: "btn sm", title: "Where students got stuck, and what they flagged as confusing",
-        onclick: () => showInsights(post) }, icon("search"), "Insights"),
-      h("button", { class: `btn sm ghost skip-toggle ${post.allow_skip ? "" : "on"}`,
-        title: post.allow_skip ? "Students may skip ahead (click to require every part in order)" : "Students must hear every part in order (click to allow skipping ahead)",
-        onclick: act(async () => { await api.editPost(post.id, { allow_skip: !post.allow_skip }); await reload(); }) },
-        icon(post.allow_skip ? "skip" : "stop"), post.allow_skip ? "Skipping allowed" : "No skipping"),
-      h("a", { class: "btn sm ghost", href: `#/lesson/${post.id}` }, icon("eye"), "Preview"));
-  }
-
-  function postCard(post) {
-    const lesson = post.kind === "lesson";
-    const files = post.files.length ? h("div", { class: "post-files" }, post.files.map(f =>
-      h("a", { class: "file-chip", href: api.fileUrl(post.id, f.id), target: "_blank", rel: "noopener" }, icon("file"), f.name))) : null;
-    const pre = lesson && post.lesson?.kind === "prerequisite";
-    return h("article", { class: `card post ${lesson ? "is-lesson" : "is-material"} ${pre ? "is-pre" : ""}` },
-      h("div", { class: "post-main" },
-        h("div", { class: "post-top" },
-          h("div", { class: "post-title" },
-            lesson ? h("div", { class: "post-kind" }, kindTag(post.lesson?.kind, post.topic_title),
-              pre ? h("small", { class: "muted" }, `Watch before the lecture${post.topic_title ? ` on ${post.topic_title}` : ""}`) : null) : null,
-            h("h3", {}, post.title),
-            h("small", { class: "muted" }, [lesson ? `v${post.version?.number || 1}` : "Material", lesson && post.minutes ? `About ${Math.max(1, Math.round(post.minutes))} min` : null,
-              post.topic_title, `Posted ${formatDate(post.created_at)}`].filter(Boolean).join(" · "))),
-          post.due_at ? h("span", { class: "due-chip" }, icon("clock"), `Due ${formatDate(post.due_at)}`) : null,
-          teacher ? h("button", { class: "icon-btn sm", title: lesson ? "Stop sharing" : "Delete", onclick: act(async () => {
-            if (!await confirmDialog(lesson ? "Stop sharing this lesson?" : "Delete this post?",
-              lesson ? "Students won't see it any more, and its attendance is removed." : "Students won't see it any more.", lesson ? "Stop sharing" : "Delete", "danger")) return;
-            await api.deletePost(post.id); await reload();
-          }) }, icon("trash")) : null),
-        post.body ? h("p", { class: "post-body" }, post.body) : null,
-        files,
-        lesson ? lessonActions(post) : null));
-  }
-
-  function stream() {
-    return h("div", { class: "stream" },
-      teacher ? h("div", { class: "card composer" },
-        h("span", { class: "lecture-avatar", style: avatarTint(course.subject) }, initials(course.subject)),
-        h("button", { class: "composer-btn", onclick: () => addMaterial() }, "Share notes or material with the class…"),
-        h("a", { class: "btn sm", href: `#/course/${courseId}/classwork` }, icon("class"), "Share a lesson")) : null,
-      course.posts.length ? course.posts.map(postCard)
-        : h("div", { class: "card empty" }, h("div", { class: "empty-icon" }, icon("chat")),
-          h("h3", {}, "Nothing shared yet"),
-          h("p", {}, teacher ? "Build a lesson in Classwork and share it once it's approved, or share notes here." : "Lessons and notes your teacher shares show up here.")));
-  }
-
   // ---------- classwork ----------
+  // A shared lesson's attendance, on its row: how many students have heard all of it (and how many are partway),
+  // opening the full list.
+  function attendanceButton(post) {
+    const a = post.attendance || { present: 0, started: 0, total: 0 };
+    return h("button", { class: "att-tag att-btn", title: "Attendance: who has heard the whole lesson", onclick: () => showAttendance(post) },
+      icon("user"), `${a.present}/${a.total} present${a.started > a.present ? ` · ${a.started - a.present} watching` : ""}`);
+  }
+
+  function materialRow(m) {
+    return h("li", { class: "lesson-row" },
+      h("div", { class: "lesson-name" }, h("strong", {}, m.title), h("span", { class: "kind-tag" }, "Study material")),
+      m.files.map(f => h("a", { class: "file-chip", href: api.fileUrl(m.id, f.id), target: "_blank", rel: "noopener" }, icon("file"), f.name)),
+      teacher ? h("button", { class: "icon-btn sm", title: "Delete material", onclick: act(async () => {
+        if (!await confirmDialog("Delete this material?", "Students won't see it any more.", "Delete", "danger")) return;
+        await api.deletePost(m.id); await reload();
+      }) }, icon("trash")) : null);
+  }
+
   function lessonRow(l) {
     const shared = !!l.post_id;
     const post = course.posts.find(p => p.id === l.post_id);
@@ -331,15 +288,16 @@ export async function mountCourse(courseId, tab, ctx) {
         h("a", { class: "btn sm", href: `#/lesson/${l.post_id}` }, icon("play"), p.completed ? "Again" : p.started ? "Continue" : "Start"));
     }
     const approved = ["approved", "completed"].includes(l.status);
+    const written = hasScript(l.status, l.versions);
     return h("li", { class: "lesson-row" },
-      h("div", { class: "lesson-name" }, h("strong", {}, l.title), kind, badge(l.status)),
-      shared ? h("span", { class: "att-tag present" }, icon("check"), `Shared v${post?.version?.number || 1}`) : null,
+      h("div", { class: "lesson-name" }, h("a", { class: "lesson-link", href: lectureHref(l.lecture_id) }, h("strong", {}, l.title)), kind, badge(l.status)),
+      shared && post ? attendanceButton(post) : null,
       l.versions ? h("button", { class: "btn sm ghost", title: "Every approved script of this lesson",
         onclick: () => showVersions(l.id, { onChange: reload }) }, icon("layers"), `${l.versions} version${l.versions === 1 ? "" : "s"}`) : null,
-      h("a", { class: "btn sm ghost", href: `#/lecture/${encodeURIComponent(l.lecture_id)}/studio` }, icon("edit"), "Studio"),
+      h("a", { class: `btn sm ${written ? "ghost" : "primary"}`, href: lectureHref(l.lecture_id) }, icon(written ? "edit" : "plus"), lectureLabel(l.status, l.versions)),
       shared && l.update_available ? h("button", { class: "btn sm primary", title: "Students get the newly approved script; attendance so far stays",
         onclick: act(async () => { const r = await api.share(l.id); toast(`Shared version ${r.version}.`, "success"); await reload(); }) }, icon("upload"), "Share update") : null,
-      !shared ? h("button", { class: `btn sm ${approved ? "primary" : ""}`, disabled: !approved, title: approved ? "Share with the class" : "Approve the script in Studio first",
+      !shared ? h("button", { class: `btn sm ${approved ? "primary" : ""}`, disabled: !approved, title: approved ? "Share with the class" : "Create the lecture and approve its script first",
         onclick: () => shareLesson(l) }, icon("send"), "Share") : null,
       h("button", { class: "icon-btn sm", title: "Delete lesson", onclick: act(async () => {
         if (!await confirmDialog("Delete this lesson?", "Its attendance, and its lecture (material, script and audio), are deleted too. This can't be undone.", "Delete", "danger")) return;
@@ -366,11 +324,8 @@ export async function mountCourse(courseId, tab, ctx) {
             if (!await confirmDialog(`Delete “${t.title}”?`, "Its lessons are deleted too, with their material, scripts, audio and attendance. This can't be undone.", "Delete", "danger")) return;
             await api.deleteTopic(t.id); await reload();
           }) }, icon("trash"))) : null),
-      t.lessons.length || materials.length ? h("ul", { class: "lesson-list" }, t.lessons.map(lessonRow),
-        materials.map(m => h("li", { class: "lesson-row" },
-          h("div", { class: "lesson-name" }, h("strong", {}, m.title), h("small", { class: "muted" }, `${m.files.length} file${m.files.length === 1 ? "" : "s"}`)),
-          m.files.map(f => h("a", { class: "file-chip", href: api.fileUrl(m.id, f.id), target: "_blank", rel: "noopener" }, icon("file"), f.name)))))
-        : h("p", { class: "topic-empty" }, "No lessons yet. Add one, then build it in Studio."));
+      t.lessons.length || materials.length ? h("ul", { class: "lesson-list" }, t.lessons.map(lessonRow), materials.map(materialRow))
+        : h("p", { class: "topic-empty" }, "No lessons yet. Add one, then create its lecture."));
   }
 
   function classwork() {
@@ -393,12 +348,20 @@ export async function mountCourse(courseId, tab, ctx) {
             }) }, icon("trash"))) : null),
         topics.length ? topics : h("p", { class: "topic-empty" }, teacher ? "Add a topic to this chapter." : "Nothing here yet."));
     }).filter(Boolean);
+    // Material shared without a topic (notes for the whole class) closes the page.
+    const topicIds = new Set(course.chapters.flatMap(ch => ch.topics.map(t => t.id)));
+    const general = course.posts.filter(p => p.kind === "material" && !topicIds.has(p.topic_id));
+    if (general.length) chapters.push(h("section", { class: "card chapter" },
+      h("div", { class: "chapter-head" }, h("h3", {}, "General")),
+      h("ul", { class: "lesson-list" }, general.map(materialRow))));
     return h("div", { class: "classwork" },
       teacher ? h("div", { class: "classwork-bar" },
-        h("p", { class: "muted" }, "Chapters hold topics; each topic holds its lessons. Build a lesson in Studio, then share it."),
-        h("button", { class: "btn primary", onclick: act(async () => {
-          const title = await askTitle("New chapter", "", "e.g. Dynamic programming"); if (title) { await api.addChapter(courseId, title); await reload(); }
-        }) }, icon("plus"), "Chapter")) : null,
+        h("p", { class: "muted" }, "Chapters hold topics; each topic holds its lessons. Create a lesson's lecture, then share it."),
+        h("div", { class: "row-actions" },
+          h("button", { class: "btn", title: "Notes or files for the whole class, not one topic", onclick: () => addMaterial() }, icon("book"), "Material"),
+          h("button", { class: "btn primary", onclick: act(async () => {
+            const title = await askTitle("New chapter", "", "e.g. Dynamic programming"); if (title) { await api.addChapter(courseId, title); await reload(); }
+          }) }, icon("plus"), "Chapter"))) : null,
       chapters.length ? chapters : h("div", { class: "card empty" }, h("div", { class: "empty-icon" }, icon("layers")),
         h("h3", {}, teacher ? "Plan the course" : "No lessons yet"),
         h("p", {}, teacher ? "Start with a chapter, add its topics, and create a lesson in each topic." : "Lessons appear here once your teacher shares them.")));
@@ -454,12 +417,12 @@ export async function mountCourse(courseId, tab, ctx) {
     const language = languageSelect(defaults.language, defaults.languages);
     const made = await modal({
       title: prereq ? "New prerequisite lesson" : "New lesson",
-      text: prereq ? `A short lesson on what students should know before “${topic.title}”. Upload material for it in Studio.`
-        : `A lesson in “${topic.title}”. Next, upload its material and describe the teacher in Studio.`,
+      text: prereq ? `A short lesson on what students should know before “${topic.title}”. Next, create its lecture from your material.`
+        : `A lesson in “${topic.title}”. Next, create its lecture: upload the material and describe the teacher.`,
       body: [h("label", { class: "field" }, h("span", {}, "Lesson title"), title),
         h("label", { class: "field" }, h("span", {}, "Teaching language"), language),
-        h("p", { class: "muted small" }, "No time to set: the lesson is as long as your material needs, about 20 minutes at most.")],
-      actions: [{ label: "Cancel", value: null }, { label: "Create and open Studio", kind: "primary", value: () => {
+        h("p", { class: "muted small" }, "No time to set: the lesson is as long as your material needs, about 35 minutes at most.")],
+      actions: [{ label: "Cancel", value: null }, { label: "Create lecture", kind: "primary", value: () => {
         if (!title.value.trim()) return (title.classList.add("invalid"), undefined);
         return { kind, title: title.value.trim(), language: language.value };
       } }],
@@ -467,7 +430,7 @@ export async function mountCourse(courseId, tab, ctx) {
     if (!made) return;
     try {
       const r = await api.addLesson(topic.id, made);
-      location.hash = `#/lecture/${encodeURIComponent(r.lecture_id)}/studio`;
+      location.hash = lectureHref(r.lecture_id);
     } catch (e) { toast(e.message, "error", 6000); }
   }
 
@@ -519,7 +482,7 @@ export async function mountCourse(courseId, tab, ctx) {
       const lines = [...sec.flags.filter(f => !f.resolved_at).map(f => `- Marked confusing at: "${f.line_text}"${f.comment ? ` (${f.comment})` : ""}`),
         ...sec.doubts.map(d => `- Doubt: ${d.question}`)];
       if (!await confirmDialog(`Rewrite “${sec.title}”?`, "Eris rewrites just this section from what students said. The lesson becomes a draft: "
-        + "review it in Studio and approve it to give the class a new version.", "Rewrite section")) return;
+        + "review it with Edit lecture and approve it to give the class a new version.", "Rewrite section")) return;
       detail.replaceChildren(h("div", { class: "insight-wait" }, h("div", { class: "spinner" }), "Rewriting the section… this takes about a minute."));
       try {
         await api.regenerateSection(data.post.lecture_id, { section: sec.title, feedback: lines.join("\n") });
@@ -588,9 +551,9 @@ export async function mountCourse(courseId, tab, ctx) {
   }
 
   function render() {
-    const body = tab === "stream" ? stream() : tab === "classwork" ? classwork() : people();
+    const body = tab === "classwork" ? classwork() : people();
     main.replaceChildren(h("div", { class: "page course-page" }, header(),
-      h("nav", { class: "tabs course-tabs" }, tabLink("stream", "Stream", "chat"), tabLink("classwork", "Classwork", "layers"), tabLink("people", "People", "user")),
+      h("nav", { class: "tabs course-tabs" }, tabLink("classwork", "Classwork", "layers"), tabLink("people", "People", "user")),
       body));
   }
   render();
