@@ -31,8 +31,6 @@
 .file-type.pptx { background: var(--tint-3); color: var(--tint-3-ink); }
 .file-type.pdf { background: var(--danger-soft); color: var(--danger); }
 .file-type.docx { background: var(--sky-soft); color: var(--sky); }
-:root[data-theme="dark"] .file-type.pptx, :root[data-theme="dark"] .file-type.pdf, :root[data-theme="dark"] .file-type.docx { background: var(--surface-3); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .file-type { background: var(--surface-3); } }
 .file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 
 .persona { display: flex; flex-direction: column; }

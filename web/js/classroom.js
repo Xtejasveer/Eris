@@ -103,10 +103,12 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
   const captionText = h("p", { class: "ls-caption-text" });
   // The tutor beside the caption: two looping videos of the same character (web/assets/tutor, made with
   // `main.py tutor-video`): the talking loop while the voice speaks, the idle loop otherwise. If they can't load, the
-  // 3D teacher takes their place, and if that can't either, the teacher's initials.
+  // 3D teacher takes their place, and if that can't either, the teacher's initials. info.tutor names the tutor for
+  // the lesson's voice ("male": tutor-male-idle.mp4 ...); none is the default tutor.
+  const tutorPrefix = info.tutor ? `tutor-${info.tutor}-` : "tutor-";
   const tutorClip = (name) => {
-    const v = h("video", { class: `ls-tutor-video ${name === "idle" ? "on" : ""}`, src: `assets/tutor/tutor-${name}.mp4`,
-      poster: `assets/tutor/tutor-${name}-poster.webp`, loop: true, playsinline: true, preload: "auto", "aria-hidden": "true",
+    const v = h("video", { class: `ls-tutor-video ${name === "idle" ? "on" : ""}`, src: `assets/tutor/${tutorPrefix}${name}.mp4`,
+      poster: `assets/tutor/${tutorPrefix}${name}-poster.webp`, loop: true, playsinline: true, preload: "auto", "aria-hidden": "true",
       disablepictureinpicture: true, disableremoteplayback: true });
     v.muted = true;  // silent, so the browser lets it play on its own
     return v;
@@ -220,6 +222,10 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
       h("div", { class: "splash-actions" },
         h("button", { class: "btn primary lg", onclick: () => start(0) }, icon("play"), "Start class"),
         savedSec ? h("button", { class: "btn lg", onclick: () => start(savedSec.index) }, `Resume at “${savedSec.title}”`) : null)));
+    // The opening line's clip (and the resume point's) loads while the start screen shows, so the voice starts
+    // with the class instead of after a long first download.
+    if (info.voice) for (const from of [0, savedSec?.index].filter(i => i != null))
+      voice.prefetch(segments.slice(from).find(seg => seg.kind === "say")?.text);
   }
   splash();
 

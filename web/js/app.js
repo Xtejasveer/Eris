@@ -102,12 +102,6 @@ $("#signout-btn").addEventListener("click", async () => {
   location.hash = "#/";
   showSignIn();
 });
-$("#theme-btn").addEventListener("click", () => {
-  const root = document.documentElement;
-  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-  root.dataset.theme = dark ? "light" : "dark";
-  try { localStorage.setItem("eris-theme", root.dataset.theme); } catch {}
-});
 // Sidebar: open on the home and course pages; in Studio it folds to an icon rail to give the work room, and slides
 // out over the page while the mouse is on it.
 function applySidebar(r = currentRoute()) {

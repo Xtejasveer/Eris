@@ -86,6 +86,9 @@ def build_parser():
     p = sub.add_parser("tutor-video", help="make the classroom's video tutor from an idle clip and a talking clip")
     p.add_argument("--idle", required=True, help="video of the character listening (mouth closed)")
     p.add_argument("--talking", required=True, help="video of the same character talking")
+    p.add_argument("--name", default="", choices=["", "male"], help="male: the tutor shown for lessons with a man's voice")
+    p.add_argument("--idle-start", type=float, help="use the idle clip from this second (skip a bad start)")
+    p.add_argument("--idle-end", type=float, help="use the idle clip up to this second")
 
     sub.add_parser("seed", help="add demo accounts and courses built from the lectures in data/ (local testing)")
 
@@ -114,7 +117,7 @@ def main():
         return
     if args.command == "tutor-video":
         from eris.classroom.tutor_video import prepare
-        prepare(args.idle, args.talking)
+        prepare(args.idle, args.talking, name=args.name, idle_start=args.idle_start, idle_end=args.idle_end)
         return
     if args.command == "seed":
         from eris.platform.seed import run

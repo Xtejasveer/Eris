@@ -57,32 +57,6 @@
   color-scheme: light;
 }
 
-/* Dark: true neutral darks, lightness steps instead of lines, the teal lifted for contrast. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #1c1d1c; --sidebar: #181918; --sidebar-hover: #232523; --sidebar-active: #2c2e2c; --dot: #313331; --panel: #252725; --surface: #2d2f2d; --surface-2: #353735; --surface-3: #3e403e;
-    --border: #393b39; --border-strong: #4c4f4c; --text: #f4f5f2; --text-2: #d3d5d1; --muted: #b3b6b1;
-    --primary: #f4f5f2; --primary-hover: #ffffff; --primary-soft: #2e302e; --on-primary: #1c1d1c;
-    --accent: #5fb8ad; --accent-soft: #17302d; --success: #3fc07a; --success-soft: #172a1d;
-    --warning: #e4b062; --warning-soft: #352a19; --danger: #e5566f; --danger-soft: #2c1a20;
-    --violet: #d0d0d0; --violet-soft: #2a2a2a; --sky: #85c3d8; --sky-soft: #1c2f36; --marker: #e8c34e;
-    --shadow-sm: none; --shadow: none; --shadow-lg: 0 18px 48px rgba(0, 0, 0, .5);
-    --tint-0: #1d2e21; --tint-0-ink: #9fd5ad; --tint-1: #33202a; --tint-1-ink: #eaa9c4; --tint-2: #1c2838; --tint-2-ink: #a6c4ea; --tint-3: #33281b; --tint-3-ink: #e4c090; --tint-4: #17302d; --tint-4-ink: #8fd3c9;
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #1c1d1c; --sidebar: #181918; --sidebar-hover: #232523; --sidebar-active: #2c2e2c; --dot: #313331; --panel: #252725; --surface: #2d2f2d; --surface-2: #353735; --surface-3: #3e403e;
-  --border: #393b39; --border-strong: #4c4f4c; --text: #f4f5f2; --text-2: #d3d5d1; --muted: #b3b6b1;
-  --primary: #f4f5f2; --primary-hover: #ffffff; --primary-soft: #2e302e; --on-primary: #1c1d1c;
-  --accent: #5fb8ad; --accent-soft: #17302d; --success: #3fc07a; --success-soft: #172a1d;
-  --warning: #e4b062; --warning-soft: #352a19; --danger: #e5566f; --danger-soft: #2c1a20;
-  --violet: #d0d0d0; --violet-soft: #2a2a2a; --sky: #85c3d8; --sky-soft: #1c2f36; --marker: #e8c34e;
-  --shadow-sm: none; --shadow: none; --shadow-lg: 0 18px 48px rgba(0, 0, 0, .5);
-  --tint-0: #1d2e21; --tint-0-ink: #9fd5ad; --tint-1: #33202a; --tint-1-ink: #eaa9c4; --tint-2: #1c2838; --tint-2-ink: #a6c4ea; --tint-3: #33281b; --tint-3-ink: #e4c090; --tint-4: #17302d; --tint-4-ink: #8fd3c9;
-  color-scheme: dark;
-}
-
 * { box-sizing: border-box; }
 html, body { height: 100%; }
 body {

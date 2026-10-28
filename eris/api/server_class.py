@@ -91,9 +91,16 @@ def class_data(lecture_id: str):
             "teacher": manifest["persona"]["Teacher"]["Name"], "topic": manifest["topic"],
             "estimated_min": manifest.get("estimated_min"), "duration_min": config.lecture_times(manifest)[0], "voice": bool(config.GNANI_API_KEY),
             "language": config.lecture_language(manifest), "voice_name": config.lecture_voice(manifest),
+            "tutor": tutor_for(manifest),
             "model": config.model_name(manifest.get("llm_model") or config.LLM_MODEL),  # wrote this script
             "live_model": config.model_name(config.LLM_MODEL),  # answers doubts now
             "avatar": {"enabled": config.AVATAR_ENABLED, "model_url": config.AVATAR_MODEL_URL or None}}
+
+
+def tutor_for(manifest):
+    """Which video tutor the class sees (web/assets/tutor): "male" for a man's voice, "" (the default tutor) otherwise,
+    so the face matches the voice."""
+    return "male" if config.voice_gender(manifest) == "male" else ""
 
 
 @router.get("/lectures/{lecture_id}/visuals/{key}")
@@ -195,6 +202,11 @@ def _check_user(request, lecture_id):
         raise HTTPException(403, "You do not have access to this lesson")
 
 
+def _audio(path):
+    """A voice clip for the browser: the small AAC copy when there is one, else the WAV."""
+    return FileResponse(path, media_type="audio/mp4" if path.suffix == ".m4a" else "audio/wav")
+
+
 class TTSRequest(BaseModel):
     lecture_id: str
     text: str
@@ -209,11 +221,11 @@ def tts(body: TTSRequest, request: Request):
     from eris.classroom import voice
     clip = voice.clip_path(body.lecture_id, body.text)
     if clip.exists() and clip.stat().st_size > 44:  # made already (shared lessons are made ahead): no waiting
-        return FileResponse(clip, media_type="audio/wav")
+        return _audio(voice.web_clip(clip))
     if not _tts_slots.acquire(timeout=30):
         return Response(status_code=204, headers={"X-TTS-Error": "voice busy"})
     try:
-        return FileResponse(voice.ensure_clip(body.lecture_id, body.text), media_type="audio/wav")
+        return _audio(voice.web_clip(voice.ensure_clip(body.lecture_id, body.text)))
     except Exception as e:
         print(f"[tts] Gnani failed, browser voice will be used: {e}")  # the details stay in the server log
         return Response(status_code=204, headers={"X-TTS-Error": "voice unavailable"})

@@ -15,4 +15,5 @@ numpy
 fastapi
 uvicorn
 python-multipart
+av  # makes small AAC copies of the voice clips for browsers (classroom/voice.py web_clip)
 pymupdf  # draws the slides as pictures for the class (with LibreOffice; see material/slide_images.py)

@@ -16,9 +16,6 @@
   <link rel="stylesheet" href="css/studio.css">
   <link rel="stylesheet" href="css/classroom.css">
   <link rel="stylesheet" href="css/platform.css">
-  <script>
-    try { const t = localStorage.getItem("eris-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
-  </script>
 </head>
 <body>
   <div class="app signed-out" id="app">
@@ -50,10 +47,6 @@
         <button class="nav-item" id="signout-btn" title="Sign out">
           <svg viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></svg>
           <span>Sign out</span>
-        </button>
-        <button class="nav-item" id="theme-btn" title="Toggle theme">
-          <svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
-          <span>Theme</span>
         </button>
       </div>
     </aside>

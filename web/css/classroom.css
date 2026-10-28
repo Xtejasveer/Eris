@@ -82,7 +82,7 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .flow-shape { fill: var(--pill); stroke: var(--primary); stroke-width: 3; }
 .flow-block.question .flow-shape { fill: #fff7e6; stroke: #b96a12; }
 .flow-block.end .flow-shape { fill: #eef6f1; stroke: #17885d; }
-/* The app's icon rules stroke SVG in the theme colour, and dark mode makes text light: pin the board's own ink. */
+/* The app's icon rules stroke SVG in the text colour: pin the board's own ink for diagram text. */
 .flow-text { font-family: var(--hand); font-size: 20px; fill: #1b1c21; -webkit-text-fill-color: #1b1c21; stroke: none; }
 .flow-line { fill: none; stroke: var(--text-2); stroke-width: 2.5; }
 .flow-arrowhead { fill: var(--text-2); }
@@ -186,8 +186,7 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 /* ---------- the lesson canvas ---------- */
 .app.immersive { grid-template-columns: minmax(0, 1fr); }
 .app.immersive .sidebar { display: none; }
-/* The board is always light, like a real whiteboard, so the lesson keeps the light palette in dark mode too: a warm
-   clean board, dark ink, the notebook title in a green marker. */
+/* The board is a warm clean whiteboard: dark ink, the notebook title in a green marker. */
 .lesson { --ink: #1f201d; --board: #fbfbfa; --dot: #dcdfd8; --pill: #ffffff;
   --bg: #fbfbfa; --panel: #f5f6f3; --surface: #ffffff; --surface-2: #eef0ec; --surface-3: #e4e7e2; --border: #e6e8e4; --border-strong: #d9dcd6;
   --text: #1f201d; --text-2: #4a4c48; --muted: #5f625d; --primary: #1d1f20; --primary-hover: #000000; --primary-soft: #eceeea;

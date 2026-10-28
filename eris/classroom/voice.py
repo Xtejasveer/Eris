@@ -10,6 +10,7 @@ import re
 import threading
 import time
 import wave
+from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
@@ -189,6 +190,41 @@ def ensure_clip(lecture_id, text):
         language, voice = lecture_speech(lecture_id)
         synthesize(text, path, voice, language)
     return path
+
+
+WEB_BITRATE = 48_000   # AAC for the browser: about a tenth of the WAV, and speech sounds the same
+WEB_RATE = 24_000      # sample rate for the browser copy (Gnani's 48 kHz is more than a voice needs)
+
+
+def web_clip(path):
+    """A small AAC (.m4a) copy of a WAV clip for sending to browsers: the opening line of a lesson is ~2.4 MB as WAV,
+    which on a slow connection makes the voice start many seconds after the class. Made once, next to the WAV (which
+    stays for durations and lip timings). Falls back to the WAV if it can't be made."""
+    out = Path(path).with_suffix(".m4a")
+    if out.exists() and out.stat().st_mtime >= Path(path).stat().st_mtime:
+        return out
+    tmp = out.with_name(out.stem + ".part.m4a")
+    try:
+        import av
+        with av.open(str(path)) as src, av.open(str(tmp), "w", format="mp4", options={"movflags": "+faststart"}) as dst:
+            stream = dst.add_stream("aac", rate=WEB_RATE, layout="mono")
+            stream.bit_rate = WEB_BITRATE
+            resampler = av.AudioResampler(format=stream.format.name, layout="mono", rate=WEB_RATE)
+            for frame in src.decode(audio=0):
+                for f in resampler.resample(frame):
+                    for packet in stream.encode(f):
+                        dst.mux(packet)
+            for f in resampler.resample(None):
+                for packet in stream.encode(f):
+                    dst.mux(packet)
+            for packet in stream.encode(None):
+                dst.mux(packet)
+        tmp.replace(out)  # whole files only: a half-written copy is never served
+        return out
+    except Exception as e:
+        tmp.unlink(missing_ok=True)
+        print(f"[tts] sending the WAV for {Path(path).name}: no AAC copy ({type(e).__name__}: {e})")
+        return Path(path)
 
 
 def ensure_timing(clip, text):

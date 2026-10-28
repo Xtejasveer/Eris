@@ -524,6 +524,12 @@ def _durations(lecture_id, segments):
     return out
 
 
+def _tutor_now(lecture_id):
+    from eris.api.server_class import tutor_for
+    path = config.manifest_path(lecture_id)
+    return tutor_for(json.loads(path.read_text(encoding="utf-8")) if path.exists() else {})
+
+
 def _lock_version(conn, lesson):
     """Copy the approved script (and everything the player needs) into a read-only version file."""
     from eris.api.server_class import class_data
@@ -759,6 +765,8 @@ def post_class(post_id: int, request: Request):
             "live_model": config.model_name(config.LLM_MODEL),  # the locked copy's is from when it was shared
             # The slides drawn from the deck as it is now, so a copy locked before they existed shows them too
             "slide_images": slide_images(data.get("lecture_id") or post["lecture_id"]),
+            # the tutor for the lesson's voice now (a copy locked before tutors had names still gets the right face)
+            "tutor": _tutor_now(data.get("lecture_id") or post["lecture_id"]),
             "durations": _durations(data.get("lecture_id") or post["lecture_id"], data["segments"]), "course": course, "role": role, "progress": progress, "played": played}
 
 

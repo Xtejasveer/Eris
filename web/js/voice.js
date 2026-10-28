@@ -179,7 +179,8 @@ export class Voice {
   prefetch(text) { if (text && this.mode !== "browser") this.clip(text); }
 
   level() {
-    if (!this.speaking || this.paused) return 0;
+    // Silent until sound really comes out: while a clip is still on its way the tutor listens, not talks.
+    if (!this.speaking || this.paused || !this._sounding) return 0;
     if (this.mode === "gnani" && this._analyser && !this.audio.paused) {
       this._analyser.getByteTimeDomainData(this._buf);
       let sum = 0;
@@ -198,6 +199,7 @@ export class Voice {
     this._done = 0;
     this._browserFrac = 0;
     this.speaking = true;
+    this._sounding = false;  // set when the clip (or the browser voice) actually starts
     try {
       const url = await this.clip(text);
       if (gen !== this._gen) return;
@@ -210,7 +212,7 @@ export class Voice {
         await this._playUrl(url);
       }
       else { if (this.mode !== "gnani") this.mode = "browser"; await this._speakBrowser(text); }
-    } finally { this.speaking = false; this._done = 1; this._token = null; this._timing = null; }
+    } finally { this.speaking = false; this._sounding = false; this._done = 1; this._token = null; this._timing = null; }
   }
 
   _playUrl(url) {
@@ -219,6 +221,7 @@ export class Voice {
       this._cancel = () => { this.audio.pause(); done(); };
       this.audio.onended = done;
       this.audio.onerror = done;
+      this.audio.onplaying = () => { this._sounding = true; };
       this.audio.src = url;
       this.audio.playbackRate = this.rate;
       if (!this.paused) this.audio.play().catch(done);
@@ -243,6 +246,7 @@ export class Voice {
         const base = this.language.split("-")[0];
         const voice = speechSynthesis.getVoices().find(v => v.lang === this.language) || speechSynthesis.getVoices().find(v => v.lang?.startsWith(base));
         if (voice) u.voice = voice;
+        u.onstart = () => { this._sounding = true; };
         u.onend = u.onerror = () => { clearTimeout(fallback); resolve(); };
         let boundaries = false;
         u.onboundary = (e) => {
