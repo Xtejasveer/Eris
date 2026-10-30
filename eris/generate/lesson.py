@@ -177,7 +177,7 @@ def problem_sections(problems, findings, titles):
 # ---------- reading a lesson ----------
 
 def parse_lesson(text):
-    """[{title, items}] where items are {"kind": "say" | "note" | "code" | "output" | "figure", ...}, and the
+    """[{title, items}] where items are {"kind": "say" | "note" | "code" | "output" | "figure" | "sketch", ...}, and the
     format problems found while reading."""
     sections, problems, cur = [], [], None
     lines = text.splitlines()
@@ -220,6 +220,12 @@ def parse_lesson(text):
             continue
         if line.startswith("FIGURE "):
             cur["items"].append({"kind": "figure", "ref": line[7:].strip()})
+            continue
+        if line.startswith("SKETCH:"):
+            from eris.visuals.sketch import parse_items
+            items, bad = parse_items(line[7:])
+            problems += [f'section "{cur["title"]}": SKETCH "{line[7:].strip()[:60]}": {b}' for b in bad]
+            cur["items"].append({"kind": "sketch", "spec": line[7:].strip(), "items": items})
             continue
         if line == "END":
             continue
@@ -472,10 +478,52 @@ def unexplained_steps(sections, figs):
 FRAMING_RE = re.compile(r"\b(opening|introduction|recap|summary|review|closing|conclusion|wrap)", re.I)
 
 
+def mixed_script_words(text):
+    """Words that mix two writing systems: a Latin letter or a Bengali vowel sign inside a Hindi word ("शear",
+    "बढ़াइए"). The voice misreads them. A word is a run of letters with their vowel signs; every one of its letters
+    should belong to one script."""
+    import unicodedata
+    found, word = [], []
+    for ch in text + " ":
+        if unicodedata.category(ch)[0] in "LM":
+            word.append(ch)
+            continue
+        if word:
+            scripts = {unicodedata.name(c, "").split(" ")[0] for c in word} - {"", "COMBINING"}
+            if len(scripts) > 1:
+                found.append("".join(word))
+            word = []
+    return found
+
+
+def _unheard_notes(section):
+    """Notes of a section that nothing is said about: the next thing after them is a figure, a program or the end
+    of the section, so the class never hears about them (and the screen moves on at once)."""
+    items, out = section["items"], []
+    for k, it in enumerate(items):
+        if it["kind"] != "note":
+            continue
+        nxt = next((x for x in items[k + 1:] if x["kind"] != "note"), None)
+        if nxt is None or nxt["kind"] in ("figure", "code"):
+            out.append(it.get("title") or (it["lines"][0] if it["lines"] else ""))
+    return out
+
+
 def lesson_problems(sections, budget, figs, env, slide_count, extra=()):
     """What code can check exactly. Returns a list of problems for the writer."""
     from eris.material.figures import use_of
     problems = list(extra)
+    for s in sections:
+        # what is spoken or written must be readable by the voice: one writing system per word
+        texts = [it["text"] for it in s["items"] if it["kind"] == "say"]
+        texts += [ln for it in s["items"] if it["kind"] == "note" for ln in [it.get("title", "")] + it["lines"]]
+        for word in dict.fromkeys(w for t in texts for w in mixed_script_words(t)):
+            problems.append(f'section "{s["title"]}": "{word}" mixes two writing systems (a letter from another '
+                            "script slipped in); write the word fully in one script so the voice reads it right")
+        for title in _unheard_notes(s):
+            problems.append(f'section "{s["title"]}": nothing is said about the note "{title}": the next thing is a '
+                            "figure, a program or the end of the section. Put the note right before the sentences "
+                            "it sums up (show first, then talk)")
     titles = [s["title"] for s in sections]
     if not titles or not titles[0].lower().startswith("opening"):
         problems.append('the lesson must start with "# Opening"')
@@ -540,6 +588,9 @@ def content_states(sections, pictures=None):
                 st["narration"].append(it["text"])
             elif it["kind"] == "note":
                 st["notebook"].append(it["title"] + "\n" + "\n".join(it["lines"]))
+            elif it["kind"] == "sketch":
+                from eris.visuals.sketch import row_line
+                st["notebook"].append("sketch: " + row_line(it["items"]))
             elif it["kind"] == "code":
                 file = it["file"]
                 st["code"].append(f'{it["file"]}:\n{it["code"]}')
@@ -586,7 +637,8 @@ def material_text(lecture_id):
     with contextlib.redirect_stdout(io.StringIO()):  # load_folder reports each file; not needed here
         docs, _ = load_folder(config.data_dir(lecture_id))
     parts = [d.page_content for d in docs if d.metadata.get("source") != "persona.md"]
-    parts += [f"Picture on {p['where']}: {p['description']}" for p in load_pictures(lecture_id) if p.get("description")]
+    from eris.material.images import teaching
+    parts += [f"Picture on {p['where']}: {p['description']}" for p in teaching(load_pictures(lecture_id)) if p.get("description")]
     from eris.material import figures
     parts += [f"Chart or diagram on {f['ref']} ({f['title']}): {f['details']}" for f in figures.load(lecture_id)
               if f["kind"] in ("graph", "diagram", "flow")]  # chart data isn't slide text

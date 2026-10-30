@@ -115,7 +115,7 @@ SCRIPT_QUESTIONS = {
 }
 
 
-WRITTEN = ("NOTE", "NOTE_TITLE", "WRITE", "WRITE_CODE", "VISUAL", "FLOW_NEXT")
+WRITTEN = ("NOTE", "NOTE_TITLE", "WRITE", "WRITE_CODE", "VISUAL", "FLOW_NEXT", "SKETCH_ROW")
 HIGHLIGHTS = ("NOTE_HIGHLIGHT", "HIGHLIGHT", "SLIDE_HIGHLIGHT", "FLOW_HIGHLIGHT", "LOOK_BACK", "SLIDE_CIRCLE")
 PASS_AT = {"explains_clearly": 0.35, "pictures_explained": 0.35}  # fail only when Jev is fairly sure: a rewrite costs a round
 CONTENT_CHECKS = {"notes_match_code", "narration_matches_output", "narration_is_speech", "has_worked_example",
@@ -171,6 +171,9 @@ def section_states(segments, figs=None, pictures=None):
             cur["narration"].append(seg["text"])
         elif name in ("NOTE", "NOTE_TITLE", "WRITE"):
             cur["notebook"].append(args["text"])
+        elif name == "SKETCH_ROW":
+            from eris.visuals.sketch import row_line
+            cur["notebook"].append("sketch: " + row_line(args["parts"]))
         elif name == "WRITE_CODE":
             cur["code"].append(f"{args['file']}:\n{args['code']}")
         elif name == "RUN":
@@ -208,7 +211,8 @@ def section_states(segments, figs=None, pictures=None):
             key = f"pair_{len(cur['spoken_while_writing'])}"
             cur["spoken_while_writing"][key] = {"written": args.get("code") or args.get("text") or (
                                                     f"interactive graph: {args['title']}" if name == "VISUAL" else
-                                                    f"diagram block: {args.get('label', '')}" if name == "FLOW_NEXT" else ""),
+                                                    f"diagram block: {args.get('label', '')}" if name == "FLOW_NEXT" else
+                                                    f"sketch row: {args.get('items', '')}" if name == "SKETCH_ROW" else ""),
                                                 "said": segments[i + 1]["text"]}
             cur["_flags"][key] = flag
     return states

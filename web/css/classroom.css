@@ -378,9 +378,10 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .ls-live .checkpoint + .checkpoint, .ls-live .raised-note + .checkpoint { border-top: 1px dashed var(--border); padding-top: 8px; }
 .ls-live .raised-note { display: flex; flex-direction: column; gap: 8px; }
 /* While the teacher talks, the doubt box rests: pause the lesson (or wait for a question break) to ask. */
-.ls-ask.locked { opacity: .55; box-shadow: none; }
-.ls-ask.locked .ls-input { cursor: not-allowed; }
-.ls-ask.locked .ls-mic, .ls-ask.locked .ls-plus { cursor: not-allowed; background: #d9d1c4; }
+/* While the lesson plays the box is closed; a click anywhere on it (or Space) pauses and opens it to ask a doubt. */
+.ls-ask.locked { opacity: .55; box-shadow: none; cursor: pointer; }
+.ls-ask.locked > * { pointer-events: none; }  /* a disabled field sends no clicks: let them reach the box */
+.ls-ask.locked .ls-mic, .ls-ask.locked .ls-plus { background: #d9d1c4; }
 .ls-live .msg .bubble, .ls-drawer .msg .bubble { font-size: 13.5px; }
 .ls-live .msg.teacher .bubble { background: var(--surface-2); color: var(--ink); }
 .ls-live .msg.teacher.prompt .bubble { background: var(--primary-soft); }
@@ -413,3 +414,97 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .ls-kind { display: inline-block; margin-right: 6px; padding: 1px 7px; border-radius: 999px; background: #f3e5ee; color: #8a4f78; font-size: 10.5px; font-weight: 700; vertical-align: 2px; }
 .ls-mini { height: 26px; padding: 0 11px; border: 0; border-radius: 999px; background: var(--surface-2); color: var(--text-2); font: 600 12px var(--font); cursor: pointer; }
 .ls-mini:hover { color: var(--ink); }
+
+/* Sketch rows in the notebook ([SKETCH_ROW], sketch.js): pen-drawn boxes, arrows and marks, one numbered row at a time. */
+.sk-row { display: flex; align-items: center; gap: 18px; margin: 14px 0 22px; break-inside: avoid; font-style: normal; }
+.sk-num { flex: none; align-self: flex-start; margin-top: 11px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: #fff3b0;
+  border: 2px solid #c99a1c; color: #7a5a06; font: 700 16px/1 var(--hand); }
+.sk-parts { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 14px; min-width: 0; }
+.sk-row svg { flex: none; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+.sk-box { position: relative; display: inline-flex; align-items: center; min-height: 52px; padding: 6px 20px; font: 400 25px/1.2 var(--hand);
+  color: var(--ink); --sk-line: #5b8fd0; --sk-fill: #e3eefa; }
+.sk-box.sk-result { --sk-line: #d9705a; --sk-fill: #fbe3dd; }
+.sk-box.sk-good { --sk-line: #4f9f5f; --sk-fill: #e0f2e3; }
+.sk-box .sk-t { position: relative; z-index: 1; white-space: nowrap; }
+.sk-frame { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.sk-frame path { stroke: var(--sk-line); stroke-width: 2.6; fill: var(--sk-fill); transition: fill .3s; }
+.sk-box.drawing .sk-frame path { fill: transparent; }
+.sk-text { font: 400 25px/1.2 var(--hand); color: var(--ink); white-space: nowrap; }
+.sk-arrow { position: relative; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; min-height: 52px; }
+.sk-arrow svg path { stroke: #4a4c48; stroke-width: 2.2; }
+.sk-arrow-t { font: 400 17px/1.1 var(--hand); color: #6b6d68; white-space: nowrap; margin-bottom: 2px; }
+.sk-mark svg path { stroke-width: 3.4; }
+.sk-tick svg path { stroke: #d1a21a; }
+.sk-cross svg path { stroke: #c4493a; }
+.sk-icon svg path { stroke: #6a55b8; stroke-width: 2.4; }
+.sk-t.nb-focus { animation: nb-focus 2.4s ease; border-radius: 6px; }
+@media (max-width: 700px) {
+  .sk-row { gap: 10px; }
+  .sk-num { margin-top: 7px; }
+  .sk-box, .sk-text { font-size: 20px; min-height: 44px; padding: 4px 14px; }
+}
+
+/* ---------- the voice dock (bottom right): hold Space or the orb to speak a doubt ---------- */
+.vd { --vd-live: #ff5a4e; position: relative; display: flex; align-items: center; gap: 12px; min-height: 60px; max-width: min(440px, 38vw);
+  padding: 6px 6px 6px 20px; border-radius: 999px; background: var(--pill); color: var(--text-2);
+  box-shadow: 0 2px 14px rgba(28, 26, 23, .08), 0 0 0 1px rgba(28, 26, 23, .05); transition: background .25s, color .25s, box-shadow .3s, max-width .3s; }
+.vd-text { flex: 0 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; max-height: 4.2em; overflow: hidden;
+  font: 500 14px/1.4 var(--font); }
+.vd-hint { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.vd-kbd { font: 600 11px/1 var(--font); padding: 4px 7px 3px; border-radius: 6px; color: var(--ink); background: #f3f3f1;
+  border: 1px solid rgba(28, 26, 23, .1); border-bottom-width: 2px; }
+.vd-orb { position: relative; flex: none; width: 48px; height: 48px; border: 0; border-radius: 50%; display: grid; place-items: center;
+  background: var(--primary); color: #fff; cursor: pointer; touch-action: none; user-select: none; transition: transform .15s, background .25s, color .25s; }
+.vd-orb:active { transform: scale(.93); }
+.vd-orb svg { width: 20px; height: 20px; }
+.vd-wave { display: none; align-items: center; gap: 3px; height: 20px; }
+.vd-wave i { width: 3px; height: 100%; border-radius: 2px; background: #fff; transform: scaleY(.3); animation: vd-bar .9s ease-in-out infinite; }
+.vd-wave i:nth-child(2) { animation-delay: -.45s; animation-duration: .7s; }
+.vd-wave i:nth-child(3) { animation-delay: -.2s; animation-duration: 1.1s; }
+.vd-wave i:nth-child(4) { animation-delay: -.6s; animation-duration: .8s; }
+.vd-wave i:nth-child(5) { animation-delay: -.3s; }
+@keyframes vd-bar { 0%, 100% { transform: scaleY(.3); } 50% { transform: scaleY(1); } }
+
+/* listening: the dock turns dark and the words appear as they are heard */
+.vd[data-state="listening"] { max-width: min(560px, 46vw); background: #16181a; color: #fff; box-shadow: 0 14px 40px rgba(0, 0, 0, .28); }
+.vd[data-state="listening"] .vd-text { display: block; font-size: 16px; font-weight: 500; }  /* words flow as text */
+.vd[data-state="listening"] .vd-orb { background: var(--vd-live); animation: vd-pulse 1.4s ease-out infinite; }
+.vd[data-state="listening"] .vd-orb svg { display: none; }
+.vd[data-state="listening"] .vd-wave { display: flex; }
+.vd-w.new { animation: vd-in .35s ease-out; }
+@keyframes vd-in { from { opacity: 0; filter: blur(4px); transform: translateY(3px); } }
+@keyframes vd-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--vd-live) 55%, transparent); } 100% { box-shadow: 0 0 0 18px transparent; } }
+
+/* asked, and the teacher is thinking */
+.vd-quote { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-style: italic; }
+.vd-dots { display: inline-flex; gap: 4px; }
+.vd-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); animation: vd-dot 1s ease-in-out infinite; }
+.vd-dots i:nth-child(2) { animation-delay: .15s; }
+.vd-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes vd-dot { 0%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+.vd[data-state="thinking"] .vd-orb, .vd[data-state="sent"] .vd-orb, .vd[data-state="answering"] .vd-orb {
+  background: color-mix(in srgb, var(--primary) 14%, #fff); color: var(--primary); }
+
+/* a question break: a ring around the orb runs down until the lesson moves on */
+.vd[data-state="waiting"] { box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent), 0 2px 14px rgba(28, 26, 23, .08); }
+.vd[data-state="waiting"] .vd-orb::before { content: ""; position: absolute; inset: -6px; border-radius: 50%;
+  background: conic-gradient(var(--primary) calc(var(--left, 1) * 360deg), color-mix(in srgb, var(--primary) 14%, transparent) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px)); }
+.vd-count { color: var(--primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* typing (a tap of Space or a click on the orb) */
+.vd-input { display: none; flex: 1; min-width: 0; padding: 8px 0; border: 0; outline: none; resize: none; background: transparent;
+  color: var(--ink); font: 400 15px/1.4 var(--font); }
+.vd[data-state="typing"] { width: min(460px, 42vw); max-width: none; }
+.vd[data-state="typing"] .vd-input { display: block; }
+.vd[data-state="typing"] .vd-text { display: none; }
+.vd-send { flex: none; width: 36px; height: 36px; border: 0; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: #fff; cursor: pointer; }
+.vd:not([data-state="typing"]) .vd-send { display: none; }
+@media (max-width: 760px) {
+  .vd, .vd[data-state="listening"], .vd[data-state="typing"] { width: auto; max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vd-wave i, .vd-dots i, .vd[data-state="listening"] .vd-orb, .vd-w.new { animation: none; }
+  .vd-wave i { transform: scaleY(.7); }
+}

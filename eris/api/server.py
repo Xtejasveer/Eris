@@ -36,7 +36,7 @@ def _claim_lectures():
 
 # Every /api route needs a signed-in user, except signing in itself. Lecture routes need the lecture's teacher;
 # a student may use only the class-time routes, and only for a lecture shared with a course they are in.
-PUBLIC_API = re.compile(r"^/api/auth/(login|signup|logout|demo|options)$")
+PUBLIC_API = re.compile(r"^/api/(auth/(login|signup|logout|demo|options)|landing)$")
 LECTURE_PATH = re.compile(r"^/api/lectures/([^/]+)(/.*)?$")
 STUDENT_LECTURE_ROUTES = re.compile(r"^/(visuals/[^/]+|images/[^/]+|slides/[^/]+|doubts/(start|ask|reply)|recovery)$")
 TEACHER_ONLY = re.compile(r"^/api/(lectures|persona/template)$")

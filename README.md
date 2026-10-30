@@ -1,55 +1,111 @@
-# AI Substitute Teacher (v1)
+# Eris: the AI substitute that teaches your class, your way
 
-Index a teacher's files, generate a lecture script with inline markers, let the teacher
-approve it, then run a class session that previews the script and answers student doubts.
+When a teacher is away, Eris teaches their lesson for them. The teacher uploads their slides or notes and fills in a
+short persona; Eris writes a lecture script in the teacher's voice, checks it for quality, and the teacher approves
+it. Students then join the course with a class code and take the lesson in the browser: a voiced tutor teaches on
+the teacher's own slides, a notebook, a code editor and interactive graphs, and answers their doubts live.
 
 ```
-index ──► generate (draft) ──► approve ──► render (audio) ──► session
+upload + persona ──► index ──► generate (draft) ──► checks (code + Jev) ──► approve ──► share ──► students learn
 ```
 
-**How a class runs.** The LLM writes the script once and the teacher approves it. In class,
-a plain-code *player* (`eris/classroom/session.py`) walks the approved `script.json` one segment at a time:
-narration plays (Gnani TTS), then the next action runs on the board, then the next narration.
-Each step finishes before the next starts, so speech and actions can't drift apart.
-LLMs are used only for student doubts (`eris/classroom/doubt_agent.py`) and for a one-line recovery when an
-action fails (`eris/classroom/recovery.py`). They get a read-only snapshot of the class; only the player
-moves forward.
+**How a class runs.** The LLM writes the script once and the teacher approves it. In class, a plain-code *player*
+(`web/js/player.js` in the browser; `eris/classroom/session.py` in the terminal) walks the approved `script.json` one
+segment at a time: narration plays (Gnani TTS), then the next action runs on the screen, then the next narration.
+Each step finishes before the next starts, so speech and actions can't drift apart. During a class, LLMs are used
+only for student doubts (`eris/classroom/doubt_agent.py`) and for a one-line recovery when an action fails
+(`eris/classroom/recovery.py`). They get a read-only snapshot of the class; only the player moves forward.
 
-Each command is a separate run. They share state only through files in
-`workspace/lectures/<id>/` and the Chroma collection named `<id>`.
+## Features
+
+**For teachers**
+- **Courses, chapters, topics and lessons.** A course has a class code students join with. Each topic holds its
+  lecture, optional **prerequisite** lessons (the groundwork to watch first) and its study material, all in one
+  place on the course's **Classwork** page.
+- **Create lecture / Edit lecture.** One workspace per lesson: upload the material (PPTX, PDF, DOCX, TXT or MD), fill
+  in the teacher persona, pick the teaching language and voice, and click **Generate script**. Then read it in
+  **Preview**, see the checks in **Quality**, change it in **Edit**, try it in **Classroom** and approve it.
+- **No time to set.** The lesson is as long as the material needs (see "How long a lesson is", below), up to 30
+  minutes of speaking.
+- **Quality checks before anyone sees it.** Code checks and Jev (a separate judging model) check every script; real
+  problems go back to the writer automatically (see "Quality checks").
+- **Locked versions and sharing.** Sharing locks the approved script as a version and makes its voice clips ahead.
+  A newer approved script reaches students only when the teacher shares the update.
+- **Attendance.** A student is present once they have heard every line of a shared lesson. Each lesson row in
+  Classwork shows "present" and "watching" counts and opens the full list.
+- **Home page.** Counts, every lesson with how far it has come (material, script, approved, shared, watched), and
+  the one thing that needs doing next. Clicking a lesson opens its lecture workspace.
+
+**For students**
+- Join a course with its class code, then see every topic's prerequisite, lecture and study material together.
+- Take a lesson at their own pace: start, continue, pause, skip back. Progress is saved.
+- Ask doubts by typing or speaking, at the question breaks or any time, and mark a line as confusing.
+
+**Teaching**
+- **The teacher's real slides.** Slides are shown as pictures of the deck itself (PowerPoint, or a PDF of lecture
+  notes when there is no PowerPoint), with the line being read highlighted and pictures circled by a pen.
+- **Four screens:** notebook, slides, code, and a visual board with interactive graphs and diagrams drawn block by
+  block. Only the screens the material supports are used.
+- **10 languages:** English, Hindi, Tamil, Telugu, Kannada, Malayalam, Marathi, Bengali, Gujarati and Punjabi, with a
+  voice that matches the teacher (a woman's or a man's voice, and the grammar to match).
+- **A video tutor** (a woman or a man, matching the voice) that talks while the voice speaks; a 3D lip-synced avatar
+  is the fallback.
+
+**Doubts**
+- An agent that knows where the class is, searches the teacher's material and teaches its answer on the same
+  screens. "No doubts" in any language moves on instantly.
+- Every question passes guardrails (prompt injection, harmful requests, abuse, personal data) before the agent
+  sees it, and every answer is checked by Jev (does it answer, is it correct, is it safe) before it plays.
+- Answers start speaking after their first sentence; the rest is voiced while it plays.
+
+**Safety and deployment**
+- Programs run only in a sandbox (Docker on a server, the OS sandbox on a Mac) with no network; if no sandbox is
+  available, code runs are switched off instead of running unprotected. Students' doubt answers never run code.
+- Teachers are created by the admin; the sign-in page asks "I'm a student / I'm a teacher" and the server checks it
+  matches the account.
+- One `docker compose` deploy with automatic HTTPS (Caddy). Step-by-step guides: `deploy/azure.md` (Azure for
+  Students) and `deploy/README.md` (Google Cloud).
 
 ## Project layout
 
 ```
-main.py                 command line: serve / index / generate / approve / render / video / session
+main.py                 command line: serve / seed / index / generate / approve / render / session / tutor-video / ...
 eris/                   the Python package
-  config.py             settings (.env), paths and the lecture manifest
+  config.py             settings (.env), paths, languages and voices, the lecture manifest
   persona.py            reads persona.md
   prompts.py            every agent's system prompt
   tools.py              the agents' tools (search the material, run code, read the board, ask the class)
-  material/             reading the teacher's files: indexer.py (knowledge base), figures.py (diagrams,
-                        step lists, charts and which environments the material unlocks)
-  generate/             making the script: research + writer (script_agent.py), the generate command
+  guardrails.py         Jev's checks on doubt questions and answers
+  sandbox.py            where programs run (Docker or the OS sandbox; off when neither is there)
+  material/             reading the teacher's files: indexer.py (knowledge base), deck.py (which file is the slide
+                        deck: a PPTX, else a PDF), slide_images.py (slides as pictures), images.py (pictures, read
+                        by a vision model), figures.py (diagrams, step lists, charts and which screens the material
+                        unlocks)
+  generate/             making the script: depth.py (how long each part is), research + writer (script_agent.py),
+                        the lesson (lesson.py) and its staging (staging.py), the generate command
                         (script_writer.py), checks and repairs (script_pipeline.py, script_checks.py,
-                        script_fixes.py, format_fixes.py), the parser (script_parser.py) and the judge
-                        (script_judge.py, quality_loop.py)
+                        script_fixes.py, format_fixes.py), the parser (script_parser.py) and Jev (script_judge.py)
   visuals/              the Visual board: flow diagrams (flow_diagram.py) and interactive graphs
                         (visual_builder.py, visual_controls.py, visual_smoke.mjs)
-  classroom/            running a class: doubt_agent.py, class_board.py, session.py (terminal class),
-                        actions.py, recovery.py, voice.py
-  api/                  the website backend: server.py, server_class.py, jobs.py
+  classroom/            running a class: doubt_agent.py, class_board.py, session.py (terminal class), actions.py,
+                        recovery.py, voice.py, tutor_video.py
+  platform/             accounts and courses: db.py (SQLite), auth.py (sign-in), access.py (who sees what),
+                        seed.py (demo data)
+  api/                  the website backend: server.py, server_platform.py (courses, lessons, attendance),
+                        server_class.py (the class, voice, doubts), jobs.py
 web/                    the website (plain HTML/CSS/JS, no build step)
-templates/persona.md    the example persona
+templates/              the example persona, and demo lessons for `seed`
+deploy/, Dockerfile, docker-compose.yml   running it on a server
 docs/                   design notes
-talking_video.py, musetalk_modal.py   photorealistic teacher video (MuseTalk on Modal)
-data/, workspace/       lecture material and generated files (local, not in git)
+data/, workspace/       lecture material, generated files and the database (local, not in git)
 ```
 
 A module's own command runs with `python -m`, e.g. `python -m eris.generate.script_parser script.md`.
 
 ## 1. Setup (about 5 minutes)
 
-You need [uv](https://docs.astral.sh/uv/) and an [OpenRouter](https://openrouter.ai) API key.
+You need [uv](https://docs.astral.sh/uv/) and an [OpenRouter](https://openrouter.ai) API key. For slides shown as
+pictures from PowerPoint, install [LibreOffice](https://www.libreoffice.org) (PDF decks need nothing extra).
 
 ```bash
 uv venv --python 3.12
@@ -57,22 +113,29 @@ source .venv/bin/activate
 uv pip install -r requirements.txt
 uv pip install -r requirements-extras.txt  # optional: teacher video (modal) and better lip sync (faster-whisper)
 cp .env.example .env
+python main.py seed                        # optional: demo accounts and courses
 ```
 
-Edit `.env`:
+Edit `.env` (every setting is explained in `.env.example`):
 
 | Variable | Meaning |
 |---|---|
 | `OPENROUTER_API_KEY` | required |
-| `LLM_MODEL` | required: an OpenRouter model that supports **tool calling**, e.g. `openai/gpt-4o-mini` |
+| `LLM_MODEL` | required: an OpenRouter model that supports **tool calling**, e.g. `anthropic/claude-haiku-5.5` |
 | `EMBED_MODEL` | embedding model (default `baai/bge-m3`) |
-| `LECTURE_DURATION_MIN` | default total lecture time in minutes (15): runs the class clock; each lecture can set its own |
-| `SPEAKING_MIN` | default speaking time in minutes (5): the only time the script writer is given |
-| `SPEAKING_WPM` | speaking speed: speaking time x this = the script's word budget (default 115). Measure your voice with `python main.py measure-voice`, which saves it here |
-| `GNANI_API_KEY` | needed only for voice (`render`, `session --voice/--mic`). Get one at app.gnani.ai/voice |
-| `TTS_VOICE` / `TTS_LANGUAGE` | Gnani Timbre v2.5 voice and language (default `Kaveri`, `en-IN`) |
-| `TTS_SPEED` | 0.85 to 1.15 (default 0.85, the slowest Gnani allows) |
-| `STT_LANGUAGE` | language for spoken doubts (default `en-IN`) |
+| `JUDGE_MODEL` / `JUDGE_ENABLED` | Jev, the model that checks scripts and doubt answers (default `typesafe/jev-1.13`, on) |
+| `GUARDRAILS_ENABLED` / `DOUBT_JUDGE` | check doubt questions and answers (both on by default) |
+| `VISION_MODEL` / `VISUAL_MODEL` | reads pictures in the material / builds interactive graphs (default `LLM_MODEL`) |
+| `SPEAKING_WPM` | the voice's real speed with pauses (default 115): minutes x this = words. Measure it with `python main.py measure-voice` |
+| `GNANI_API_KEY` | Gnani voice (TTS) and spoken doubts (STT). Without it the browser's own voice is used |
+| `TTS_VOICE` / `TTS_LANGUAGE` / `TTS_SPEED` | default voice and language (`Kaveri`, `en-IN`); each lesson picks its own |
+| `ERIS_DEMO_LOGINS` | one-click demo accounts on the sign-in page (turn off for real users) |
+| `ERIS_TEACHER_SIGNUP` | let anyone sign up as a teacher (off: only students sign up) |
+| `ERIS_STUDENT_CODE_RUNS` | let students' doubt answers run programs (off) |
+| `ERIS_SANDBOX` | where programs run: `auto`, `docker`, `os` or `off` |
+| `ERIS_DOMAIN` / `ERIS_SECURE_COOKIES` | on a server: the domain for HTTPS, and HTTPS-only sign-in cookies |
+
+`LECTURE_DURATION_MIN` and `SPEAKING_MIN` are only used when the depth plan can't be made.
 
 ## 2. The website (easiest way)
 
@@ -80,25 +143,55 @@ Edit `.env`:
 python main.py serve        # then open http://127.0.0.1:8000
 ```
 
-- **Home:** pick a Lecture in the sidebar, drop the study material on the upload area, check
-  the persona fields (prefilled from `templates/persona.md`), set the Topic, and click
-  **Generate script**. The log streams while it indexes and writes. The script appears on the
-  right as a readable document (speech, notebook cards, code, actions). **Edit** it if needed,
-  then **Approve**. **Reset lecture** clears that lecture's knowledge base (its Chroma
-  collection) and everything generated, but keeps the uploaded material and persona.
-- **Classroom:** click **Start class** (the sidebar folds into an icon rail to give the stage more room). The left panel shows the teacher, a voice visual and the
-  caption. The right panel is the stage with three environments: **Notebook** (a ruled page where
-  notes are hand-written), **Slides**, and **Code** (editor plus terminal). Only the AI teacher's
-  script switches between them; the indicator can't be clicked. At each question break, type a
-  student's question (or use Dictate in Chrome/Safari). The doubt agent can answer on the screen
-  too: it may write notes and small programs (`answer1.py`, ...) that are checked and run by the
-  backend without teacher approval.
-- **Voice:** with `GNANI_API_KEY` set, narration uses Gnani Timbre v2.5 (cached per line).
-  Without it, the browser's built-in voice is used, so the site works with no voice key.
+1. **Sign in.** Choose "I'm a teacher" or "I'm a student". With `python main.py seed`, demo accounts sit under the
+   form: three teachers with demo courses, three students, and a blank **Test Teacher** and **Test Student** with
+   nothing in them, to try everything from the start.
+2. **Make a course** (teacher). On Home, **New course**. In its **Classwork**, add a chapter, a topic, then a
+   **Lesson** or a **Prerequisite**.
+3. **Create the lecture.** Click **Create lecture** on the lesson: upload the material, fill in the persona (or
+   **Use example**), set the topic, language and voice, and **Generate script**. The progress streams while it
+   indexes, plans, writes and checks.
+4. **Review.** Read the script in **Preview**, see each check in **Quality**, change it in **Edit**, and run it in
+   the **Classroom** tab. Approve it, then **Share** it from Classwork.
+5. **Take the class** (student). Join with the class code, open the lesson and press play. At each question break,
+   type or speak a doubt.
+6. **Back as the teacher.** Classwork shows each shared lesson's attendance; the lecture workspace shows its
+   versions.
 
-How it fits together: the browser runs the player (it's where the audio plays, so it keeps
-narration and actions in order). The backend (`eris/api/server.py`, `eris/api/server_class.py`, `eris/api/jobs.py`)
-only generates, approves, makes audio, runs code, writes recovery lines and runs doubt-agent turns.
+**Voice:** with `GNANI_API_KEY` set, narration uses Gnani Timbre v2.5 (cached per line, made ahead when a lesson is
+shared). Without it, the browser's built-in voice is used, so the site works with no voice key.
+
+How it fits together: the browser runs the player (it's where the audio plays, so it keeps narration and actions in
+order). The backend generates, checks, approves, makes audio and slide pictures, runs code in the sandbox, keeps
+courses, progress and attendance in SQLite (`workspace/eris.db`), and runs doubt-agent turns.
+
+### How long a lesson is
+
+The teacher never sets a time. `eris/generate/depth.py` splits the material into sub-topics and asks Jev six yes/no
+questions about how the material explains each one (a specific case? steps? builds on another part? a comparison?
+an exception? a task for students?). Jev's confidence in each yes, plus one per extra slide, gives a score: under
+2.0 is **Brief** (0.6 min), 3.5 or more is **In depth** (2.2 min), **Normal** (1.2 min) between. A "Must cover" item
+is never brief; the lesson's main idea is always in depth. Opening, recap and closing add 1.4 minutes.
+
+Minutes x `SPEAKING_WPM` gives each section its word budget, and a section that comes out far too short goes back to
+the writer. If the plan needs more than 30 minutes of speaking (about 35 minutes of lesson), every part is shortened
+by the same share and Studio suggests splitting the material into two lessons.
+
+### Quality checks
+
+`generate` writes in three steps (research, the lesson's teaching, then staging for the screen) and checks after
+each one:
+
+- **Code checks** (exact): the script's format, every program runs, no programs if the material has none, every
+  figure used is in the material, calculation steps are explained one at a time, each section is near its planned
+  length, and staging didn't change a single spoken sentence.
+- **Jev** (`eris/generate/script_judge.py`) answers yes/no questions with a confidence: covers "Must cover", stays
+  away from "Avoid", notes and narration match the programs and their output, graphs match what is said (these are
+  blockers), plus the opening and closing, the teacher's style, natural speech, clear and true explanations,
+  pictures explained and highlights that fit (minor). A check passes at 0.5.
+- **What happens:** code problems and Jev blockers go back to the writer (at most 2 rounds, only the failing
+  sections), and the best version is kept. Minor findings show as tips in Studio's **Quality** tab, and repairs made
+  by code are listed as auto-fixes.
 
 ## 3. Add a lecture from the command line
 
@@ -108,8 +201,8 @@ Put the teacher's files in `data/<id>/`:
 ```
 data/<id>/
 ├── persona.md      # required (copy templates/persona.md)
-├── lecture.pptx    # at least one PPTX, PDF or DOCX
-├── notes.pdf
+├── lecture.pptx    # at least one PPTX, PDF or DOCX; the PPTX is the slide deck
+├── notes.pdf       # with no PPTX, the first PDF is the deck: each page is a slide
 └── lab.docx        # code in Courier/Consolas font is kept as code
 ```
 
@@ -129,7 +222,7 @@ everything that is missing at once. A value can continue on the next lines.
 ## 4. Run it from the command line
 
 ```bash
-python main.py index    --lecture example    # build the knowledge base (set the topic and length in Studio)
+python main.py index    --lecture example    # build the knowledge base (set the topic in the lecture workspace)
 python main.py generate --lecture example    # write the script -> status: draft
 python main.py approve  --lecture example    # validate script.md -> status: approved
 python main.py render   --lecture example    # optional: pre-render narration audio, real duration
@@ -164,6 +257,11 @@ python main.py index   --lecture example --no-reset         # add without wiping
 python main.py doubts  --lecture example                    # test one doubt checkpoint
 python main.py status  --lecture example                    # print lecture.json
 python main.py session --lecture example --force            # run a draft (warns)
+python main.py stage   --lecture example --runs 3           # stage the saved lesson again and report (saves nothing)
+python main.py seed                                         # demo accounts and courses (safe to run again)
+python main.py measure-voice                                # measure the voice's speed, save SPEAKING_WPM
+python main.py tutor-video --idle idle.mp4 --talking talk.mp4 [--name male]   # make the classroom's video tutor
+python main.py serve --host 0.0.0.0 --port 8000             # accept outside connections (in a container)
 ```
 
 During a session, type a student's doubt at each `Student doubt` prompt, or press
@@ -176,16 +274,23 @@ re-generating resets to `draft`.
 
 ```
 workspace/lectures/<id>/
-├── lecture.json      # status, settings, parsed persona
-├── outline.json      # slide titles / sections / pages
+├── lecture.json      # status, settings, parsed persona, screens, depth plan
+├── outline.json      # slide titles / sections / pages (the deck marked, with its slide count)
+├── lesson.md         # the teaching before staging (step 2), kept for review
 ├── script.md         # the script (edit this)
 ├── script.json       # parsed segments with expected outputs
+├── judge.json        # Jev's findings, rounds and auto-fixes (Studio's Quality tab)
+├── images.json, figures.json   # pictures in the material and what the vision model saw; diagrams and charts
+├── slides/           # the deck drawn as pictures, with every text line's and picture's position
+├── visuals/          # built interactive graphs
 ├── script_failed.md  # only if generation could not produce a valid script
 ├── doubts_log.md     # every student question and answer
 ├── session_state.json# player position + event log (pending/running/done/failed)
-├── audio/            # cached narration clips (WAV)
+├── audio/            # cached narration clips (WAV, plus small AAC copies for browsers)
 ├── board/            # code files the class saw, run live
 └── tmp/              # code files from dry runs
+workspace/eris.db     # accounts, courses, lessons, versions, progress, attendance, doubt logs (SQLite)
+workspace/versions/   # each approved script version that was shared
 chroma_db/            # the vector store
 ```
 
@@ -266,14 +371,14 @@ page and view the class was on.
 ### What the AI teacher may use: environments
 
 The classroom has four environments: **notebook**, **slides**, **code** and **visual**. The Visual board holds
-two kinds of pictures, each in its own tab: flow **diagrams** and interactive **graphs**. The notebook and slides
-are always used. Code and the Visual board depend on the teacher's material, so the agent never invents a program
+two kinds of pictures, each in its own tab: flow **diagrams** and interactive **graphs**. The notebook is always
+used. The slides, code and the Visual board depend on the teacher's material, so the agent never invents a program
 for a history class or a picture the material doesn't have:
 
 | Environment | Used when |
 |---|---|
 | Notebook | always |
-| Slides | the material has a PPTX deck |
+| Slides | the material has a deck: a PPTX, or (with no PPTX) a PDF whose pages are the slides (`eris/material/deck.py`) |
 | Code (`WRITE_CODE`, `RUN`, ...) | the material contains code (several code lines in the slides, PDF or DOCX) |
 | Visual: diagrams (`FLOW`, ...) | the slides, PDF or DOCX have a diagram, or a written list of steps (1. 2. 3., Step 1/2/3, or A → B → C) |
 | Visual: graphs (`VISUAL`, ...) | the slides contain a chart (`VISUALS_ENABLED=true`, the default); otherwise it is explained on its slide |
@@ -296,7 +401,10 @@ word written in it (OCR), a diagram's steps and a chart's data. Results are cach
 - A diagram picture with steps can be drawn as a flow, a chart picture recreated as a graph, and any other picture
   is listed for the writer as something to show and explain.
 - The doubt agent's board says what the picture on each slide shows.
-- In class, the Slides view shows the slide's real pictures beside its text.
+- In class, the Slides view shows each slide itself as a picture (`eris/material/slide_images.py`: LibreOffice draws a
+  PPTX, a PDF is drawn directly). The position of every text line and picture is saved, so `SLIDE_HIGHLIGHT` sweeps
+  a highlighter over the exact line on the picture and `SLIDE_CIRCLE` draws a pen circle around a picture. Pictures
+  that are icons or one flat colour (a box's shadow in a PDF) are left out.
 
 ### Flow diagrams, drawn block by block
 
@@ -359,9 +467,15 @@ The parser checks every `VISUAL_SET` against them. A visual without a slider is 
 - Settings (`.env`): `VISUALS_ENABLED=true`, `VISUAL_MODEL` (defaults to `LLM_MODEL`; a stronger coding model
   draws better graphs). Needs `node` for the test run (skipped without it).
 
-## 7. Talking avatar
+## 7. The tutor and the talking avatar
 
-The classroom shows a 3D teacher whose lips move with the voice, who blinks, looks at the class, and moves
+**The video tutor (default).** Beside the caption, the classroom shows a short looping video of the tutor: the
+talking loop while the voice speaks, the idle loop otherwise. There are two tutors, a woman and a man; each lesson
+shows the one that matches its voice. Make a tutor from an idle clip and a talking clip with
+`python main.py tutor-video --idle idle.mp4 --talking talking.mp4` (add `--name male` for the man's); it crops to
+the face and writes `web/assets/tutor/`.
+
+**The 3D avatar (fallback).** If the videos can't load, the classroom shows a 3D teacher whose lips move with the voice, who blinks, looks at the class, and moves
 naturally. It is free and open source, runs entirely in the browser (no GPU server, no API keys), and does not
 change how the TTS makes audio. The investigation and design are in `docs/avatar-plan.md`.
 
@@ -472,7 +586,7 @@ Not used, on purpose: TalkingHead's other sample avatars (non-commercial license
 ## 8. Troubleshooting
 
 - **The model does not use tools / errors about tools.** `LLM_MODEL` must support tool
-  calling. Check the model page on OpenRouter for "tools", or try `openai/gpt-4o-mini`.
+  calling. Check the model page on OpenRouter for "tools", or try `anthropic/claude-haiku-5.5`.
 - **`Missing required settings in .env`.** Copy `.env.example` to `.env` and set
   `OPENROUTER_API_KEY` and `LLM_MODEL`.
 - **Chroma metadata errors.** Chroma accepts only str, int, float and bool metadata.
@@ -489,6 +603,12 @@ Not used, on purpose: TalkingHead's other sample avatars (non-commercial license
   update `gnani-vachana` if you still see this.
 - **Gnani `429 RATE_LIMITED`.** Gnani allows one request at a time per key. `eris/classroom/voice.py` queues
   calls and retries automatically; if a clip still fails, the browser voice is used for that line.
-- **The website shows "Approve the script on the Home page first".** Class needs status `approved`
-  (or `completed` to re-run). Saving an edit resets it to `draft`.
+- **The classroom says "This class isn't ready yet".** Its script needs to be generated and approved first
+  (Create lecture / Edit lecture). Saving an edit resets it to `draft`.
+- **Slides show as text, not pictures.** A PPTX needs LibreOffice (`soffice`) to be drawn; install it and reload. A
+  PDF deck is drawn without it.
+- **Code lessons can't run programs.** No sandbox was found, so code runs are off: start Docker (and
+  `docker pull python:3.12-slim`), or set `ERIS_SANDBOX=os` on a Mac.
+- **A sign-in is refused with "This is a teacher account".** Choose "I'm a teacher" (or "I'm a student") to match
+  the account, then sign in again.
 - **`Lecture not approved`.** Run `approve`, or use `session --force` for a quick look.

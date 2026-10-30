@@ -85,7 +85,7 @@ def _notebook_errors(segments):
 
 
 def _limit_errors(segments):
-    """Rules from the prompt that models often ignore: short notes, few question breaks."""
+    """Rules from the prompt that models often ignore: short notes."""
     errors, section = [], "Opening"
     for seg in segments:
         if seg.get("name") == "SECTION":
@@ -96,10 +96,6 @@ def _limit_errors(segments):
                 errors.append(f'section "{section}": the [NOTE] starting "{lines[0][:40]}" has {len(lines)} lines; '
                               "keep each [NOTE] to 2-6 short lines (split it, or show a long "
                               "trace with code instead)")
-    checks = sum(1 for s in segments if s.get("name") == "DOUBT_CHECK")
-    if checks > config.MAX_DOUBT_CHECKS + 1:
-        errors.append(f"the script has {checks} [DOUBT_CHECK] markers; use at most {config.MAX_DOUBT_CHECKS} "
-                      "(after the major blocks) plus the final one on the last line. Remove the extra ones")
     return errors
 
 
@@ -131,23 +127,6 @@ def _flow_errors(segments):
         if shown < len(blocks):
             errors.append(f'the diagram "{fid}" draws only {shown} of its {len(blocks)} blocks; add a [FLOW_NEXT id="{fid}"] '
                           "for each remaining block, each followed by a sentence naming it")
-    return errors
-
-
-def _doubt_check_errors(segments):
-    """The prompt asks for a question break after each of the first three concept sections and one at the end."""
-    from eris.generate.script_fixes import concept_sections
-    want = min(config.MAX_DOUBT_CHECKS, len(concept_sections(segments))) + 1
-    have = sum(1 for s in segments if s.get("name") == "DOUBT_CHECK")
-    errors = []
-    if have < want:
-        errors.append(f"the script has {have} [DOUBT_CHECK](s); put one at the end of each of the first "
-                      f"{want - 1} concept sections and one as the very last line ({want} in all)")
-    errors += _flow_errors(segments)
-    from eris.generate.script_fixes import early_doubt_checks
-    for section in early_doubt_checks(segments):
-        errors.append(f'section "{section}" asks for doubts in the middle: move its [DOUBT_CHECK] to the end of the '
-                      "section, after everything it teaches (just before the next [SECTION])")
     return errors
 
 
@@ -212,7 +191,7 @@ def check_generated(text, budget, slide_count, figs=None, env=None):
                       "your final message must contain the WHOLE script, not just the end")
     errors += _notebook_errors(segments)
     errors += _limit_errors(segments)
-    errors += _doubt_check_errors(segments)
+    errors += _flow_errors(segments)
     for seg in segments:
         if seg.get("name") == "HIGHLIGHT" and "text" not in seg["args"]:
             errors.append(f'[HIGHLIGHT file="{seg["args"]["file"]}" lines="{seg["args"]["lines"]}"] uses a line number; '
@@ -297,7 +276,8 @@ def run_generate(lecture_id):
     persona = manifest["persona"]
     from eris.classroom.actions import _load_slides
     from eris.material.images import load as load_pictures
-    pictures, slides = load_pictures(lecture_id), _load_slides(lecture_id)
+    from eris.material.images import with_labels
+    pictures, slides = with_labels(load_pictures(lecture_id), lecture_id), _load_slides(lecture_id)
     material = material_text(lecture_id)
     # How long the lesson is comes from the material: each sub-topic gets the depth its material gives it (depth.py).
     # Without a plan (the split failed) the old way is used: the lecture's speaking time, shared out evenly.

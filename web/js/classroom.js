@@ -11,7 +11,7 @@ import { api } from "./api.js";
 import { h, icon, toast, modal, initials, formatDuration, modelTag, kindTag, lectureHref, lectureLabel } from "./ui.js";
 import { Stage } from "./stage.js";
 import { Voice, createDictation } from "./voice.js";
-import { Player, Stopped, ClassClock } from "./player.js";
+import { Player, Stopped, ClassClock, isNoDoubt } from "./player.js";
 import { renderScriptDoc } from "./script-view.js";
 import { checkpoints } from "./checkpoints.js";
 
@@ -68,7 +68,7 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
   const sectionText = h("span", { class: "ls-section" }, info.topic);
   const stateText = h("span", { class: "ls-state" }, "Ready");
   const topLeft = h("div", { class: "ls-top-left" },
-    h("button", { class: "ls-panel-btn", title: "Outline and questions", "aria-label": "Outline and questions",
+    h("button", { class: "ls-panel-btn", title: "Outline and transcript", "aria-label": "Outline and transcript",
       onclick: () => toggleDrawer() }, icon("panel")),
     h("div", { class: "ls-where" }, h("strong", {}, lessonKind === "prerequisite" ? h("span", { class: "ls-kind" }, "Prerequisite") : null, info.topic),
       h("small", {}, stateText, " · ", sectionText)));
@@ -120,23 +120,13 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
     tutorIdle, tutorTalking, tutor3d, h("span", { class: "ls-tutor-ring" }));
   const caption = h("div", { class: "ls-caption" }, tutor, captionText);
 
-  const askInput = h("textarea", { class: "ls-input", rows: 1, placeholder: "Ask a doubt…" });
-  const sendBtn = h("button", { class: "ls-send hidden", title: "Send (Enter)" }, icon("arrowRight"));
-  const plusMenu = h("div", { class: "ls-menu hidden" });
-  const plusBtn = h("button", { class: "ls-plus", title: "More", onclick: (e) => { e.stopPropagation(); openMenu(); } }, icon("plus"));
-  const micBtn = h("button", { class: "ls-mic", title: "Speak your doubt" }, icon("mic"));
-  const askBox = h("div", { class: "ls-ask" }, plusBtn, askInput, modelTag(info.live_model || info.model, "ls-model"), sendBtn, micBtn, plusMenu);
-
-  const waitBar = h("i");
-  const waitText = h("span");
-  const waitTimer = h("div", { class: "wait-timer hidden", role: "timer", "aria-live": "polite" }, h("div", { class: "wait-bar" }, waitBar), waitText);
-  const liveThread = h("div", { class: "ls-live-thread" });
-  // The chat shows only what the teacher said: never script markers or board content.
-  const spokenOnly = (text) => String(text || "").replace(/\[\/?[A-Z_]+(?:\s[^\]]*)?\]/g, " ").replace(/\s{2,}/g, " ").trim();
-  const liveCard = h("div", { class: "ls-live hidden" },
-    h("div", { class: "ls-live-head" }, icon("question"), h("strong", { class: "ls-live-title" }, "Questions"),
-      h("button", { class: "ls-mini", title: "Hide", onclick: () => liveCard.classList.add("hidden") }, "Hide")),
-    liveThread, waitTimer);
+  // ---------- the voice dock (bottom right): hold Space (or the orb) and speak a doubt; what is heard shows live ----
+  const askInput = h("textarea", { class: "vd-input", rows: 1, placeholder: "Type your doubt…" });
+  const sendBtn = h("button", { class: "vd-send hidden", title: "Ask (Enter)" }, icon("arrowRight"));
+  const dockText = h("div", { class: "vd-text", "aria-live": "polite" });
+  const dockOrb = h("button", { class: "vd-orb", title: "Hold to ask a doubt (or hold Space)", "aria-label": "Hold to ask a doubt" },
+    h("span", { class: "vd-wave" }, [0, 1, 2, 3, 4].map(() => h("i"))), icon("mic"));
+  const askBox = h("div", { class: "vd", dataset: { state: "start" } }, dockText, askInput, sendBtn, dockOrb);
 
   // ---------- the checkpoint bar: the lesson as a row of checkpoints the student can go back to ----------
   const scrubFill = h("i", { class: "sc-fill" });
@@ -153,17 +143,15 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
   const topicCount = h("span", { class: "sc-count" });
   const scrubRow = h("div", { class: "ls-scrub" }, restartBtn, scrubTrack, topicCount, continueBtn, gapChip, speedBtn, flagBtn);
   const bar = h("div", { class: "ls-bar" }, scrubRow,
-    h("div", { class: "ls-bar-row" }, caption, h("div", { class: "ls-ask-wrap" }, liveCard, askBox)));
+    h("div", { class: "ls-bar-row" }, caption, h("div", { class: "ls-ask-wrap" }, askBox)));
 
   // ---------- drawer: outline and every question so far ----------
   const outline = h("ol", { class: "outline" });  // topics and their sub-topics (renderOutline, once checkpoints are known)
   const transcriptList = h("ol", { class: "transcript" });
-  const history = h("div", { class: "chat" }, h("div", { class: "chat-empty" }, icon("chat"), h("p", {}, "Questions and answers show up here.")));
   const drawer = h("aside", { class: "ls-drawer" },
     h("div", { class: "ls-drawer-head" }, h("strong", {}, "Lesson")),  // the panel button at the top left closes it
     h("div", { class: "ls-drawer-label" }, "Outline"), outline,
-    h("div", { class: "ls-drawer-label" }, "Transcript"), transcriptList,
-    h("div", { class: "ls-drawer-label" }, "Questions"), history);
+    h("div", { class: "ls-drawer-label" }, "Transcript"), transcriptList);
   const toggleDrawer = (on) => {
     lesson.classList.toggle("drawer-open", on);
     if (lesson.classList.contains("drawer-open")) renderTranscript();
@@ -217,7 +205,7 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
       student ? h("p", { class: `splash-progress ${info.progress?.completed ? "done" : ""}` },
         info.progress?.completed ? "Completed: you're marked present" : `${info.progress?.percent || 0}% heard · present at 100%`) : null,
       h("div", { class: "sp-grid" }, item("clock", "Length", formatDuration(info.estimated_min)), item("layers", "Sections", sections.length),
-        item("question", "Question breaks", segments.filter(s => s.name === "DOUBT_CHECK").length), item("volume", "Voice", info.voice ? info.voice_name || "Gnani" : "Browser"),
+        item("question", "Doubts", "Hold Space anytime"), item("volume", "Voice", info.voice ? info.voice_name || "Gnani" : "Browser"),
         info.model || info.live_model ? item("sparkle", "Model", info.model || info.live_model) : null),
       h("div", { class: "splash-actions" },
         h("button", { class: "btn primary lg", onclick: () => start(0) }, icon("play"), "Start class"),
@@ -384,8 +372,9 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
   }
 
   // ---------- player UI ----------
-  let pendingAsk = null, askOpen = null;
-  let live = null;  // the question break (or raised question) on screen now
+  let pendingAsk = null;
+  let askingNow = false;  // the lesson was paused by Space (or a click on the box) to ask a doubt
+  let holdTalking = false;    // Space is held: the student is speaking a doubt
   const ui = {
     onCaption(text) { lineInView = !document.hidden; setCaption(text); },
     onSpoken(index) {
@@ -404,46 +393,28 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
     isBreakDone(i) { return breaksDone.has(i); },
     onBreakDone(i) { breaksDone.add(i); },
     cancelAsk() { if (pendingAsk) { const r = pendingAsk; pendingAsk = null; r(""); } stopWait(); },
+    // A question break (or a raised doubt being answered). There is no chat: the teacher's answer is heard and
+    // captioned, and the dock shows what was asked and when the teacher is thinking.
     openCheckpoint(section, final) {
-      history.querySelector(".chat-empty")?.remove();
-      const raised = raisedPending;  // this break was opened for a question asked mid-lesson
       raisedPending = false;
-      const thread = h("div", { class: "ck-thread" });
-      const typing = h("div", { class: "msg teacher typing hidden" }, h("span"), h("span"), h("span"));
-      const block = h("div", { class: "checkpoint" },
-        h("div", { class: "ck-head" }, icon("question"), h("strong", {}, final ? "Final questions" : raised ? "Your question" : "Question break"), h("small", {}, section)),
-        thread, typing);
-      liveThread.querySelectorAll(".raised-note").forEach(n => n.remove());  // "will answer after this sentence"
-      liveThread.append(block);  // earlier questions and answers stay above, to scroll back to
-      liveCard.querySelector(".ls-live-title").textContent = "Questions";
-      liveCard.classList.remove("hidden");
-      live = block;
-      const scroll = () => { liveThread.scrollTop = liveThread.scrollHeight; };
       setState("Question break");
-      const add = (cls, text, extra) => { thread.append(h("div", { class: `msg ${cls}` }, h("div", { class: "bubble" }, text), extra)); scroll(); };
       return {
-        thinking(on) { typing.classList.toggle("hidden", !on); setState(on ? "Thinking…" : "Question break"); scroll(); },
+        thinking(on) { thinkingNow = on; if (!on) asked = ""; setState(on ? "Thinking…" : "Question break"); },
         setLimit() {},
         setCount() {},
-        teacher(text, opts = {}) { add(`teacher ${opts.prompt ? "prompt" : ""}`, spokenOnly(text), opts.passed ? h("span", { class: "msg-tag" }, `Passed to ${info.teacher}`) : null); },
-        student(text) { add("student", text); },
-        note(text) { add("system", text); },
+        teacher(text, opts = {}) { if (opts.passed) flash(`Passed to ${info.teacher || "your teacher"}`); },
+        student(text) { asked = text; renderAskLock(); },
+        note(text) { flash(text); },
         ask(seconds) {
           setState("Listening for questions");
-          askInput.placeholder = "Ask your doubt, or say “no”…";
-          askBox.classList.add("active");
-          askInput.focus();
           startWait(seconds);
           return new Promise(resolve => {
-            pendingAsk = (v) => { pendingAsk = null; stopWait(); askBox.classList.remove("active"); setState("Question break"); resolve(v); };
-            askOpen = null; renderAskLock();  // the box opens for the class's questions
+            pendingAsk = (v) => { pendingAsk = null; stopWait(); setState("Question break"); resolve(v); };
+            renderAskLock();
           });
         },
         close() {
-          typing.classList.add("hidden");
-          askBox.classList.remove("active");
-          history.append(block.cloneNode(true));  // a copy for the drawer; the live card keeps the original
-          if (live === block) { live = null; setTimeout(() => { if (!live) liveCard.classList.add("hidden"); }, 400); }
+          thinkingNow = false; asked = "";
           setState(running ? "Teaching" : "Ready");
         },
       };
@@ -473,97 +444,162 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
   }
   setCaption("Press play when the class is ready.", false);
 
-  // ---------- asking ----------
+  // ---------- asking: the voice dock ----------
+  // Hold Space (or the orb) to speak a doubt: the lesson stops at once, what is heard shows live in the dock, and
+  // letting go asks it. A tap opens a field to type instead (and starts or resumes the class while paused). At a
+  // question break the dock counts down; nothing asked, and the lesson moves on.
   let raisedPending = false;
+  let typingOpen = false;   // the field to type a doubt is open
+  let thinkingNow = false;  // the teacher is working on an answer
+  let asked = "";           // the doubt just asked, shown until the answer starts
+  let dockFlash = "";       // a short note ("Passed to ...") shown for a moment
+  let heardText = "";       // what the dictation has heard so far, while Space is held
   let waitTimerId = 0, waitLeft = 0, waitTotal = 0;
   function startWait(seconds) {
     stopWait();
     if (!seconds) return;
     waitLeft = waitTotal = seconds;
-    waitTimer.classList.remove("hidden", "holding");
-    renderWait();
     waitTimerId = setInterval(() => {
       if (player?.paused) return;
       waitLeft -= 0.1;
       renderWait();
       if (waitLeft <= 0) { stopWait(); submit(""); }
     }, 100);
+    renderWait();
   }
   function renderWait() {
-    waitBar.style.width = `${Math.max(0, (100 * waitLeft) / waitTotal)}%`;
-    waitText.textContent = player?.paused ? "Paused" : `Moving on in ${Math.ceil(Math.max(0, waitLeft))}s · start typing to ask`;
+    askBox.style.setProperty("--left", waitTotal ? Math.max(0, waitLeft / waitTotal) : 0);
+    const n = askBox.querySelector(".vd-count");
+    if (n) n.textContent = player?.paused ? "paused" : `${Math.ceil(Math.max(0, waitLeft))}s`;
   }
-  function holdWait() {
-    if (!waitTimerId) return;
-    clearInterval(waitTimerId); waitTimerId = 0;
-    waitTimer.classList.add("holding");
-    waitBar.style.width = "100%";
-    waitText.textContent = "Take your time. Press Enter to ask.";
-  }
-  function stopWait() { clearInterval(waitTimerId); waitTimerId = 0; waitTimer.classList.add("hidden"); }
+  function holdWait() { clearInterval(waitTimerId); waitTimerId = 0; askBox.style.setProperty("--left", 1); }
+  function stopWait() { clearInterval(waitTimerId); waitTimerId = 0; waitTotal = 0; askBox.style.removeProperty("--left"); }
 
+  const kbd = (k) => h("kbd", { class: "vd-kbd" }, k);
+  function dockState() {
+    if (holdTalking) return "listening";
+    if (typingOpen) return "typing";
+    if (thinkingNow) return "thinking";
+    if (pendingAsk) return "waiting";
+    if (dockFlash) return "note";
+    if (asked) return "sent";
+    if (player?.inBreak) return "answering";
+    return running ? "idle" : "start";
+  }
+  // The dock shows one state at a time; it is rebuilt only when that state (or what was heard) changes.
+  let dockKey = null;
   function renderAskLock() {
-    const open = !running || !!player?.paused || !!pendingAsk;
-    const key = `${open}|${!!pendingAsk}`;
-    if (key === askOpen) return;
-    askOpen = key;
-    askBox.classList.toggle("locked", !open);
-    askInput.disabled = !open;
-    micBtn.disabled = !open;
-    plusBtn.disabled = !open;
-    askInput.placeholder = !open ? "Pause the lesson to ask a doubt" : pendingAsk ? "Ask your doubt, or say “no”…" : "Ask a doubt…";
-    if (!open && listening) dictation?.stop();
-    if (open && liveThread.children.length && player?.paused) liveCard.classList.remove("hidden");  // earlier Q&A
+    const state = dockState();
+    const key = `${state}|${heardText}|${asked}|${dockFlash}`;
+    if (key === dockKey) return;
+    dockKey = key;
+    askBox.dataset.state = state;
+    askInput.disabled = state !== "typing";
+    const quote = (t) => h("span", { class: "vd-quote" }, `“${t}”`);
+    const words = (t) => t.split(/\s+/).filter(Boolean).map((w, i, all) => h("span", { class: `vd-w${i >= all.length - 2 ? " new" : ""}` }, `${w} `));
+    dockText.replaceChildren(...{
+      start: [h("span", { class: "vd-hint" }, kbd("Space"), " to start the class")],
+      idle: [h("span", { class: "vd-hint" }, "Hold ", kbd("Space"), " to ask a doubt")],
+      listening: heardText ? words(heardText) : [h("span", { class: "vd-hint" }, "Listening… let go to ask")],
+      typing: [h("span", { class: "vd-hint" }, kbd("Enter"), " to ask · ", kbd("Esc"), " to carry on")],
+      thinking: [asked ? quote(asked) : null, h("span", { class: "vd-dots" }, h("i"), h("i"), h("i"))],
+      sent: [quote(asked), h("span", { class: "vd-hint" }, "after this sentence")],
+      waiting: [h("span", { class: "vd-hint" }, "Any doubts? Hold ", kbd("Space")), h("span", { class: "vd-count" })],
+      answering: [h("span", { class: "vd-hint" }, "Hold ", kbd("Space"), " to ask a doubt")],
+      note: [h("span", { class: "vd-hint" }, dockFlash)],
+    }[state]);
+    if (state === "waiting") renderWait();
+    if (state === "typing") requestAnimationFrame(() => askInput.focus());
+  }
+  function flash(text) { dockFlash = text; renderAskLock(); setTimeout(() => { dockFlash = ""; renderAskLock(); }, 3500); }
+
+  // A tap: the field opens to type a doubt; the lesson pauses while it is open. Enter asks (the teacher answers
+  // right after the current sentence); Esc carries on without asking.
+  function askNow() {
+    if (!running || !player) return;
+    if (!pendingAsk && !player.paused) { player.pause(); renderPlay(); askingNow = true; }
+    typingOpen = true;
+    renderAskLock();
+  }
+  function cancelAsk() {
+    askInput.blur();
+    typingOpen = false;
+    if (askingNow && !askInput.value.trim() && player?.paused) { player.resume(); renderPlay(); }
+    askingNow = false;
+    renderAskLock();
   }
 
-  function submit(text) {
+  // spoken: the doubt was spoken with Space held, so it interrupts the teacher instead of waiting for the sentence.
+  function submit(text, spoken = false) {
+    askingNow = false; typingOpen = false;
     text = text.trim();
     askInput.value = ""; autosize(); renderSend();
     if (pendingAsk) { const r = pendingAsk; pendingAsk = null; r(text); return; }
-    if (!text) return;
+    if (!text) { renderAskLock(); return; }
     if (!running || !player) { toast("Start the class first, then ask.", "info"); return; }
-    // Mid-lesson: the teacher answers right after the current sentence.
+    if (isNoDoubt(text)) { if (player.paused) { player.resume(); renderPlay(); } renderAskLock(); return; }  // "no": carry on
+    asked = text;
+    if (spoken) {  // held Space and spoke: the teacher stops and answers now (thinking shows straight away)
+      thinkingNow = true;
+      if (!player.inBreak) raisedPending = true;
+      player.interruptNow(text);
+      renderPlay();
+      return;
+    }
+    // Typed mid-lesson: the teacher answers right after the current sentence.
     player.raiseHand(text);
     raisedPending = true;
-    liveThread.append(h("div", { class: "raised-note" }, h("div", { class: "msg student raised" }, h("div", { class: "bubble" }, text)),
-      h("div", { class: "msg system" }, h("div", { class: "bubble" }, `${info.teacher.split(" ")[0] || "The teacher"} will answer right after this sentence.`))));
-    liveThread.scrollTop = liveThread.scrollHeight;
-    liveCard.querySelector(".ls-live-title").textContent = "Questions";
-    liveCard.classList.remove("hidden");
     if (player.paused) { player.resume(); renderPlay(); }
+    renderAskLock();
   }
-  const autosize = () => { askInput.style.height = "auto"; askInput.style.height = `${Math.min(askInput.scrollHeight, 120)}px`; };
+  const autosize = () => { askInput.style.height = "auto"; askInput.style.height = `${Math.min(askInput.scrollHeight, 96)}px`; };
   const renderSend = () => { sendBtn.classList.toggle("hidden", !askInput.value.trim()); };
   askInput.addEventListener("input", () => { autosize(); renderSend(); if (askInput.value.trim()) holdWait(); });
-  askInput.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (askInput.value.trim()) submit(askInput.value); } });
+  askInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (askInput.value.trim()) submit(askInput.value); }
+    else if (e.key === "Escape") { e.preventDefault(); cancelAsk(); }
+  });
   sendBtn.addEventListener("click", () => askInput.value.trim() && submit(askInput.value));
 
-  function openMenu() {
-    const item = (label, ic, fn, disabled) => h("button", { class: "ls-menu-item", disabled, onclick: () => { closeMenu(); fn(); } }, icon(ic), label);
-    plusMenu.replaceChildren(
-      item("No questions, continue", "skip", () => submit(""), !pendingAsk),
-      item("Outline and questions", "layers", () => toggleDrawer(true)));
-    plusMenu.classList.remove("hidden");
-    setTimeout(() => document.addEventListener("click", closeMenu, { once: true }));
+  // Hold to talk (Space, or pressing the orb): the lesson stops at once (mid-sentence), the student speaks while
+  // holding, and letting go asks the doubt; the teacher answers it on screen, then picks the lesson up from the
+  // sentence it stopped in. Nothing heard: the lesson simply carries on.
+  const HOLD_MS = 280;  // shorter than this is a tap (type a doubt, or play/pause)
+  let holdTimer = 0, spaceDown = false, talkPaused = false;
+  const talk = createDictation(info.language, (text) => { heardText = text; renderAskLock(); }, () => {
+    const text = heardText.trim();
+    holdTalking = false; heardText = "";
+    if (text) submit(text, true);
+    else if (talkPaused && player?.paused) { player.resume(); renderPlay(); }
+    talkPaused = false;
+    renderAskLock();
+  }, true);
+  function startTalking() {
+    holdTimer = 0;
+    if (!talk) { toast("Speaking needs Chrome or Safari: type your doubt instead.", "info"); askNow(); return; }
+    holdTalking = true; heardText = ""; typingOpen = false; askInput.blur();
+    talkPaused = !pendingAsk && !player.paused;
+    if (talkPaused) { player.pause(); renderPlay(); }
+    if (pendingAsk) holdWait();
+    renderAskLock();
+    try { talk.start(); } catch { holdTalking = false; renderAskLock(); }
   }
-  function closeMenu() { plusMenu.classList.add("hidden"); }
-
-  // The mic: dictation fills the box and sends it when the student stops talking.
-  let listening = false;
-  const dictation = createDictation(info.language, (text) => { askInput.value = text; autosize(); renderSend(); }, () => {
-    listening = false; renderMic();
-    if (askInput.value.trim()) submit(askInput.value);
+  function stopTalking() { if (holdTalking) talk.stop(); }
+  // The orb: press and hold to talk, a click opens the field to type (or starts the class).
+  dockOrb.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    dockOrb.setPointerCapture(e.pointerId);
+    if (running && player) holdTimer = setTimeout(startTalking, HOLD_MS);
   });
-  if (!dictation) micBtn.title = "Speaking needs Chrome or Safari: type your question instead";
-  micBtn.addEventListener("click", () => {
-    if (!dictation) return toast("Speaking needs Chrome or Safari. Type your question instead.", "info");
-    if (listening) { dictation.stop(); return; }
-    listening = true; renderMic(); holdWait(); askInput.value = ""; dictation.start();
-  });
-  function renderMic() {
-    micBtn.classList.toggle("on", listening);
-    micBtn.title = listening ? "Listening… click to stop" : "Speak your doubt";
-  }
+  const orbUp = () => {
+    if (holdTalking) { stopTalking(); return; }
+    if (!holdTimer && running && player) return;
+    clearTimeout(holdTimer); holdTimer = 0;
+    if (!running) togglePlay(); else askNow();
+  };
+  dockOrb.addEventListener("pointerup", orbUp);
+  dockOrb.addEventListener("pointercancel", () => { clearTimeout(holdTimer); holdTimer = 0; stopTalking(); });
 
   // ---------- controls ----------
   function setState(text) { stateText.textContent = text; renderAskLock(); }
@@ -571,7 +607,7 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
     renderAskLock();
     const playing = running && !player?.paused;
     playBtn.replaceChildren(icon(playing ? "pause" : "play"));
-    playBtn.title = !running ? "Start (space)" : playing ? "Pause (space)" : "Resume (space)";
+    playBtn.title = !running ? "Start (space)" : playing ? "Pause" : "Resume (space)";
     lesson.classList.toggle("paused", running && !!player?.paused);
     if (running) setState(player.paused ? "Paused" : stateText.textContent === "Paused" || stateText.textContent === "Ready" ? "Teaching" : stateText.textContent);
   }
@@ -691,12 +727,28 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
   };
   loop();
 
+  const spaceKey = (e) => e.code === "Space" && !/INPUT|TEXTAREA|SELECT|BUTTON/.test(document.activeElement?.tagName);
   const onKey = (e) => {
-    if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName)) return;
-    if (e.code !== "Space" || !running || document.activeElement?.tagName === "BUTTON") return;
-    e.preventDefault(); togglePlay();
+    if (!spaceKey(e)) return;
+    e.preventDefault();
+    if (e.repeat || spaceDown) return;
+    spaceDown = true;
+    // A class under way: holding Space talks. A tap is decided when the key comes up.
+    if (running && player) holdTimer = setTimeout(startTalking, HOLD_MS);
+  };
+  const onKeyUp = (e) => {
+    if (e.code !== "Space" || !spaceDown) return;
+    spaceDown = false;
+    e.preventDefault();
+    if (holdTalking) { stopTalking(); return; }
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = 0; }
+    else if (running && player) return;  // the hold already started talking (or failed to)
+    // A tap: Space starts the class and resumes a pause; while the lesson plays (or at a question break) it opens
+    // the box to type a doubt.
+    if (!running || (player?.paused && !pendingAsk)) { askingNow = false; togglePlay(); } else askNow();
   };
   document.addEventListener("keydown", onKey);
+  document.addEventListener("keyup", onKeyUp);
 
   // ---------- the 3D tutor (optional): plays and lip-syncs the same voice ----------
   let avatar = null, avatarLoading = false;
@@ -751,6 +803,8 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
     cancelAnimationFrame(raf);
     clearInterval(clockTimer);
     document.removeEventListener("keydown", onKey);
+    document.removeEventListener("keyup", onKeyUp);
+    try { talk?.abort(); } catch {}
     if (player) player.stop();
     player = null;
     voice.dispose();

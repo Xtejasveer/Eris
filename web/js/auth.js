@@ -3,7 +3,9 @@
 import { api } from "./api.js";
 import { h, icon, avatarTint, initials } from "./ui.js";
 
-export function renderAuth(root, onSignedIn) {
+// opts.demo: opened from "Try the demo": only the demo accounts (one click signs in), no form. The plain sign-in page
+// (#/signin) shows only the form.
+export function renderAuth(root, onSignedIn, { demo: demoMode = false } = {}) {
   let mode = "login", role = "student";
   const error = h("div", { class: "callout error hidden" });
   const name = h("input", { class: "input", placeholder: "Your full name", autocomplete: "name" });
@@ -23,8 +25,7 @@ export function renderAuth(root, onSignedIn) {
   const title = h("h1", {});
   const sub = h("p", { class: "muted" });
 
-  const form = h("form", { class: "auth-form", onsubmit: async (e) => {
-    e.preventDefault();
+  async function submit() {
     error.classList.add("hidden");
     submitBtn.disabled = true;
     try {
@@ -35,28 +36,36 @@ export function renderAuth(root, onSignedIn) {
       error.replaceChildren(icon("alert"), h("div", {}, err.message));
       error.classList.remove("hidden");
     } finally { submitBtn.disabled = false; }
-  } },
+  }
+  const form = h("form", { class: "auth-form", onsubmit: (e) => { e.preventDefault(); submit(); } },
     title, sub, roles, error, nameField,
     h("label", { class: "field" }, h("span", {}, "Email"), email),
     h("label", { class: "field" }, h("span", {}, "Password"), password),
     submitBtn,
     h("p", { class: "auth-switch" }, switchLink));
 
-  // Demo accounts (python main.py seed): one click fills the form and signs in.
+  // Demo accounts (python main.py seed): one click fills the form and signs in. Only on the demo page.
   const demo = h("div", { class: "demo-logins hidden" });
-  api.demoLogins().then((accounts) => {
-    if (!accounts?.length) return;
+  if (demoMode) api.demoLogins().then((accounts) => {
+    if (!accounts?.length) {  // demo accounts are off on this server
+      demo.replaceChildren(h("div", { class: "demo-head" }, "No demo accounts on this server"),
+        h("p", { class: "muted" }, "Demo accounts are switched off here."));
+      demo.classList.remove("hidden");
+      return;
+    }
     const chip = (a) => h("button", { type: "button", class: "demo-chip", title: `Sign in as ${a.name}`, onclick: () => {
       mode = "login"; role = a.role; render();
       email.value = a.email; password.value = a.password;
-      form.requestSubmit();
+      submit();  // the demo page has no form on screen: sign in directly
     } }, h("span", { class: "lecture-avatar", style: avatarTint(a.name) }, initials(a.name)),
       h("span", { class: "demo-text" }, h("strong", {}, a.name), h("small", {}, a.role === "teacher" ? a.subject || "Teacher" : "Student")));
     const group = (role, label) => {
       const list = accounts.filter(a => a.role === role);
       return list.length ? h("div", { class: "demo-group" }, h("small", { class: "demo-label" }, label), h("div", { class: "demo-list" }, list.map(chip))) : null;
     };
-    demo.replaceChildren(h("div", { class: "demo-head" }, "Try a demo account"), group("teacher", "Teachers"), group("student", "Students"));
+    demo.replaceChildren(h("div", { class: "demo-head" }, "Pick a demo account"),
+      h("p", { class: "muted demo-sub" }, "One click signs you in. Teachers build lessons; students take them."),
+      error, group("teacher", "Teachers"), group("student", "Students"));  // a failed sign-in shows here
     demo.classList.remove("hidden");
   }, () => {});
 
@@ -84,6 +93,8 @@ export function renderAuth(root, onSignedIn) {
       h("div", { class: "auth-tutor" }, tutor),
       h("h2", {}, "Every lesson, ", h("span", { class: "mark" }, "on your own time"), "."),
       h("p", {}, "Your teacher's lessons, taught by their AI substitute: it explains, writes on the board and answers your doubts.")),
-    h("section", { class: "auth-main" }, h("div", { class: "auth-stack" }, h("div", { class: "card auth-card" }, form), demo))));
-  email.focus();
+    h("section", { class: "auth-main" }, h("div", { class: "auth-stack" },
+      h("a", { class: "auth-back", href: "#/" }, icon("back"), "About Eris"),
+      demoMode ? demo : h("div", { class: "card auth-card" }, form)))));
+  if (!demoMode) email.focus();
 }

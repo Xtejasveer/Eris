@@ -8,7 +8,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from eris.classroom import actions
@@ -38,6 +38,7 @@ _tts_slots = threading.BoundedSemaphore(3)
 # Jev checks on a doubt answer that run side by side (see _ask_turn).
 _checks = ThreadPoolExecutor(max_workers=4, thread_name_prefix="doubt-check")
 _slides = {}         # lecture_id -> {slide number: text}
+_fast_prompts = {}   # lecture_id -> the doubt agent's system prompt, for answers made in one call
 
 
 def forget_lecture(lecture_id):
@@ -165,7 +166,8 @@ def _slide_pictures(lecture_id):
         if p.get("slide"):
             out.setdefault(str(p["slide"]), []).append({
                 "url": f"/api/lectures/{lecture_id}/images/{p['key']}.{p['ext']}",
-                "kind": p.get("kind", "picture"), "description": p.get("description", "")})
+                "kind": p.get("kind", "picture"), "description": p.get("description", ""),
+                "parts": p.get("parts") or []})  # where to circle inside it, as fractions of the picture
     return out
 
 
@@ -376,7 +378,8 @@ def _board_at(lecture_id, cursor, key=None, segments=None, run_code=True):
     board = class_board.rebuild(segments, cursor)
     board["figures"] = figures.load(lecture_id)  # the material's graphs: the only ones an answer may build
     from eris.material.images import load as load_pictures
-    board["pictures"] = load_pictures(lecture_id)  # what the pictures on each slide show
+    from eris.material.images import with_labels
+    board["pictures"] = with_labels(load_pictures(lecture_id), lecture_id, render=False)  # what each slide's pictures show
     # Doubts use only what this class used: notebook and slides always, code and graphs if the lecture had them.
     used = figures.env_from_segments(segments)
     board["environments"] = {**used, "notebook": True, "slides": bool(_slides_for(lecture_id))}
@@ -455,6 +458,7 @@ class DoubtAsk(BaseModel):
     cursor: int | None = None
     thread_id: str | None = None  # the class's conversation from an earlier question; None = a new class run
     visuals: str = ""            # what each visual on screen shows now (its Visual.state line), from the player
+    interrupted: str = ""        # the lesson sentence the student stopped by holding Space to ask (spoken doubts)
     post_id: int | None = None   # a shared lesson a student is playing: its locked version, and where to log doubts
     version_id: int | None = None
 
@@ -492,7 +496,9 @@ def _judged_answer(lecture_id, agent, thread_id, question, turn, board, body, lo
     report, entry = judge(turn), {"question": question, "section": body.section, "used": "first"}
     entry["first"] = {k: report.get(k) for k in ("score", "blockers", "findings", "error")}
     entry["first"]["answer"] = turn.get("reply_text", "")[:1500]
-    if report.get("blockers"):
+    if report.get("blockers") and agent is None:  # judged after the class heard it: logged only
+        print(f"[doubts] quality check: {report['blockers']} blocker(s) (logged)")
+    elif report.get("blockers"):
         print(f"[doubts] quality check: {report['blockers']} blocker(s); asking for a better answer")
         try:
             fixed = doubt_agent.turn_fix(agent, thread_id, report["fix"], log_path, body.section, question)
@@ -543,21 +549,79 @@ def doubts_ask(lecture_id: str, body: DoubtAsk, request: Request):
         return {"thread_id": thread_id, "max": config.MAX_DOUBTS_FINAL if body.final else config.MAX_DOUBTS_PER_CHECK,
                 "prompt": None, "reply": "", "reply_text": "", "done": True, "final": "", "passed": False,
                 "reply_segments": [], "final_segments": []}
-    flags, turn = _guard_question(lecture_id, question, body.section)
-    if turn is None:
-        with _doubt_lock:
-            turn, answer_flags = _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body)
-        flags += answer_flags
+    guard = _checks.submit(_guard_question, lecture_id, question, body.section)  # checked while the answer is made
+    with _doubt_lock:
+        turn, flags = _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body, guard)
     _log(request, lecture_id, body.model_dump(), body.section, question, turn, flags)
     limit = config.MAX_DOUBTS_FINAL if body.final else config.MAX_DOUBTS_PER_CHECK
     return {"thread_id": thread_id, "max": limit, **turn}
 
 
-def _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body):
-    """(the turn to play, the answer's guardrail flags)."""
-    started = time.monotonic()
-    board = _board_at(lecture_id, body.cursor, thread_id, _locked_segments(lecture_id, body), thread["run_code"])
-    set_board(board, _slides_for(lecture_id))
+def _segments_for(lecture_id, body):
+    """The script the class is playing: a student's locked version, else the lecture's approved script."""
+    segments = _locked_segments(lecture_id, body)
+    if segments is None:
+        script_json = config.lecture_dir(lecture_id) / "script.json"
+        segments = json.loads(script_json.read_text(encoding="utf-8")) if script_json.exists() else []
+    return segments
+
+
+SCRIPT_SHOWN = {"NOTE": "notebook", "WRITE": "notebook", "NOTE_TITLE": "notebook heading", "WRITE_CODE": "program",
+                "SKETCH_ROW": "notebook sketch", "SLIDE": "slide shown", "FLOW": "diagram", "VISUAL": "graph"}
+
+
+def _script_around(segments, cursor):
+    """The approved script around the class's position, as the doubt agent needs it: every part's title (taught,
+    now, later), and the whole current part as written (what was said, and what went on the screen), with where
+    the class is in it. The agent answers from this instead of searching the material again."""
+    cursor = len(segments) if cursor is None else min(cursor, len(segments))
+    starts = [i for i, s in enumerate(segments) if s.get("name") == "SECTION"]
+    now = max([i for i in starts if i <= cursor] or [0])
+    after = next((i for i in starts if i > now), len(segments))
+    outline = [f"- {segments[i]['args']['title']} ({'taught' if i < now else 'now' if i == now else 'later'})"
+               for i in starts]
+    lines = []
+    for i in range(now, after):
+        seg, a = segments[i], segments[i].get("args", {})
+        if i == cursor:
+            lines.append(">>> the class is here <<<")
+        if seg["kind"] == "say":
+            lines.append(seg["text"])
+        elif seg.get("name") in SCRIPT_SHOWN:
+            what = a.get("text") or a.get("code") or a.get("items") or a.get("title") or a.get("n") or ""
+            if seg.get("name") == "FLOW":
+                what = f"{a.get('title', '')}: " + " -> ".join(b.get("label", "") for b in a.get("blocks", []))
+            lines.append(f"({SCRIPT_SHOWN[seg['name']]}: {str(what)[:400]})")
+    return ("# The lesson's parts\n" + "\n".join(outline) + "\n\n# The approved script of this part\n"
+            + "\n".join(lines))[:7000]
+
+
+COVER_WORD_RE = re.compile(r"[^\W\d_]{4,}")
+COVERED_AT = 0.7  # this share of the doubt's words in the script of this part: it is about what is being taught
+
+
+def _covered(question, script):
+    """True when the doubt's own words (4+ letters) are mostly in the script around the class: no search needed.
+    Works in any language the script is in; a doubt with no such words is searched."""
+    words = {w.lower() for w in COVER_WORD_RE.findall(question)}
+    have = script.lower()
+    return bool(words) and sum(w in have for w in words) >= COVERED_AT * len(words)
+
+
+def _fast_prompt(lecture_id):
+    """The doubt agent's system prompt, for answers made in one call."""
+    if lecture_id not in _fast_prompts:
+        from eris.classroom.session import doubt_prompt, persona_to_text, speaker_rule
+        manifest = manifest_or_404(lecture_id)
+        persona, language = manifest["persona"], config.lecture_language(manifest)
+        _fast_prompts[lecture_id] = (doubt_prompt(persona, persona_to_text(persona), manifest["topic"], language)
+                                     + speaker_rule(language, config.voice_gender(manifest)))
+    return _fast_prompts[lecture_id]
+
+
+def _turn_notes(thread, board, body):
+    """What the doubt agent is told besides the question: where the class is now (when it moved), what programs
+    printed, what the screen's graphs show, the sentence a spoken doubt cut off, and the earlier doubts."""
     parts = []
     if thread["cursor"] != body.cursor:  # a new question break: where the class is now
         parts.append(body.context)
@@ -570,17 +634,64 @@ def _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body):
     parts.append("Environments in this class: " + figures.describe_environments(board["environments"]))
     if body.visuals.strip():  # students may have moved the controls themselves
         parts.append("What the graphs and diagrams on the class screen show right now:\n" + body.visuals.strip()[:1500])
+    if body.interrupted.strip():  # a spoken doubt stopped the teacher mid-sentence: answer about that moment
+        parts.append(f'The student stopped you mid-sentence to ask this. You had just said: "{body.interrupted.strip()[:600]}" '
+                     "Answer about that moment; don't finish the sentence or go on with the lesson (it resumes from "
+                     "there after your answer).")
+    if thread.get("history"):  # earlier questions in this class, whichever way they were answered
+        parts.append("Earlier in this class:\n" + "\n".join(f'- Student: "{q}" You answered: {a[:300]}'
+                                                             for q, a in thread["history"][-3:]))
+    return parts
+
+
+def _fast_context(lecture_id, segments, board, body, question, parts):
+    """Everything the one-call answer needs, given up front instead of looked up with tools."""
+    from eris.classroom.class_board import describe
+    from eris.tools import search_material
+    script = _script_around(segments, body.cursor)
+    # The approved script of this part usually holds the answer; the material is searched only for a doubt it
+    # doesn't cover (about a later part, another slide, a detail it leaves out). Saves a second.
+    material = ("" if _covered(question, script) else
+                "# The material that matches the question\n" + search_material.invoke({"query": question})[:4000])
+    return "\n\n".join(p for p in [script, "# The class screen now\n" + describe(board, _slides_for(lecture_id))[:6000],
+                                    material, *parts] if p)
+
+
+def _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body, guard=None):
+    """(the turn to play, the answer's guardrail flags). guard: the question's guardrail check, running alongside
+    the answer; a blocked question's answer is thrown away and the redirect plays."""
+    started = time.monotonic()
+    segments = _segments_for(lecture_id, body)
+    board = _board_at(lecture_id, body.cursor, thread_id, segments, thread["run_code"])
+    set_board(board, _slides_for(lecture_id))
+    parts = _turn_notes(thread, board, body)
+    fast = doubt_agent.fast_route(question, board.get("environments"), thread["run_code"])
     try:
-        turn = doubt_agent.turn_ask(agent, thread_id, question, log_path, body.section, "\n\n".join(parts))
+        if fast:
+            context = _fast_context(lecture_id, segments, board, body, question, parts)
+            reply = doubt_agent.fast_answer(_fast_prompt(lecture_id), context, question)
+            passed = doubt_agent._log(log_path, body.section, question, reply)
+            turn = {"prompt": None, "reply": reply, "done": False, "final": "", "passed": passed}
+        else:  # a program to run: the agent dry-runs it first, so what the teacher says it prints is real
+            turn = doubt_agent.turn_ask(agent, thread_id, question, log_path, body.section, "\n\n".join(parts))
         turn = doubt_agent.with_segments(turn, count_slides(lecture_id), board)
         answered = time.monotonic()
-        # The safety check and the quality check are separate Jev calls: run them at the same time. Only an
-        # answer the quality check replaced is checked again.
-        first, guard = turn, _checks.submit(_guard_answer, lecture_id, question, turn)
-        turn = _judged_answer(lecture_id, agent, thread_id, question, turn, board, body, log_path)
-        turn, answer_flags = guard.result() if turn is first else _guard_answer(lecture_id, question, turn)
-        print(f"[doubts] answered in {time.monotonic() - started:.1f}s "
-              f"(agent {answered - started:.1f}s, checks {time.monotonic() - answered:.1f}s)")
+        # The question's check ran alongside the answer; the answer's safety check runs now, before the class
+        # hears it. The quality check is only logged (in the background): a rewrite would double the wait.
+        if guard is not None:
+            q_flags, blocked = guard.result()
+            if blocked is not None:
+                return blocked, q_flags
+        else:
+            q_flags = []
+        turn, answer_flags = _guard_answer(lecture_id, question, turn)
+        if config.DOUBT_JUDGE_BLOCKS:
+            turn = _judged_answer(lecture_id, agent, thread_id, question, turn, board, body, log_path)
+        elif config.DOUBT_JUDGE:
+            _checks.submit(_judged_answer, lecture_id, None, thread_id, question, dict(turn), board, body, log_path)
+        print(f"[doubts] answered in {time.monotonic() - started:.1f}s ({'one call' if fast else 'agent'} "
+              f"{answered - started:.1f}s, safety check {time.monotonic() - answered:.1f}s)")
+        answer_flags = q_flags + answer_flags
         turn["_board_files"] = board.get("files", {})
         _build_answer_visuals(lecture_id, turn)
         turn.pop("_board_files", None)
@@ -590,7 +701,110 @@ def _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body):
     _show_slide_if_asked(question, board, turn, _slides_for(lecture_id))
     _remember_answer(lecture_id, board, turn, thread_id)
     thread["notes"] += _output_notes(turn)
+    thread.setdefault("history", []).append((question, turn.get("reply_text") or turn.get("reply", "")))
     return turn, answer_flags
+
+
+def _class_thread(lecture_id, body, request, run_code):
+    """(thread_id, thread): the class run's doubt conversation, or a new one (someone else's id starts afresh)."""
+    thread = _class_threads.get(body.thread_id or "")
+    if not _owned(thread, request) or thread["lecture"] != lecture_id:
+        thread_id = f"class_{uuid.uuid4().hex}"
+        thread = _class_threads[thread_id] = {"lecture": lecture_id, "cursor": None, "notes": [],
+                                              "user": request.state.user["id"], "run_code": run_code}
+        return thread_id, thread
+    return body.thread_id, thread
+
+
+def _event(kind, **data):
+    return json.dumps({"type": kind, **data}, ensure_ascii=False) + "\n"
+
+
+@router.post("/lectures/{lecture_id}/doubts/stream")
+def doubts_stream(lecture_id: str, body: DoubtAsk, request: Request):
+    """The same answer as doubts/ask, streamed as it is written (NDJSON): a "segments" event per spoken sentence,
+    with the screen markers before it, then "done". The class hears the first sentence while the rest is still being
+    written. Each sentence passes the answer's safety check before it is sent; a blocked one ends the answer with
+    passing the question to the teacher. Doubts the one-call answer can't handle (a program to run, a request to
+    see the slides) are answered whole by the agent and sent as one "segments" event."""
+    run_code = _runs_code(request)
+    agent, log_path = _agent(_check_id(lecture_id), run_code)
+    question = body.question.strip()
+    if not question:
+        raise HTTPException(400, "Empty question")
+    thread_id, thread = _class_thread(lecture_id, body, request, run_code)
+    limit = config.MAX_DOUBTS_FINAL if body.final else config.MAX_DOUBTS_PER_CHECK
+
+    def whole(turn, flags):
+        _log(request, lecture_id, body.model_dump(), body.section, question, turn, flags)
+        yield _event("segments", segments=turn.get("reply_segments", []) + turn.get("final_segments", []))
+        yield _event("done", thread_id=thread_id, max=limit, passed=turn.get("passed", False),
+                     reply_text=turn.get("reply_text", ""))
+
+    def stream():
+        if doubt_agent.is_no_doubt(question):
+            yield _event("done", thread_id=thread_id, max=limit, passed=False, reply_text="")
+            return
+        guard = _checks.submit(_guard_question, lecture_id, question, body.section)
+        with _doubt_lock:
+            segments = _segments_for(lecture_id, body)
+            board = _board_at(lecture_id, body.cursor, thread_id, segments, thread["run_code"])
+            set_board(board, _slides_for(lecture_id))
+            if (not doubt_agent.fast_route(question, board.get("environments"), thread["run_code"])
+                    or SLIDE_REQUEST_RE.search(question)):
+                turn, flags = _ask_turn(lecture_id, agent, log_path, thread_id, thread, question, body, guard)
+                yield from whole(turn, flags)
+                return
+            started, first_at = time.monotonic(), None
+            context = _fast_context(lecture_id, segments, board, body, question, _turn_notes(thread, board, body))
+            said, played, flags, passed = [], [], [], False
+            try:
+                for unit in doubt_agent.answer_units(doubt_agent.fast_stream(_fast_prompt(lecture_id), context, question)):
+                    if first_at is None:  # the question's own check ran alongside: a blocked one never gets an answer
+                        q_flags, blocked = guard.result()
+                        flags += q_flags
+                        if blocked is not None:
+                            yield from whole(blocked, flags)
+                            return
+                    segs = doubt_agent.answer_segments(unit, count_slides(lecture_id), board)
+                    if not segs:
+                        continue
+                    text = doubt_agent.plain_text(segs)
+                    # the answer so far must be safe before this sentence is heard
+                    turn, a_flags = _guard_answer(lecture_id, question, {"reply_text": " ".join(said + [text])})
+                    flags += a_flags
+                    if turn.get("passed"):  # blocked: the rest of the answer is dropped
+                        passed = True
+                        yield _event("segments", segments=turn["reply_segments"])
+                        said = [turn["reply_text"]]
+                        break
+                    piece = {"reply_segments": segs, "reply": unit, "_board_files": board.get("files", {})}
+                    _build_answer_visuals(lecture_id, piece)
+                    _remember_answer(lecture_id, board, piece, thread_id)
+                    played += piece["reply_segments"]
+                    said.append(text)
+                    if first_at is None:
+                        first_at = time.monotonic()
+                        print(f"[doubts] first sentence after {first_at - started:.1f}s (streamed)")
+                    yield _event("segments", segments=piece["reply_segments"])
+            except Exception as e:
+                print(f"[doubts] streamed answer failed: {type(e).__name__}: {e}")
+                if not played:
+                    yield _event("error", detail=AGENT_DOWN)
+                    return
+            reply = " ".join(said)
+            passed = passed or doubt_agent._log(log_path, body.section, question, reply)
+            turn = {"prompt": None, "reply": reply, "reply_text": reply, "done": False, "final": "", "passed": passed,
+                    "reply_segments": played, "final_segments": []}
+            thread["notes"] += _output_notes(turn)
+            thread.setdefault("history", []).append((question, reply))
+            if config.DOUBT_JUDGE and played:  # logged in the background, never waited for
+                _checks.submit(_judged_answer, lecture_id, None, thread_id, question, dict(turn), board, body, log_path)
+            print(f"[doubts] streamed answer done in {time.monotonic() - started:.1f}s")
+        _log(request, lecture_id, body.model_dump(), body.section, question, turn, flags)
+        yield _event("done", thread_id=thread_id, max=limit, passed=passed, reply_text=reply)
+
+    return StreamingResponse(stream(), media_type="application/x-ndjson")
 
 
 @router.post("/lectures/{lecture_id}/doubts/reply")

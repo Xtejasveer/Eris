@@ -95,6 +95,36 @@ def _render(lecture_id, deck):
     return info
 
 
+LABEL_NEAR = 0.06  # a label may sit this far (fraction of the slide) outside its picture, at the end of a pointer line
+LABEL_MAX_WORDS = 5
+TITLE_BAND = 0.18  # text this close to the top is the slide's title, not a label
+
+
+def label_parts(slide):
+    """The labels printed on the slide around or over its pictures ("Shear plane", "Primary shear zone"): parts the
+    pen can circle, though they are slide text rather than part of the picture. [{"name", "box"}] in slide fractions."""
+    out, seen = [], set()
+    for line in slide.get("lines", []):
+        text = " ".join(line["text"].split()).strip(" :")
+        x0, y0, x1, y1 = line["box"]
+        if not 3 <= len(text) <= 40 or len(text.split()) > LABEL_MAX_WORDS or y0 < TITLE_BAND or text[0] in "•▪●◦■-–*":
+            continue
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+        if not any(b[0] - LABEL_NEAR <= cx <= b[2] + LABEL_NEAR and b[1] - LABEL_NEAR <= cy <= b[3] + LABEL_NEAR
+                   for b in slide.get("pictures", [])):
+            continue
+        if text.lower() not in seen:
+            seen.add(text.lower())
+            out.append({"name": text, "box": line["box"]})
+    return out
+
+
+def slide_labels(lecture_id, render=True):
+    """{slide number: [label]} (the writer, stager and doubt agent list them as parts to circle). render=False only
+    reads slides already drawn."""
+    return {int(n): [p["name"] for p in label_parts(s)] for n, s in slide_images(lecture_id, render).items()}
+
+
 def slide_images(lecture_id, render=True):
     """{slide number: {url, ratio, lines, pictures}} for the player, or {} (no deck, no LibreOffice for a PowerPoint,
     or it failed).
@@ -113,7 +143,15 @@ def slide_images(lecture_id, render=True):
             except Exception as e:
                 print(f"[slides] could not draw {deck.name}: {e}")
                 return {}
-    return {n: {**s, "url": f"/api/lectures/{lecture_id}/slides/{n}.png"} for n, s in info["slides"].items()}
+    from eris.material.images import load, slide_parts
+    parts = slide_parts(load(lecture_id), {n: s.get("pictures") for n, s in info["slides"].items()})
+    out = {}
+    for n, s in info["slides"].items():
+        found = parts.get(n, [])
+        names = {p["name"].lower() for p in found}
+        out[n] = {**s, "url": f"/api/lectures/{lecture_id}/slides/{n}.png",
+                  "parts": found + [p for p in label_parts(s) if p["name"].lower() not in names]}
+    return out
 
 
 def render_later(lecture_id):

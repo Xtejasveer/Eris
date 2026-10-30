@@ -194,7 +194,16 @@ def flow_next(board, args):
 
 def slide_circle(board, args):
     board["current_slide"] = args["n"]
-    print(f"\n⭕ [SLIDE_CIRCLE {args['n']}] (the picture on slide {args['n']} is circled)")
+    what = f"'{args['part']}' in the picture" if args.get("part") else "the picture"
+    print(f"\n⭕ [SLIDE_CIRCLE {args['n']}] ({what} on slide {args['n']} is circled)")
+    return {"ok": True, "error": ""}
+
+
+def sketch_row(board, args):
+    """A row of the notebook sketch (printed as a line of boxes and arrows in the terminal)."""
+    from eris.visuals.sketch import row_line, row_words
+    board["notebook"].extend(row_words(args["parts"]))
+    print("\n✏️  " + row_line(args["parts"]))
     return {"ok": True, "error": ""}
 
 
@@ -210,6 +219,7 @@ ACTIONS = {
     "SLIDE": show_slide,
     "SLIDE_HIGHLIGHT": slide_highlight,
     "SLIDE_CIRCLE": slide_circle,
+    "SKETCH_ROW": sketch_row,
     "WRITE": note,
     "NOTE": note,
     "NOTE_TITLE": note_title,
@@ -256,5 +266,8 @@ def restore(board, segments):
             board["notebook"].extend(args["text"].splitlines())
         elif seg.get("name") == "NOTE_TITLE":
             board["notebook"].append("## " + args["text"])
+        elif seg.get("name") == "SKETCH_ROW":
+            from eris.visuals.sketch import row_words
+            board["notebook"].extend(row_words(args["parts"]))
         elif seg.get("name") == "NEW_PAGE":
             board["notebook"].append("## " + args["title"])

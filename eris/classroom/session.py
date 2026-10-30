@@ -136,6 +136,9 @@ def play_segment(index, seg, segments, state, board, ctx):
         state["section_text"].append(f"Code in {args['file']}:\n{args['code']}")
     elif action in ("NOTE", "NOTE_TITLE", "WRITE"):
         state["section_text"].append(f"Notebook:\n{args['text']}")
+    elif action == "SKETCH_ROW":
+        from eris.visuals.sketch import row_line
+        state["section_text"].append(f"Notebook sketch: {row_line(args['parts'])}")
     result = actions.execute(board, seg)
     if not result["ok"]:
         print(f"\n⚠️  {result['error']}")

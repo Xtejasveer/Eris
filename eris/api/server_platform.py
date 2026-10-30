@@ -64,6 +64,21 @@ def auth_options():
     return {"teacher_signup": config.TEACHER_SIGNUP}
 
 
+@router.get("/landing")
+def landing_settings():
+    """The settings the landing page explains, read from where the lesson planner uses them (eris/generate/depth.py,
+    config.SPEAKING_WPM), so the page always shows what a generated lesson really gets."""
+    from eris.generate import depth
+    # Each class language, the line its voice sample says, and whether it has a man's voice as well as a woman's
+    # (the samples are in web/assets/voices/<code>-woman.m4a and -man.m4a, made with these voices).
+    languages = [{"code": code, "name": name, "sample": config.VOICE_SAMPLES.get(code, ""),
+                  "man": any(v in config.MALE_VOICES for v in config.LANGUAGE_VOICES.get(code, []))}
+                 for code, (name, _) in config.LANGUAGES.items()]
+    return {"depth_min": depth.DEPTH_MIN, "framing_min": depth.FRAMING_MIN, "max_speaking_min": depth.MAX_SPEAKING_MIN,
+            "brief_below": depth.BRIEF_BELOW, "in_depth_at": depth.IN_DEPTH_AT, "words_per_min": config.SPEAKING_WPM,
+            "languages": languages}
+
+
 @router.post("/auth/signup")
 def signup(body: Signup, response: Response):
     if body.role == "teacher" and not config.TEACHER_SIGNUP:  # the role is the browser's claim: only students

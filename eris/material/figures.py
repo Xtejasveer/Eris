@@ -55,12 +55,13 @@ def step_lists(text):
 
 
 NOT_PROCESS_RE = re.compile(r"\b(exercises?|questions?|quiz(?:zes)?|homework|assignments?|tasks?|practice|"
-                            r"discussion|activit(?:y|ies)|review)\b", re.I)
+                            r"discussion|activit(?:y|ies)|review|types?|kinds?|classifications?|categories|"
+                            r"varieties|examples?)\b", re.I)
 
 
 def _is_process(steps, title):
-    """A numbered list of exercises or questions is not a process to draw: its heading says so, or most of its
-    items are questions."""
+    """A numbered list of exercises or questions, or of kinds of something ("Types of chips"), is not a process to
+    draw as a flowchart: its heading says so, or most of its items are questions."""
     if NOT_PROCESS_RE.search(title or ""):
         return False
     return sum(s.rstrip().endswith("?") for s in steps) * 2 < len(steps)
@@ -209,8 +210,8 @@ def figures_from_pictures(pictures):
     picture with data recreated as a graph, and any other picture (photo, painting, map, ...) taught from its slide."""
     out = []
     for p in pictures or []:
-        if not p.get("description"):
-            continue
+        if not p.get("description") or p.get("decoration"):
+            continue  # a logo or campus photo teaches nothing
         base = {"source": p["source"], "where": p["where"], "ref": p["ref"],
                 "title": p["description"].split(". ")[0][:120]}
         if p.get("kind") in ("diagram", "flowchart") and len(p.get("steps") or []) >= 2:
@@ -343,12 +344,19 @@ def lecture_environments(lecture_id, manifest=None, slide_count=None):
 
 
 def load(lecture_id):
-    """The figures saved by the last index run ([] if none)."""
+    """The figures saved by the last index run ([] if none), under today's rules."""
     import json
 
     from eris import config
     path = config.lecture_dir(lecture_id) / "figures.json"
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        figs = json.loads(path.read_text(encoding="utf-8"))
     except Exception:
         return []
+    # Saved before a rule changed: a list of kinds ("Types of chips") is still not drawn as a process, and a picture
+    # found since to be decoration (a logo, a campus photo) is not taught.
+    from eris.material.images import load as load_pictures
+    decoration = {p.get("ref") for p in load_pictures(lecture_id) if p.get("decoration")}
+    return [f for f in figs if (f.get("kind") != "flow"
+            or _is_process(f.get("details", "").removeprefix("steps: ").split(" -> "), f.get("title")))
+            and not (f.get("kind") == "picture" and f.get("ref") in decoration)]

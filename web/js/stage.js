@@ -8,6 +8,7 @@ import { h, icon, esc } from "./ui.js";
 import { highlightLine } from "./highlight.js";
 import { FlowBoard } from "./flow.js";
 import { drawPen, svgLayer } from "./pen.js";
+import { drawSketchRow } from "./sketch.js";
 
 const ENVS = [["notebook", "Notebook", "book"], ["slides", "Slides", "slides"], ["code", "Code", "code"],
   ["visual", "Visual", "sparkle"]];
@@ -183,7 +184,7 @@ export class Stage {
   lookBack(text) {
     this.setEnv("notebook");
     for (const i of this._pageOrder()) {
-      const el = [...this.pages[i].el.querySelectorAll(".nb-line")].reverse()
+      const el = [...this.pages[i].el.querySelectorAll(".nb-line, .sk-t")].reverse()
         .find(line => line.textContent.toLowerCase().includes(text.trim().toLowerCase()));
       if (!el) continue;
       this.showPage(i);
@@ -227,10 +228,21 @@ export class Stage {
     }
   }
 
+  // One row of a sketch ([SKETCH_ROW]). Rows written one after another are one sketch, numbered 1, 2, 3.
+  async sketchRow(items, ctl) {
+    this.setEnv("notebook");
+    const prev = this.notePage.lastElementChild;
+    const number = prev?.classList.contains("sk-row") ? Number(prev.dataset.n) + 1 : 1;
+    const row = h("div", { class: "sk-row", dataset: { n: number } });
+    this.notePage.append(row);
+    this._reveal(row, !!ctl);
+    await drawSketchRow(row, items, number, ctl);
+  }
+
   noteHighlight(text) {
     this.setEnv("notebook");
     for (const i of this._pageOrder()) {
-      const lines = [...this.pages[i].el.querySelectorAll(".nb-line")].reverse();
+      const lines = [...this.pages[i].el.querySelectorAll(".nb-line, .sk-t")].reverse();
       if (lines.some(el => markText(el, text, "nearest", this.follow))) { this.showPage(i); return true; }
     }
     return false;
@@ -359,13 +371,16 @@ export class Stage {
     }
   }
 
-  // Circle the picture(s) on slide n with a pen, as a teacher would while talking about it.
-  slideCircle(n) {
+  // Circle the picture(s) on slide n with a pen, as a teacher would while talking about it; with a part ("chip"),
+  // only that part of the picture, where the vision model found it. A part it doesn't know circles the picture.
+  slideCircle(n, part = null) {
     if (String(this.currentSlideNo) !== String(n) && !this.showSlide(n)) return false;
     this.setEnv("slides");
-    if (this.slideBox.classList.contains("as-image")) return this._circleSlideImage(n);
+    if (this.slideBox.classList.contains("as-image")) return this._circleSlideImage(n, part);
     const imgs = [...this.slideBox.querySelectorAll(".slide-pictures img")];
     if (!imgs.length) return false;
+    const pics = this.pictures[n] || this.pictures[String(n)] || [];
+    const hit = part ? pics.map((p, k) => [k, findPart(p.parts, part)]).find(([, b]) => b) : null;
     const draw = () => {
       this.slideBox.querySelector(".pen-layer")?.remove();
       const box = this.slideBox.getBoundingClientRect();
@@ -373,11 +388,16 @@ export class Stage {
       layer.setAttribute("viewBox", `0 0 ${box.width} ${box.height}`);
       this.slideBox.appendChild(layer);
       imgs.forEach((img, k) => {
+        if (hit && k !== hit[0]) return;
         const r = img.getBoundingClientRect();
         // object-fit: contain: the picture itself may be smaller than its box
         const scale = Math.min(r.width / (img.naturalWidth || r.width), r.height / (img.naturalHeight || r.height));
         const w = (img.naturalWidth || r.width) * scale, hgt = (img.naturalHeight || r.height) * scale;
         const cx = r.left - box.left + r.width / 2, cy = r.top - box.top + r.height / 2;
+        if (hit) {
+          const [x0, y0, x1, y1] = hit[1], left = cx - w / 2, top = cy - hgt / 2;
+          return this._circlePart(layer, box, { x: left + x0 * w, y: top + y0 * hgt, w: (x1 - x0) * w, h: (y1 - y0) * hgt }, n * 7 + k);
+        }
         // loosely around the picture, but never off the slide (the stroke drifts out ~4% at its end)
         const rx = Math.min(w / 2 * 1.1 + 6, cx - 6, box.width - cx - 6) / 1.05;
         const ry = Math.min(hgt / 2 * 1.1 + 6, cy - 6, box.height - cy - 6) / 1.05;
@@ -391,15 +411,18 @@ export class Stage {
   }
 
   /** Circle the pictures and charts on the slide picture, at the places the deck puts them. */
-  _circleSlideImage(n) {
-    const boxes = (this.images[n] ?? this.images[String(n)])?.pictures || [];
-    if (!boxes.length) return false;
+  _circleSlideImage(n, part = null) {
+    const image = this.images[n] ?? this.images[String(n)];
+    const boxes = image?.pictures || [];
+    const partBox = part ? findPart(image?.parts, part) : null;
+    if (!boxes.length && !partBox) return false;
     const draw = () => {
       this.slideBox.querySelector(".pen-layer")?.remove();
       const box = this.slideBox.getBoundingClientRect();
       const layer = svgLayer("pen-layer");
       layer.setAttribute("viewBox", `0 0 ${box.width} ${box.height}`);
       this.slideBox.appendChild(layer);
+      if (partBox) return this._circlePart(layer, box, this._slidePx(partBox), n * 7);
       boxes.forEach((b, k) => {
         const r = this._slidePx(b), cx = r.x + r.w / 2, cy = r.y + r.h / 2;
         // loosely around the picture, but never off the slide (the stroke drifts out ~4% at its end)
@@ -412,6 +435,14 @@ export class Stage {
     if (img && !img.complete) img.addEventListener("load", draw, { once: true });
     else draw();
     return true;
+  }
+
+  // A pen circle close around one part of a picture (r: its box in slide pixels), never off the slide.
+  _circlePart(layer, box, r, seed) {
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+    const rx = Math.max(18, Math.min(r.w / 2 * 1.18 + 8, cx - 4, box.width - cx - 4) / 1.05);
+    const ry = Math.max(14, Math.min(r.h / 2 * 1.18 + 8, cy - 4, box.height - cy - 4) / 1.05);
+    drawPen(layer, cx, cy, rx, ry, { seed, ms: 650 });
   }
 
   slideHighlight(text) {
@@ -696,4 +727,23 @@ function markText(el, text, block = "nearest", scroll = true) {
   el.replaceChildren(src.slice(0, idx), mark, src.slice(idx + want.length));
   if (scroll) el.scrollIntoView({ block, inline: "nearest", behavior: "smooth" });
   return true;
+}
+
+// The box of the part a pen circle names ("chip", "the primary shear zone"), from a picture's parts, or null:
+// the same name first, then one name inside the other, then most shared words.
+export function findPart(parts, name) {
+  if (!parts?.length || !name) return null;
+  const words = s => String(s).toLowerCase().replace(/[^\p{L}\p{N} ]+/gu, " ").split(/\s+/)
+    .filter(w => w.length > 2 && w !== "the").map(w => w.replace(/s$/, ""));
+  const want = String(name).trim().toLowerCase();
+  const same = parts.find(p => p.name.toLowerCase() === want)
+    || parts.find(p => p.name.toLowerCase().includes(want) || want.includes(p.name.toLowerCase()));
+  if (same) return same.box;
+  const asked = new Set(words(name));
+  let best = null, score = 0;
+  for (const p of parts) {
+    const w = words(p.name), shared = w.filter(x => asked.has(x)).length / Math.max(1, w.length);
+    if (shared > score) { best = p; score = shared; }
+  }
+  return score >= 0.5 ? best.box : null;
 }

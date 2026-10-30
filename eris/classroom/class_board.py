@@ -66,6 +66,10 @@ def add_segments(board, segments):
             board["notebook"].extend(lines)
             prefix = "## " if name == "NOTE_TITLE" else ""
             _page_lines(board, board["section"]).extend(prefix + ln for ln in lines)
+        elif name == "SKETCH_ROW":
+            from eris.visuals.sketch import row_line, row_words
+            board["notebook"].extend(row_words(args["parts"]))
+            _page_lines(board, board["section"]).append("sketch: " + row_line(args["parts"]))
     return board
 
 
@@ -133,7 +137,8 @@ def describe(board, slides=None):
         seen = f"  (shown in '{shown[n]}')" if n in shown else ""
         current = "  <- on screen now" if n == board.get("current_slide") else ""
         pics = [p["description"] for p in board.get("pictures", []) if p.get("slide") == int(n) and p.get("description")]
-        pic = f" | picture: {' / '.join(pics)[:240]}" if pics else ""
+        parts = [q["name"] for p in board.get("pictures", []) if p.get("slide") == int(n) for q in p.get("parts") or []]
+        pic = (f" | picture: {' / '.join(pics)[:240]}" if pics else "") + (f" | parts: {', '.join(parts)}" if parts else "")
         parts.append(f"  slide {n}: {title}{' - ' + rest if rest else ''}{pic}{seen}{current}")
     if not slides:
         parts.append("  this lecture has no slides")

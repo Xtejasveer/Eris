@@ -2,7 +2,7 @@
 
 - add_sync_flags: highlights, pen circles and slider moves followed by narration get while_speaking=true, so they
   happen as that sentence starts. Notes, programs, graphs and diagram blocks are written first, then explained.
-- trim_doubt_checks: keep at most N question breaks plus the final one.
+- drop_markers(text, {"DOUBT_CHECK"}): new scripts have no question breaks (students ask any time by holding Space).
 - drop_bad_staging: remove highlight / look-back markers the parser rejects (the narration stays).
 - drop_visual / drop_bad_visuals: remove a [VISUAL] that can't be built or read, with every [VISUAL_SET] and
   [OPEN_VISUAL] that uses it (the narration stays).
@@ -13,12 +13,14 @@ They run only during `generate`; the teacher's edits in Studio are never changed
 """
 
 import re
+import unicodedata
 
 from eris.generate.script_parser import BLOCK_MARKERS, parse_line_marker
 
-AUTO_FLAG = {"NOTE", "NOTE_TITLE", "WRITE_CODE", "VISUAL", "FLOW_NEXT"}
+AUTO_FLAG = {"NOTE", "NOTE_TITLE", "WRITE_CODE", "VISUAL", "FLOW_NEXT", "SKETCH_ROW"}
 # Optional staging: if one of these can't be resolved, the lesson still works without it.
 DROPPABLE = {"HIGHLIGHT", "NOTE_HIGHLIGHT", "SLIDE_HIGHLIGHT", "SLIDE_CIRCLE", "LOOK_BACK", "VISUAL_SET", "OPEN_VISUAL",
+             "SKETCH_ROW",
              "FLOW_NEXT", "FLOW_HIGHLIGHT", "OPEN_FLOW"}
 ERROR_LINE_RE = re.compile(r"^line (\d+): \[([A-Z_]+)\]")
 
@@ -103,19 +105,6 @@ def remove_flags(text, ordinals):
     return "\n".join(lines)
 
 
-def trim_doubt_checks(text, keep):
-    """Keep the last [DOUBT_CHECK] and `keep` evenly spaced earlier ones. Returns (text, number removed)."""
-    lines = text.splitlines()
-    checks = _marker_lines(lines, "DOUBT_CHECK")
-    earlier = checks[:-1]
-    if len(earlier) <= keep:
-        return text, 0
-    step = len(earlier) / keep
-    kept = {earlier[int(step * (k + 1)) - 1] for k in range(keep)}
-    drop = set(earlier) - kept
-    return "\n".join(ln for i, ln in enumerate(lines) if i not in drop), len(drop)
-
-
 NOT_CONCEPT_RE = re.compile(r"\b(opening|introduction|intro|recap|summary|closing|wrap[- ]?up|conclusion)\b", re.I)
 
 
@@ -123,28 +112,6 @@ def concept_sections(segments):
     """Titles of the teaching sections (not the opening, recap or closing)."""
     titles = [s["args"]["title"] for s in segments if s.get("name") == "SECTION"]
     return [t for t in titles[1:] if not NOT_CONCEPT_RE.search(t)]
-
-
-def add_doubt_checks(text, keep):
-    """Give each of the first `keep` concept sections a [DOUBT_CHECK] at its end (if it has none) and make the
-    last line one. Returns (text, number added)."""
-    lines = text.splitlines()
-    sections = _marker_lines(lines, "SECTION")
-    titles = [parse_line_marker(lines[i])[1].get("title", "") for i in sections]
-    concept = [k for k, t in enumerate(titles) if k > 0 and not NOT_CONCEPT_RE.search(t)][:keep]
-    inserts = []
-    for k in concept:
-        start, stop = sections[k], sections[k + 1] if k + 1 < len(sections) else len(lines)
-        if not any(parse_line_marker(ln) and parse_line_marker(ln)[0] == "DOUBT_CHECK" for ln in lines[start:stop]):
-            inserts.append(stop)
-    for at in sorted(inserts, reverse=True):
-        lines[at:at] = ["[DOUBT_CHECK]", ""]
-    added = len(inserts)
-    last = next((ln for ln in reversed(lines) if ln.strip()), "")
-    if parse_line_marker(last) is None or parse_line_marker(last)[0] != "DOUBT_CHECK":
-        lines.append("[DOUBT_CHECK]")
-        added += 1
-    return "\n".join(lines), added
 
 
 def _flow_labels(lines):
@@ -225,41 +192,6 @@ def complete_flows(text):
                 lines[at:at] = [f'[FLOW_NEXT id="{fid}"]', f"Next on the board: {label[0].lower() + label[1:]}."]
             added += 1
     return "\n".join(lines), added
-
-
-def early_doubt_checks(segments):
-    """Titles of sections whose [DOUBT_CHECK] comes before the section has finished teaching."""
-    out, section = [], None
-    for i, seg in enumerate(segments):
-        if seg.get("name") == "SECTION":
-            section = seg["args"]["title"]
-        elif seg.get("name") == "DOUBT_CHECK" and i + 1 < len(segments):
-            following = segments[i + 1:]
-            ends = next((k for k, s in enumerate(following) if s.get("name") == "SECTION"), len(following))
-            if any(s["kind"] == "action" for s in following[:ends]) and section:
-                out.append(section)
-    return out
-
-
-def move_doubt_checks_to_section_end(text):
-    """Move each [DOUBT_CHECK] that comes before its section has finished to just before the next [SECTION].
-    Returns (text, number moved)."""
-    lines = text.splitlines()
-    sections = _marker_lines(lines, "SECTION")
-    checks = _marker_lines(lines, "DOUBT_CHECK")
-    moves = []
-    for c in checks[:-1]:
-        nxt = next((s for s in sections if s > c), None)
-        if nxt is None:
-            continue
-        between = [ln for ln in lines[c + 1:nxt] if parse_line_marker(ln) and not parse_line_marker(ln)[0].startswith("/")]
-        if between:
-            moves.append((c, nxt))
-    for c, nxt in sorted(moves, reverse=True):
-        lines.insert(nxt, "[DOUBT_CHECK]")
-        lines.insert(nxt + 1, "")
-        del lines[c]
-    return "\n".join(lines), len(moves)
 
 
 def drop_bad_staging(text, errors):
@@ -363,14 +295,14 @@ PICTURE_VERB_RE = re.compile(r"\b(?:picture|imagine|visuali[sz]e)\s+(?:a|an|the|
                              r"two|one|each|every|being)\b|\b(?:figure|map|chart|table)\s+(?:it\s+|them\s+)?out\b|"
                              r"\bchart\s+a\s+course\b", re.I)
 SLIDE_NAMED_RE = re.compile(r"\bslide\s+(\d+)\b", re.I)
-STAY_AFTER = {"NOTE", "NOTE_TITLE", "WRITE_CODE", "NOTE_HIGHLIGHT", "HIGHLIGHT", "LOOK_BACK", "FLOW_HIGHLIGHT",
+STAY_AFTER = {"NOTE", "NOTE_TITLE", "SKETCH_ROW", "WRITE_CODE", "NOTE_HIGHLIGHT", "HIGHLIGHT", "LOOK_BACK", "FLOW_HIGHLIGHT",
               "SLIDE_HIGHLIGHT", "SLIDE_CIRCLE",
               "FLOW_NEXT", "VISUAL_SET", "RUN", "READ_OUTPUT", "OPEN_FILE"}
 SUMMARY_RE = re.compile(r"^\s*(takeaway|in short|to sum up|so remember|remember)\b", re.I)
 FRAMING_RE = re.compile(r"\b(opening|introduction|intro|welcome|recap|summary|review|closing|conclusion|wrap)", re.I)
 SCREEN_OF = {  # which workspace a marker brings to the front
     "SLIDE": "slide", "SLIDE_HIGHLIGHT": "slide", "SLIDE_CIRCLE": "slide",
-    "NOTE": "notebook", "NOTE_TITLE": "notebook", "NOTE_HIGHLIGHT": "notebook", "NEW_PAGE": "notebook", "LOOK_BACK": "notebook",
+    "NOTE": "notebook", "NOTE_TITLE": "notebook", "SKETCH_ROW": "notebook", "NOTE_HIGHLIGHT": "notebook", "NEW_PAGE": "notebook", "LOOK_BACK": "notebook",
     "WRITE_CODE": "code", "HIGHLIGHT": "code", "RUN": "code", "READ_OUTPUT": "code", "OPEN_FILE": "code",
     "FLOW": "visual", "FLOW_NEXT": "visual", "FLOW_HIGHLIGHT": "visual", "OPEN_FLOW": "visual",
     "VISUAL": "visual", "VISUAL_SET": "visual", "OPEN_VISUAL": "visual",
@@ -469,6 +401,59 @@ def _mentioned_slide(line, by_slide, screen, current=None, how=None):
     return best
 
 
+def _part_words(text):
+    return {w[:-1] if w.endswith("s") and len(w) > 3 else w for w in re.findall(r"[a-z]{3,}", text.lower())} - {"the", "and"}
+
+
+SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?।॥])\s+")
+
+
+def _first_sentence(line):
+    """What is said as a pointer marker fires: the first sentence of the line after it."""
+    return SENTENCE_SPLIT_RE.split(line.strip(), 1)[0]
+
+
+def _latin(text):
+    """Mostly Latin letters: part names (English, from the vision model) can be matched to its words."""
+    letters = re.findall(r"[^\W\d_]", text)
+    return bool(letters) and sum(c.isascii() for c in letters) >= 0.8 * len(letters)
+
+
+def _topic_words(parts_on):
+    """Words in the part names of most slides ("chip", "tool" in a machining deck): the topic's own vocabulary, said
+    in nearly every sentence, so naming one is no sign the teacher is pointing at it."""
+    if len(parts_on) < 3:
+        return set()
+    counts = {}
+    for parts in parts_on.values():
+        for w in set().union(*(words for _, words in parts)):
+            counts[w] = counts.get(w, 0) + 1
+    return {w for w, c in counts.items() if c > len(parts_on) / 2}
+
+
+def _head_word(name):
+    """The main word of a part's name: its last word ("groove" in "chip-breaker groove"), plural s dropped."""
+    words = re.findall(r"[a-z]{3,}", name.lower())
+    return (words[-1][:-1] if words[-1].endswith("s") and len(words[-1]) > 3 else words[-1]) if words else ""
+
+
+def _named_part(line, parts, topic=frozenset()):
+    """The part of the picture on screen the line's first sentence names (all of the part's words are in it), or
+    None. A part named only by topic words never counts. The longest name wins: "primary shear zone" over
+    "shear zone".
+    A sentence in another language keeps only the English technical words ("पहला है groove-type"): there the
+    part's main word is enough, when no other part on the picture has the same one."""
+    parts = [p for p in parts if not p[1] <= topic]
+    first = _first_sentence(line)
+    said = _part_words(first)
+    hits = [p for p in parts if p[1] and p[1] <= said]
+    if not hits and not _latin(first):
+        heads = [_head_word(name) for name, _ in parts]
+        hits = [p for p, head in zip(parts, heads)
+                if len(head) >= 4 and head not in topic and heads.count(head) == 1 and head in said]
+    return max(hits, key=lambda p: len(p[1]))[0] if hits else None
+
+
 def show_picture_slides(text, pictures, slide_count=None, figs=None):
     """Put a picture's slide on screen whenever the script talks about that picture, diagram or chart, if it isn't
     showing already: before the sentence that mentions it, and before a [FLOW]/[VISUAL] drawn from it (with a
@@ -478,6 +463,12 @@ def show_picture_slides(text, pictures, slide_count=None, figs=None):
     by_slide = _slide_pictures(pictures, slide_count, figs)
     if not by_slide:
         return text, 0
+    parts_on = {}  # slide number -> [(part name, its words)]: what the pen can circle inside its pictures
+    for p in pictures or []:
+        if p.get("slide") and p.get("parts"):
+            parts_on.setdefault(p["slide"], []).extend((q["name"], _part_words(q["name"])) for q in p["parts"])
+    topic = _topic_words(parts_on)
+    shown_here = False  # a slide was brought up in this section: before that, its opening hook isn't about it
     lines, out, added, i = text.splitlines(), [], 0, 0
     screen, current = None, None  # the workspace in front, and the slide showing in the Slides view
     framing = False  # opening, recap and closing only mention pictures in passing: no slide for those
@@ -499,10 +490,24 @@ def show_picture_slides(text, pictures, slide_count=None, figs=None):
             if n and (screen, current) != ("slide", n):
                 out.append(f"[SLIDE n={n}]")
                 screen, current, added, circled = "slide", n, added + 1, set()
+            # A sentence that names a part of the picture on screen ("the chip curls up...") gets the pen around
+            # just that part, once while the slide shows.
+            if n:
+                shown_here = True
+            part = (_named_part(line, parts_on.get(current, []), topic)
+                    if screen == "slide" and shown_here and line.strip() and not passing else None)
+            if part and (current, part.lower()) in circled:
+                part = None
             if n and n not in circled and by_slide[n][2]:
-                out.append(f"[SLIDE_CIRCLE n={n}]")
+                out.append(f"[SLIDE_CIRCLE n={n}]")  # the first time: the whole picture, as it is introduced
                 circled.add(n)
                 added += 1
+                part = None
+            elif part and not (out and (parse_line_marker(out[-1]) or ("",))[0] == "SLIDE_CIRCLE"):
+                out.append(f'[SLIDE_CIRCLE n={current} part="{part}"]')
+                added += 1
+            if part:
+                circled.add((current, part.lower()))
             out.append(line)
             if line.strip():
                 prev = None
@@ -515,6 +520,9 @@ def show_picture_slides(text, pictures, slide_count=None, figs=None):
         if name == "SECTION":
             framing = bool(FRAMING_RE.search(str(args.get("title", ""))))
             by_values_shown = set()
+            shown_here = False
+        if name in ("SLIDE", "SLIDE_CIRCLE", "SLIDE_HIGHLIGHT"):
+            shown_here = True
         if name in ("FLOW", "VISUAL"):
             src = SLIDE_NAMED_RE.search(str(args.get("from", "")))
             n = int(src.group(1)) if src else None
@@ -605,11 +613,12 @@ def tidy_staging(text, lesson_sentences=()):
                 out.append(f"[SLIDE n={args.get('n')}]")  # its slide wasn't on screen: nothing would light up
                 screen, current, circled = "slide", args.get("n"), set()
             if name == "SLIDE_CIRCLE":
-                if str(args.get("n")) in circled:
+                key = f"{args.get('n')}:{str(args.get('part', '')).lower()}"  # each part of a picture once, too
+                if key in circled:
                     removed += 1  # already circled while this slide shows
                     i = end + 1
                     continue
-                circled.add(str(args.get("n")))
+                circled.add(key)
             if name == "SLIDE":
                 circled = set()
             if name in SCREEN_OF:
@@ -636,6 +645,30 @@ def tidy_staging(text, lesson_sentences=()):
     return "\n".join(out), removed
 
 
+def _next_narration(lines, i):
+    """The first spoken line after line i (other markers skipped), or ""."""
+    for line in lines[i + 1:]:
+        if line.strip() and parse_line_marker(line) is None:
+            return line
+    return ""
+
+
+def drop_unnamed_parts(text):
+    """A pen circle on one part of a picture belongs on the sentence about that part: one whose next sentence names
+    none of the part's words ("Tool" before "Think of a sticky note...") is removed. Only checked when that sentence
+    is in a Latin-script language, like the part names. Returns (text, removed)."""
+    lines, out, removed = text.splitlines(), [], 0
+    for i, line in enumerate(lines):
+        m = parse_line_marker(line)
+        if m and m[0] == "SLIDE_CIRCLE" and m[1].get("part"):
+            said = _first_sentence(_next_narration(lines, i))
+            if said and _latin(said) and not _part_words(m[1]["part"]) & _part_words(said):
+                removed += 1
+                continue
+        out.append(line)
+    return "\n".join(out), removed
+
+
 def drop_empty_circles(text, pictures):
     """A pen circle needs a picture: one on a slide with no picture (e.g. a chart drawn in the deck) is removed.
     Returns (text, removed)."""
@@ -648,3 +681,154 @@ def drop_empty_circles(text, pictures):
             continue
         out.append(line)
     return "\n".join(out), removed
+
+
+# ---------- notebook sketches and calculation steps: drawn where they are explained ----------
+
+LEAD_RE = re.compile(r"^\s*(here|this|these|look|see)\b", re.I)  # "Here is..." introduces what was just drawn
+STEP_RE = re.compile(r"^\s*(first|second|third|next|then|last|lastly|finally|now|so)\b", re.I)
+NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
+SKETCH_REPEATS_AT = 0.6  # this share of a row's words already in the section's notes: the row only repeats them
+SKETCH_LOOK_AHEAD = 6    # sentences after a row searched for the one that explains it
+
+
+def _words_any(text):
+    """The words of a text in any script, lowercased (a word is a run of letters with their vowel signs, so a Hindi
+    word stays whole). A Latin word counts from 3 letters (plural s dropped); another script's from 4 characters,
+    since its short words are mostly grammar ("में", "और")."""
+    out, word = set(), []
+    for ch in text.lower() + " ":
+        if unicodedata.category(ch)[0] in "LM":
+            word.append(ch)
+            continue
+        if word:
+            w = "".join(word)
+            if w.isascii() and len(w) >= 3:
+                out.add(w[:-1] if w.endswith("s") and len(w) > 3 else w)
+            elif not w.isascii() and len(w) >= 4:
+                out.add(w)
+            word = []
+    return out - {"the", "and"}
+
+
+def _row_words(args):
+    """The words written in a sketch row (every part, even one the parser would reject)."""
+    return _words_any(" ".join(p.split(":", 1)[1] for p in str(args.get("items", "")).split("|") if ":" in p))
+
+
+def _narration_run(lines, start):
+    """(end index, sentences) of the spoken lines from `start` up to the next marker or blank line."""
+    j, sentences = start, []
+    while j < len(lines) and lines[j].strip() and parse_line_marker(lines[j]) is None:
+        sentences += [s for s in SENTENCE_SPLIT_RE.split(lines[j].strip()) if s]
+        j += 1
+    return j, sentences
+
+
+def tidy_sketches(text):
+    """A sketch row that only repeats the notes already written in its section is removed (the class sees the same
+    words twice). A row is drawn as the sentence about it starts, in any language:
+    - placed one sentence late (the sentence before it names its words more than the one after it), it moves up
+      before that sentence;
+    - placed before a sentence that isn't about it, it moves down to the first sentence that names its words (within
+      a few sentences, and never past a "Here is..." lead that introduces it).
+    Returns (text, changed)."""
+    lines, out, changed, i = text.splitlines(), [], 0, 0
+    noted = set()  # words in this section's notes
+    while i < len(lines):
+        m = parse_line_marker(lines[i])
+        name, args = m if m else (None, {})
+        if name == "SECTION":
+            noted = set()
+        if name in BLOCK_MARKERS:
+            end = _block_end(lines, i, name)
+            end = len(lines) - 1 if end is None else end
+            if name == "NOTE":
+                noted |= _words_any(" ".join(lines[i + 1:end]))
+            out += lines[i:end + 1]
+            i = end + 1
+            continue
+        if name == "NOTE_TITLE":
+            noted |= _words_any(args.get("text", ""))
+        if name == "SKETCH_ROW":
+            words = _row_words(args)
+            if words and len(words & noted) >= SKETCH_REPEATS_AT * len(words):
+                changed += 1
+                i += 1
+                continue
+            end, sentences = _narration_run(lines, i + 1)
+            first = sentences[0] if sentences else ""
+            after = len(words & _words_any(first))
+            prev = out[-1] if out and out[-1].strip() and parse_line_marker(out[-1]) is None else None
+            said = [p for p in SENTENCE_SPLIT_RE.split(prev.strip()) if p] if prev else []
+            before = len(words & _words_any(said[-1])) if said else 0
+            if words and before > after and not LEAD_RE.match(first):
+                # one sentence late: drawn before the sentence that names it (the lines before stay as they are)
+                out[-1:] = ([" ".join(said[:-1])] if len(said) > 1 else []) + [lines[i], said[-1]]
+                changed += 1
+                i += 1
+                continue
+            if words and not after and not LEAD_RE.match(first):
+                k = next((k for k, s in enumerate(sentences[:SKETCH_LOOK_AHEAD]) if words & _words_any(s)), None)
+                if k:
+                    # the lines before the sentence stay as they are; only the line it starts in is split
+                    seen, j = 0, i + 1
+                    while True:
+                        parts = [p for p in SENTENCE_SPLIT_RE.split(lines[j].strip()) if p]
+                        if seen + len(parts) > k:
+                            break
+                        seen, j = seen + len(parts), j + 1
+                    cut = k - seen
+                    head = [" ".join(parts[:cut])] if cut else []
+                    out += lines[i + 1:j] + head + [lines[i], " ".join(parts[cut:])] + lines[j + 1:end]
+                    changed += 1
+                    i = end
+                    continue
+        out.append(lines[i])
+        i += 1
+    return "\n".join(out), changed
+
+
+def _calc_note(lines, i):
+    """The numbers of the untitled one-step calculation note at line i ([NOTE] with an "=" line), else None."""
+    end = _block_end(lines, i, "NOTE")
+    body = " ".join(lines[i + 1:end]) if end else ""
+    return set(NUMBER_RE.findall(body)) if "=" in body else None
+
+
+def place_calc_steps(text):
+    """Each calculation step is written right before the sentence that does it. A sentence right after a step's note
+    that only restates the previous step's values ("to is 0.5 mm, and tc is 1.0 mm" after "r = 0.5") belongs before
+    that note, so it moves up. Returns (text, moved)."""
+    lines, moved, i = text.splitlines(), 0, 0
+    prev = None  # the numbers of the previous calculation note in this section
+    while i < len(lines):
+        m = parse_line_marker(lines[i])
+        if m and m[0] == "SECTION":
+            prev = None
+        if not (m and m[0] == "NOTE"):
+            i += 1
+            continue
+        end = _block_end(lines, i, "NOTE")
+        if end is None:
+            break
+        here = _calc_note(lines, i)
+        if here is not None and prev and len(prev) >= 2:
+            run_end, sentences = _narration_run(lines, end + 1)
+            first = sentences[0] if sentences else ""
+            said = set(NUMBER_RE.findall(first))
+            if first and not STEP_RE.match(first) and prev <= said and said - here:
+                rest = SENTENCE_SPLIT_RE.split(lines[end + 1].strip(), 1)  # only its first line changes
+                after = ([rest[1]] if len(rest) > 1 else []) + lines[end + 2:run_end]
+                note = lines[i:end + 1]
+                if i and lines[i - 1].strip() and parse_line_marker(lines[i - 1]) is None:
+                    head = lines[:i - 1] + [lines[i - 1].rstrip() + " " + first]  # joins the sentence before it
+                else:
+                    head = lines[:i] + [first]
+                lines = head + note + after + lines[run_end:]
+                i = len(head)
+                end = i + len(note) - 1
+                moved += 1
+        prev = here if here is not None else prev
+        i = end + 1
+    return "\n".join(lines), moved

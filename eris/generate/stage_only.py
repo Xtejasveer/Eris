@@ -11,7 +11,7 @@ from eris.generate.lesson import parse_lesson
 from eris.generate.script_parser import word_budget
 from eris.generate.staging import stage_lesson
 
-SCREEN_MARKERS = {"SLIDE": "slides", "NOTE": "notebook", "NOTE_TITLE": "notebook", "NEW_PAGE": "notebook",
+SCREEN_MARKERS = {"SLIDE": "slides", "NOTE": "notebook", "SKETCH_ROW": "notebook", "NOTE_TITLE": "notebook", "NEW_PAGE": "notebook",
                   "WRITE_CODE": "code", "RUN": "code", "OPEN_FILE": "code", "FLOW": "visual", "VISUAL": "visual",
                   "OPEN_VISUAL": "visual", "OPEN_FLOW": "visual"}
 
@@ -51,7 +51,8 @@ def run_stage_only(lecture_id, prompt_fn=None):
     language = config.lecture_language(manifest)
     env = figures.lecture_environments(lecture_id, manifest, count_slides(lecture_id))
     figs = figures.load(lecture_id)
-    pictures, slides = load_pictures(lecture_id), _load_slides(lecture_id)
+    from eris.material.images import with_labels
+    pictures, slides = with_labels(load_pictures(lecture_id), lecture_id), _load_slides(lecture_id)
     rounds = []
     started = time.time()
     text, segments, problems, report, pipe = stage_lesson(

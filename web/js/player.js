@@ -7,6 +7,8 @@ import { sleep } from "./ui.js";
 import { NOTE_MS, CODE_MS } from "./stage.js";
 
 export class Stopped extends Error {}
+// A student held Space and asked something: the line being said stops there, and is picked up after the answer.
+class Interrupted extends Error {}
 
 // A slide (or slide highlight) followed by another screen action, not by a sentence about it: the class would
 // see it flash. Keep it on screen a few seconds first. (A slide followed by its highlight needs no wait.)
@@ -18,7 +20,7 @@ const isPair = (seg, next) => seg.kind === "action" && !!seg.args?.while_speakin
 // "No (doubts), sir" in every class language: only these words, with at least one "no". As in doubt_agent.py.
 const NO_WORDS = new Set(["n", "na", "nah", "nahi", "nahin", "nai", "nil", "no", "none", "nope", "nothing", "नको", "नही", "नहीं", "ना", "नाही", "नो", "না", "নেই", "নো", "ਨਹੀ", "ਨਹੀਂ", "ਨਾ", "ਨੋ", "નથી", "નહીં", "ના", "નો", "இல்ல", "இல்லை", "நோ", "నో", "లేదు", "లేవు", "ಇಲ್ಲ", "ನೋ", "ഇല്ല", "നോ"]);
 const FILLER_WORDS = new Set(["any", "aur", "bhaiya", "didi", "doubt", "doubts", "ji", "koi", "kuch", "am", "ma", "maam", "madam", "mam", "miss", "more", "paaji", "please", "query", "question", "questions", "sawal", "sir", "teacher", "thank", "thanks", "veer", "veere", "you", "आणखी", "और", "काही", "कुछ", "कोई", "जी", "डाउट", "प्रश्न", "मैडम", "शंका", "सर", "सवाल", "আর", "কিছু", "কোনো", "ডাউট", "প্রশ্ন", "স্যার", "ਕੁਝ", "ਕੋਈ", "ਜੀ", "ਡਾਉਟ", "ਡਾਊਟ", "ਮੈਡਮ", "ਵੀਰੇ", "ਸਰ", "ਸਵਾਲ", "ਹੋਰ", "કંઈ", "કોઈ", "ડાઉટ", "પ્રશ્ન", "વધુ", "સર", "સવાલ", "எதுவும்", "கேள்வி", "சார்", "டவுட்", "மேலும்", "ఇంకా", "ఏమీ", "డౌట్", "ప్రశ్న", "సార్", "ಇನ್ನೂ", "ಏನೂ", "ಡೌಟ್", "ಪ್ರಶ್ನೆ", "ಸರ್", "ഒന്നും", "കൂടുതൽ", "ചോദ്യം", "ഡൗട്ട്", "സാർ"]);
-const isNoDoubt = (text) => {
+export const isNoDoubt = (text) => {
   const words = text.toLowerCase().replace(/[.,!?।॥'"]+/g, " ").split(/\s+/).filter(Boolean);
   return !words.length || (words.length <= 6 && words.every(w => NO_WORDS.has(w) || FILLER_WORDS.has(w)) && words.some(w => NO_WORDS.has(w)));
 };
@@ -94,6 +96,10 @@ export class Player {
     this._resume = null;
     this.rate = 1;               // playback speed: writing and pauses follow it, like the voice
     this.raised = [];            // questions typed mid-lesson: answered right after the current step
+    this.speakingIndex = null;   // the lesson line being said now (a plain line, not one said while writing)
+    this.cut = null;             // {index, frac, question}: that line was stopped for a spoken doubt
+    this.inBreak = false;        // a question break (or an answer) is on: a spoken doubt cuts the teacher there
+    this.answerCut = null;       // a doubt spoken over the teacher's answer: answered next, the rest is dropped
     this.resetState();
     // ctl is what animations use to wait: it honours pause and stop.
     this.ctl = { tick: (ms) => this.tick(ms) };
@@ -116,6 +122,29 @@ export class Player {
 
   // A student asked something while the teacher was teaching: answer it after the current step.
   raiseHand(question) { this.raised.push(question); }
+
+  // A student held Space and spoke a doubt: answer it now. A lesson line being said stops where it is (the answer
+  // comes at once, and the line is said again from its sentence afterwards); writing on the board finishes first.
+  interruptNow(question) {
+    if (this.inBreak) {  // talking over an answer (or "any other doubts?"): stop it and take this question next
+      this.answerCut = question;
+      this.voice.stop();
+      this._wakeAnswer?.();  // an answer still arriving stops waiting for its next sentence
+    } else if (this.speakingIndex != null && !this.cut) {
+      this.cut = { index: this.speakingIndex, frac: this.voice.progress().frac, question };
+      this.voice.stop();
+    } else this.raised.push(question);
+    if (this.paused) this.resume();
+  }
+
+  // The rest of a cut lesson line, from the sentence it stopped in.
+  restOfLine(text, frac) {
+    const parts = sentences(text);
+    const at = frac * text.length;
+    let start = 0, k = 0;
+    while (k < parts.length - 1 && start + parts[k].length < at) { start += parts[k].length + 1; k += 1; }
+    return { said: parts.slice(0, k + 1).join(" "), rest: parts.slice(k).join(" ") };
+  }
 
   pause() { this.paused = true; this.clock.hold(); this.voice.pause(); }
   resume() { this.paused = false; this.clock.run(); this.voice.resume(); this._resume?.(); }
@@ -185,6 +214,7 @@ export class Player {
         case "SLIDE": this.board.currentSlide = a.n; this.stage.showSlide(a.n); break;
         case "NOTE": case "WRITE": this.board.notebook.push(...a.text.split("\n")); await this.stage.note(a.text); break;
         case "NOTE_TITLE": this.board.notebook.push("## " + a.text); await this.stage.noteTitle(a.text); break;
+        case "SKETCH_ROW": this.board.notebook.push(...sketchWords(a.parts)); await this.stage.sketchRow(a.parts); break;
         case "NOTE_HIGHLIGHT": this.stage.noteHighlight(a.text); break;
         case "NEW_PAGE": this.board.notebook.push(a.title); await this.stage.newPage(a.title); break;
         case "VISUAL": if (a.key) await this.stage.showVisual(a.id, this.visualUrl(a.key), a.title); break;
@@ -219,6 +249,16 @@ export class Player {
         this.log(i, seg, "done");
       } catch (e) {
         if (e instanceof Stopped) { this.log(i, seg, "stopped"); throw e; }
+        if (e instanceof Interrupted) {
+          // Answer the spoken doubt now, then say the cut line again from the sentence it stopped in.
+          const cut = this.cut, line = this.restOfLine(seg.text, cut.frac);
+          this.log(i, seg, "interrupted");
+          await this.doubtCheck(false, cut.question, line.said);
+          this.cut = null;
+          await this.say(line.rest, i);
+          this.log(i, seg, "done");
+          continue;
+        }
         this.state.failed += 1;
         this.log(i, seg, "failed", e.message);
         console.warn(`[class] segment ${i + 1} failed:`, e);
@@ -255,6 +295,7 @@ export class Player {
     this.ui.onCaption?.(text);
     if (index != null) this.voice.prefetch(this.nextSay(index));
     await this.voice.speak(text);
+    if (this.cut && this.cut.index === index) throw new Interrupted();
     if (index != null && !this.stopped) this.ui.onSpoken?.(index);  // a lesson line was heard (attendance)
     await this.tick(BREATH_MS);  // tick also honours pause and stop
   }
@@ -263,7 +304,8 @@ export class Player {
   async playSegment(seg, index, withSay = null) {
     if (seg.kind === "say") {
       this.state.sectionText.push(seg.text);
-      return this.say(seg.text, index);
+      this.speakingIndex = index;
+      try { return await this.say(seg.text, index); } finally { this.speakingIndex = null; }
     }
     const a = seg.args || {};
     if (seg.name === "SECTION") {
@@ -281,6 +323,7 @@ export class Player {
     }
     if (seg.name === "WRITE_CODE") this.state.sectionText.push(`Code in ${a.file}:\n${a.code}`);
     if (["NOTE", "NOTE_TITLE", "WRITE"].includes(seg.name)) this.state.sectionText.push(`Notebook:\n${a.text}`);
+    if (seg.name === "SKETCH_ROW") this.state.sectionText.push(`Notebook sketch: ${a.items}`);
     if (seg.name === "VISUAL") this.state.sectionText.push(`Visual "${a.title}" (${a.id}): ${a.brief}`);
     if (seg.name === "FLOW") this.state.sectionText.push(`Diagram "${a.title}" (${a.id}): ${a.blocks.map(b => b.label).join(" -> ")}`);
     const error = withSay ? await this.pair(seg, withSay, index) : await this.action(seg);
@@ -327,6 +370,9 @@ export class Player {
     switch (seg.name) {
       case "NOTE_TITLE":
         b.notebook.push("## " + a.text); await st.noteTitle(a.text, ctl); return "";
+      case "SKETCH_ROW":
+        if (!a.parts?.length) return "the sketch row has no parts";
+        b.notebook.push(...sketchWords(a.parts)); await st.sketchRow(a.parts, ctl); return "";
       case "NOTE": case "WRITE":
         b.notebook.push(...a.text.split("\n")); await st.note(a.text, ctl); return "";
       case "NOTE_HIGHLIGHT":
@@ -348,7 +394,7 @@ export class Player {
         st.slideHighlight(a.text); await this.tick(400); return "";
       case "SLIDE_CIRCLE":
         b.currentSlide = a.n;
-        if (!st.slideCircle(a.n)) { st.showSlide(a.n); return ""; }  // no picture on it: just show the slide
+        if (!st.slideCircle(a.n, a.part)) { st.showSlide(a.n); return ""; }  // no picture on it: just show the slide
         await this.tick(750); return "";
       case "WRITE_CODE":
         b.files[a.file] = a.code; await st.writeCode(a.file, a.code, ctl); return "";
@@ -418,6 +464,7 @@ export class Player {
     for (let j = 0; j < segments.length; j++) {
       const seg = segments[j];
       await this.gate();
+      if (this.answerCut) return;  // the student spoke over the answer: the rest of it isn't said
       if (seg.kind === "say") { this.voice.prefetch(nextSay(j + 1)); await this.say(seg.text); continue; }
       const pair = isPair(seg, segments[j + 1]);
       const err = pair ? await this.pair(seg, segments[j + 1]) : await this.action(seg);
@@ -427,13 +474,51 @@ export class Player {
     }
   }
 
+  // A doubt answered as it is written: each sentence (with what it puts on the screen) plays as soon as it arrives,
+  // and the next one's voice is made while this one is heard. A doubt spoken over it stops it (the rest is
+  // dropped). Returns the server's "done" event: {thread_id, passed, reply_text}.
+  async streamAnswer(body, chk) {
+    const queue = [], ctrl = new AbortController();
+    let done = false, meta = {}, failed = null, wake = null;
+    const nudge = () => { const w = wake; wake = null; w?.(); };
+    this._wakeAnswer = nudge;
+    api.doubtStream(this.lectureId, body, (ev) => {
+      if (ev.type === "segments" && ev.segments?.length) {
+        queue.push(ev.segments);
+        const say = ev.segments.find(s => s.kind === "say");
+        if (say) this.voice.prefetch(sentences(say.text)[0]);
+      } else if (ev.type === "error") failed = new Error(ev.detail || "The answer could not be made");
+      else if (ev.type === "done") meta = ev;
+      nudge();
+    }, ctrl.signal).catch((e) => { if (e.name !== "AbortError") failed = e; }).finally(() => { done = true; nudge(); });
+    let started = false;
+    try {
+      for (;;) {
+        if (this.answerCut || this.stopped) { ctrl.abort(); break; }
+        if (queue.length) {
+          if (!started) { started = true; chk.thinking(false); }
+          await this.playAnswer(queue.shift());
+          continue;
+        }
+        if (done) break;
+        await new Promise(r => { wake = r; });
+      }
+    } finally {
+      this._wakeAnswer = null;
+      if (!started) chk.thinking(false);
+    }
+    if (failed && !started) throw failed;
+    return meta;
+  }
+
   // A question break. The player asks the class itself and waits DOUBT_WAIT_S seconds, so the class always
   // gets its chance, whatever the model does. The doubt agent is only called when a student asks something,
   // always on the class's one conversation. A mid-lecture break ends after BREAK_MAX_QUESTIONS or
   // BREAK_BUDGET_S, but never in the middle of an exchange: if the teacher just asked the student something
   // back ("which code?"), the student may answer first. Questions that didn't fit move to the final break.
   // first: a question a student raised mid-lesson; it is answered at once (no "any doubts?" first), even late.
-  async doubtCheck(final, first = null) {
+  // interrupted: the lesson sentence the student stopped by asking (the answer is about that moment).
+  async doubtCheck(final, first = null, interrupted = "") {
     if (!final && !first && this.clock.warned.has("notice")) { this.deferredDoubts = true; return; }  // questions wait for the end
     const ui = this.ui;
     const chk = ui.openCheckpoint(this.state.section, final);
@@ -444,6 +529,7 @@ export class Player {
     let asked = 0, followUp = false;  // followUp: the student is answering the teacher's question back
     let prompt = first ? null : final ? (this.deferredDoubts ? FINAL_DEFERRED_PROMPT : FINAL_PROMPT) : FIRST_PROMPT;
     let closing = final ? FINAL_CLOSING_LINE : CLOSING_LINE;
+    this.inBreak = true;
     try {
       while (true) {
         const outOfTime = final ? this.clock.left() <= 0
@@ -453,29 +539,28 @@ export class Player {
           else { closing = DEFER_LINE; this.deferredDoubts = true; }
           break;
         }
-        if (prompt) { chk.teacher(prompt, { prompt: true }); await this.say(prompt); }
-        const question = first != null ? first.trim() : (await chk.ask(followUp ? ANSWER_WAIT_S : DOUBT_WAIT_S)).trim();
+        if (prompt && !this.answerCut) { chk.teacher(prompt, { prompt: true }); await this.say(prompt); }
+        let question;
+        if (this.answerCut) { question = this.answerCut.trim(); this.answerCut = null; }  // spoken over the teacher
+        else question = first != null ? first.trim() : (await chk.ask(followUp ? ANSWER_WAIT_S : DOUBT_WAIT_S)).trim();
         first = null;
         await this.gate();
         if (isNoDoubt(question)) break;  // nobody asked in time, or "no questions"
         chk.student(question);
         chk.thinking(true);
-        let turn;
-        try {
-          turn = await api.doubtAsk(this.lectureId, {
-            question, context: this.snapshot(), section: this.state.section, final, cursor: this.cursor,
-            threadId: this.doubtThread, visuals: [this.stage.visualStates(), this.stage.flowStates()].filter(Boolean).join("\n"),
-            lesson: this.lesson,
-          });
-        } finally { chk.thinking(false); }
+        const turn = await this.streamAnswer({
+          question, context: this.snapshot(), section: this.state.section, final, cursor: this.cursor, interrupted,
+          threadId: this.doubtThread, visuals: [this.stage.visualStates(), this.stage.flowStates()].filter(Boolean).join("\n"),
+          lesson: this.lesson,
+        }, chk);
         this.doubtThread = turn.thread_id || this.doubtThread;
         if (!followUp) { asked += 1; this.state.doubtsAsked += 1; }  // a reply to the teacher isn't a new doubt
         if (turn.passed) this.state.passed += 1;
         chk.setCount(asked, maxQuestions);
-        const segments = turn.reply_segments?.length ? turn.reply_segments : turn.final_segments || [];
-        const text = turn.reply_text || turn.reply || turn.final_text;
+        interrupted = "";  // only the first question was asked mid-sentence
+        const text = turn.reply_text || "";
         if (text) chk.teacher(text, { passed: turn.passed });
-        await this.playAnswer(segments);
+        if (this.answerCut) { followUp = false; prompt = null; continue; }  // cut off by the next question
         followUp = asksStudent(text);
         prompt = followUp ? null : MORE_PROMPT;  // the teacher's own question is the prompt
       }
@@ -485,9 +570,16 @@ export class Player {
     } catch (e) {
       if (e instanceof Stopped) { close(); throw e; }
       chk.note(`Something went wrong (${e.message}). Moving on.`);
+    } finally {
+      this.inBreak = false;
+      // spoken over the closing line: answered right after it
+      if (this.answerCut) { this.raised.push(this.answerCut); this.answerCut = null; }
     }
     close();
   }
 
 
 }
+
+// The words of a sketch row, one per part, as the notebook keeps them (what a look-back can quote).
+function sketchWords(parts) { return (parts || []).filter(p => p.text && p.kind !== "icon").map(p => p.text); }
