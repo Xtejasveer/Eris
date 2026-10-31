@@ -406,7 +406,8 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     const est = data.manifest?.estimated_min;
     const item = (ic, v, l) => h("div", { class: "s-item" }, icon(ic), h("strong", {}, v), h("span", {}, l));
     statsEl.replaceChildren(item("layers", s.sections, "sections"), item("clock", est ? formatDuration(est) : `~${formatDuration(s.words / 115)}`, ""),
-      item("book", s.notes, "notes"), item("code", s.files, "programs"), item("question", s.breaks, "question breaks"),
+      item("book", s.notes, "notes"), item("code", s.files, "programs"),
+      s.breaks ? item("question", s.breaks, "question breaks") : null,  // only older scripts have them
       modelTag(data.script_model, "s-model"));
     statsEl.classList.toggle("hidden", !state.segments.length);
   }

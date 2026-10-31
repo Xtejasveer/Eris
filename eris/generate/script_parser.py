@@ -12,6 +12,7 @@ import textwrap
 from eris import config
 from eris.sandbox import CODE_FILE_RE
 from eris.visuals.flow_diagram import parse_flow
+from eris.visuals.sketch import parse_items, plain_long_arrows, row_words
 from eris.visuals.visual_controls import VISUAL_ID_RE, coerce_value, find_control, parse_controls
 
 # Marker name -> required args.
@@ -19,7 +20,7 @@ MARKERS = {
     "SECTION": ["title"],
     "SLIDE": ["n"],
     "SLIDE_HIGHLIGHT": ["n", "text"],
-    "SLIDE_CIRCLE": ["n"],  # a pen circle around the picture (painting, diagram, chart) on slide n
+    "SLIDE_CIRCLE": ["n"],  # a pen circle around the picture (painting, diagram, chart) on slide n; part="..." circles one part of it
     "WRITE_CODE": ["file"],
     "HIGHLIGHT": ["file"],  # plus text="..." (preferred) or lines="3-5"
     "RUN": ["cmd"],
@@ -28,6 +29,7 @@ MARKERS = {
     "NOTE": [],
     "NOTE_TITLE": ["text"],
     "NOTE_HIGHLIGHT": ["text"],
+    "SKETCH_ROW": ["items"],  # a row drawn in the notebook: items="box:A | arrow | result:B" (see sketch.py)
     "PAUSE": ["s"],
     # Pointing back at what is already on the board (mostly used in doubt answers):
     "LOOK_BACK": ["text"],   # scroll the notebook to a line written earlier and highlight it
@@ -47,7 +49,8 @@ MARKERS = {
 INT_ARGS = ("n", "s")
 # Level 2 sync: these actions may run while the narration right after them is spoken
 # (while_speaking=true). RUN, READ_OUTPUT, PAUSE, DOUBT_CHECK and SECTION must happen in order.
-WHILE_SPEAKING_OK = {"WRITE_CODE", "NOTE", "NOTE_TITLE", "WRITE", "NOTE_HIGHLIGHT", "HIGHLIGHT",
+# DOUBT_CHECK (a question break) is no longer written into new scripts; older approved scripts still have them.
+WHILE_SPEAKING_OK = {"WRITE_CODE", "NOTE", "NOTE_TITLE", "WRITE", "NOTE_HIGHLIGHT", "HIGHLIGHT", "SKETCH_ROW",
                      "SLIDE", "SLIDE_HIGHLIGHT", "SLIDE_CIRCLE", "NEW_PAGE", "OPEN_FILE", "LOOK_BACK",
                      "VISUAL", "VISUAL_SET", "OPEN_VISUAL", "FLOW", "FLOW_NEXT", "FLOW_HIGHLIGHT", "OPEN_FLOW"}
 # Markers with a body that runs until [/NAME]. The body is stored in this arg.
@@ -231,6 +234,16 @@ def _check_marker(name, args, line_no, state, errors):
     if name in ("NOTE_TITLE", "WRITE", "NEW_PAGE"):
         state["notebook"].append(args.get("text") or args["title"])
 
+    if name == "SKETCH_ROW":
+        args["items"] = plain_long_arrows(args["items"])  # a long arrow label costs the label, not the row
+        items, problems = parse_items(args["items"])
+        if problems:
+            for p in problems:
+                err(p)
+            return False
+        args["parts"] = items  # the player draws these
+        state["notebook"].extend(row_words(items))
+
     if name == "READ_OUTPUT" and not state["has_run"]:
         err("READ_OUTPUT comes before any RUN")
         return False
@@ -353,11 +366,10 @@ def _close_block(block, line_no, state, segments, errors):
     segments.append(block["segment"])
 
 
-def parse_script(text, slide_count=None, require_doubt_check=True, board=None):
+def parse_script(text, slide_count=None, board=None):
     """Return (segments, errors). Collects every error instead of stopping.
 
     slide_count: number of slides in the deck; if given, SLIDE n is range-checked.
-    require_doubt_check: lecture scripts must contain and end with [DOUBT_CHECK].
     board: what is already on the class screen (a doubt answer mid-lecture), as
       {"files": {name: code}, "notebook": [line, ...], "has_run": bool, "visuals": {id: {"controls": [...]}}}.
       Quotes, files and visual controls are checked against it.
@@ -425,14 +437,6 @@ def parse_script(text, slide_count=None, require_doubt_check=True, board=None):
             if not after or after["kind"] != "say":
                 errors.append(f"line {line_no}: [{seg['name']}] while_speaking needs narration right after it")
     segments = split_spoken_while_writing(segments)
-
-    if not require_doubt_check:  # e.g. a short doubt answer, not a whole lecture
-        return segments, errors
-    doubt_checks = [s for s in segments if s.get("name") == "DOUBT_CHECK"]
-    if not doubt_checks:
-        errors.append("script has no [DOUBT_CHECK] markers")
-    elif segments[-1].get("name") != "DOUBT_CHECK":
-        errors.append("script must end with [DOUBT_CHECK] as the last line")
     return segments, errors
 
 

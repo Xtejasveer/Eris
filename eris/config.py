@@ -129,7 +129,6 @@ FIX_ATTEMPTS = 2           # times generate asks the model to fix a script that 
 TYPE_DELAY_S = 0.04        # per-line delay when "typing" code on the board
 NOTE_CHARS_PER_S = 25      # "handwriting" speed in the notebook, used for time estimates
 NOTE_MAX_LINES = 10        # generate rejects a [NOTE] longer than this (the prompt asks for 2-6 lines)
-MAX_DOUBT_CHECKS = 3       # generate allows this many [DOUBT_CHECK]s plus the final one
 PAUSE_MAX_S = 3            # generate shortens longer [PAUSE]s: silence in class feels broken
 MAX_SENTENCE_WORDS = 30    # longer narration sentences go back to the writer (they sound rushed when spoken)
 WORDS_PER_NOTE = 180       # about one [NOTE] per this many spoken words, or the writer is told to use the notebook more
@@ -163,8 +162,11 @@ JUDGE_PASS = 0.5           # a question passes when P(yes) >= this
 JUDGE_REVISIONS = 2        # quality rounds: times generate sends the judge's findings back to the writer
 CONTENT_ROUNDS = 2         # step 2: times the lesson goes back to its writer (code problems or Jev blockers)
 STAGE_ROUNDS = 2           # step 3: times the staged script goes back to the stager for Jev blockers
-# Doubt answers: Jev judges each one before it plays (a few seconds); with a blocker the agent answers once more.
+# Doubt answers: Jev judges each one. By default the judgement is only logged (doubt_judge.jsonl), after the answer
+# plays; DOUBT_JUDGE_BLOCKS=true makes the class wait for it, and a blocker gets the agent to answer once more
+# (better answers, several seconds slower).
 DOUBT_JUDGE = os.getenv("DOUBT_JUDGE", "true").strip().lower() not in ("0", "false", "no", "off")
+DOUBT_JUDGE_BLOCKS = os.getenv("DOUBT_JUDGE_BLOCKS", "false").strip().lower() in ("1", "true", "yes", "on")
 PAIR_UNFLAG = 0.3          # a while_speaking pair is un-flagged when P(sentence describes the writing) < this
 
 # Status order. A lecture "has reached" a status if its index is >= that one.

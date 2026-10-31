@@ -64,7 +64,11 @@ def _hoist_inline(line):
         if not marker or marker[0] not in MARKERS or marker[0] in BLOCK_MARKERS:
             return match.group(0)  # brackets that are not a marker, e.g. [expression for item in list]
         hoisted.append(match.group(0))
-        return marker[1].get("text", "") if marker[0] in QUOTED_MARKERS else ""
+        # A highlight inside a sentence stands for its words ("the [NOTE_HIGHLIGHT text="for"] loop"): they stay
+        # said. Between sentences (at the start, after a full stop or another marker) its quote is not speech.
+        before = match.string[:match.start()].rstrip()
+        between = not before or before[-1] in ".!?:;]।॥"
+        return marker[1].get("text", "") if marker[0] in QUOTED_MARKERS and not between else ""
 
     sentence = INLINE_RE.sub(replace, line)
     sentence = re.sub(r"\s+([.,!?;:])", r"\1", re.sub(r"\s{2,}", " ", sentence)).strip()

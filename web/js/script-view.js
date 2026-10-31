@@ -56,6 +56,13 @@ export function renderScriptDoc(segments, teacher = "Teacher", { lectureId = nul
           h("span", { class: "doc-note-tag" }, icon("book"), "Notebook"),
           h("div", { class: "doc-note-lines" }, (a.text || "").split("\n").map(l => h("div", {}, l || " ")))));
         break;
+      case "SKETCH_ROW":
+        target().append(h("div", { class: "doc-note" },
+          h("span", { class: "doc-note-tag" }, icon("pen"), "Notebook sketch"),
+          h("div", { class: "doc-note-lines" }, h("div", {}, (a.parts || []).map(p =>
+            p.kind === "arrow" ? (p.text ? `→ ${p.text} →` : "→") : p.kind === "tick" ? "✓" : p.kind === "cross" ? "✗"
+              : p.kind === "icon" ? `(${p.text})` : p.kind === "text" ? p.text : `[${p.text}]`).join("  ")))));
+        break;
       case "NOTE_HIGHLIGHT":
         target().append(chip("edit", `Highlight in notebook: “${a.text}”`, "marker"));
         break;
@@ -77,7 +84,7 @@ export function renderScriptDoc(segments, teacher = "Teacher", { lectureId = nul
         target().append(chip("slides", `Show slide ${a.n}`));
         break;
       case "SLIDE_CIRCLE":
-        target().append(chip("pen", `Circle the picture on slide ${a.n}`, "marker"));
+        target().append(chip("pen", a.part ? `Circle “${a.part}” on slide ${a.n}` : `Circle the picture on slide ${a.n}`, "marker"));
         break;
       case "SLIDE_HIGHLIGHT":
         target().append(chip("slides", `Highlight on slide ${a.n}: “${a.text}”`, "marker"));

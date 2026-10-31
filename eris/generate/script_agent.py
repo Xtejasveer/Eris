@@ -42,11 +42,9 @@ exactly where you stopped: first write that program with [WRITE_CODE file="{file
 
 def _last_program(script):
     """The program the writer stopped for: (file, code) of the last [RUN] after the last [READ_OUTPUT], with that
-    file's latest [WRITE_CODE] (code None if there is none). (None, None) when the script is finished (it ends with
-    its final [DOUBT_CHECK]) or no [RUN] is waiting for its output."""
+    file's latest [WRITE_CODE] (code None if there is none). (None, None) when no [RUN] is waiting for its output
+    (the script is finished)."""
     text = script.rstrip()
-    if text.endswith("[DOUBT_CHECK]"):
-        return None, None
     after = text[text.rfind(READ_OUTPUT) + len(READ_OUTPUT):] if READ_OUTPUT in text else text
     runs = [m.group(1) for ln in after.splitlines() if (m := RUN_LINE_RE.match(ln))]
     if not runs:
@@ -59,7 +57,7 @@ def _last_program(script):
 
 
 WRITE_TASK = """Write the whole lecture script now, in this one message (about {budget} words of narration),
-from [SECTION title="Opening"] to the final [DOUBT_CHECK].
+from [SECTION title="Opening"] to the end of the Closing.
 
 # Research notes
 {notes}"""

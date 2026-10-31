@@ -1,7 +1,7 @@
 """Step 3 of `generate`: staging. The finished lesson (lesson.py) becomes the class script.
 
 The stager adds the markers that drive the class screen (sections, notes, code, slides, highlights, diagrams,
-graphs, question breaks) around the lesson's spoken lines, which it must keep as they are. Then:
+graphs) around the lesson's spoken lines, which it must keep as they are. Then:
 
 1. code checks the script (the parser and every format check) and that no spoken line of the lesson was changed or
    left out; problems go back to the same stager, then the usual last-resort repairs (script_pipeline.py),
@@ -21,8 +21,8 @@ from eris.generate.script_judge import better, judge_staging
 from eris.generate.script_parser import parse_script
 from eris.generate.script_pipeline import ScriptPipeline
 
-STAGE_TASK = """Stage this lesson now: return the whole class script, from [SECTION title="Opening"] to the final
-[DOUBT_CHECK].
+STAGE_TASK = """Stage this lesson now: return the whole class script, from [SECTION title="Opening"] to the end of
+the Closing.
 
 {context}"""
 SLIDE_ADVICE = ("move each [SLIDE] (and its [SLIDE_HIGHLIGHT]) right before the lesson sentence that talks about "
@@ -49,15 +49,19 @@ class Stager(ScriptWriter):
         return text.strip()
 
 
-def staging_context(lesson_text, slides, figs, env):
-    """Everything the stager needs besides the lesson: the slides' exact lines, the figures and how to use each."""
+def staging_context(lesson_text, slides, figs, env, pictures=None):
+    """Everything the stager needs besides the lesson: the slides' exact lines, the figures and how to use each, and
+    the parts of each slide picture the pen can circle."""
     from eris.material.figures import describe, describe_environments
     clean = lambda t: "\n".join(re.sub(r"^\s*[•\-*]\s*", "", ln) for ln in t.splitlines())  # noqa: E731  as shown in class
     slide_text = "\n\n".join(f"Slide {n}:\n{clean(text)}" for n, text in sorted(slides.items())) or "none"
     used = [f for f in figs or [] if f["kind"] != "picture"]
     return (f"# Lesson\n{lesson_text}\n\n# Slides (quote SLIDE_HIGHLIGHT lines exactly from these)\n{slide_text}\n\n"
             f"# Figures in the material, with how to use each\n{describe(used) if used else 'none'}\n\n"
-            f"# Environments for this class\n{describe_environments(env)}")
+            f"# Environments for this class\n{describe_environments(env)}"
+            + (f"\n\n# Parts of the slide pictures (for [SLIDE_CIRCLE n=.. part=\"..\"])\n{parts}" if (parts := "\n".join(
+                f"slide {p['slide']}: {', '.join(q['name'] for q in p['parts'])}" for p in pictures or []
+                if p.get("slide") and p.get("parts"))) else ""))
 
 
 def _norm(sentence):
@@ -157,11 +161,11 @@ def _staging_feedback(report):
 def stage_lesson(lesson_text, sections, persona_prompt, budget, slides, figs, env, pictures, rounds):
     """Stage the lesson and loop until code and Jev pass the staging. Returns (text, segments, problems, report,
     pipe). problems is non-empty only when no valid script could be made."""
-    context = staging_context(lesson_text, slides, figs, env)
+    context = staging_context(lesson_text, slides, figs, env, pictures)
     pipe = StagePipeline(Stager(persona_prompt), budget, len(slides), context, figs, env, pictures,
                          lesson_sentences=_sentences(narration(sections)))
     pipe.rounds = rounds
-    print("[staging] adding the slides, notes, highlights, diagrams and question breaks ...")
+    print("[staging] adding the slides, notes, highlights and diagrams ...")
     text, segments, problems = pipe.until_valid(pipe.writer.write(context, budget))
     if problems:
         print(f"[staging] {len(problems)} problem(s) left; a fresh stager tries once more")

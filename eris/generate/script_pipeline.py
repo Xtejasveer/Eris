@@ -12,10 +12,10 @@ import copy
 from eris import config
 from eris.generate.format_fixes import fix_format, strip_typed_output
 from eris.generate.script_checks import clean_cosmetic, format_problems, teaching_problems
-from eris.generate.script_fixes import (add_doubt_checks, add_sync_flags, drop_bad_staging, drop_bad_visuals,
-                          complete_flows, drop_markers, drop_visual, fix_flow_order, move_doubt_checks_to_section_end,
-                          drop_empty_circles, show_picture_slides, tidy_staging,
-                          trim_doubt_checks)
+from eris.generate.script_fixes import (add_sync_flags, drop_bad_staging, drop_bad_visuals,
+                          complete_flows, drop_markers, drop_visual, fix_flow_order,
+                          drop_empty_circles, drop_unnamed_parts, place_calc_steps, show_picture_slides,
+                          tidy_sketches, tidy_staging)
 from eris.generate.script_parser import parse_script
 
 RULES_FEEDBACK = ("Your script breaks these rules. Fix every one of them, keep everything else the same, "
@@ -64,6 +64,10 @@ class ScriptPipeline:
         text, cleaned = clean_cosmetic(text)
         if cleaned:
             print(f"[generate] cleanup: removed markdown symbols from {cleaned} line(s)")
+        # No question breaks: students ask whenever they like, by holding Space. One the model still writes goes.
+        text, breaks = drop_markers(text, {"DOUBT_CHECK"})
+        if breaks:
+            print(f"[generate] cleanup: removed {breaks} question break(s)")
         segments, problems = check_generated(text, self.budget, self.slides, self.figures, self.env)
         outputs = [s.get("expected_output", "") for s in self._with_outputs(segments) if s.get("name") == "RUN"]
         problems += format_problems(text, outputs)
@@ -105,16 +109,10 @@ class ScriptPipeline:
             if self.env and not self.env.get(name):
                 text, n = drop_markers(text, ENV_MARKERS[name])
                 fixed += [f"removed {n} {name} marker(s): this class's material has no {name}"] if n else []
-        text, trimmed = trim_doubt_checks(text, config.MAX_DOUBT_CHECKS)
-        fixed += [f"removed {trimmed} extra question break(s)"] if trimmed else []
         text, reordered = fix_flow_order(text)
         fixed += [f"moved {reordered} diagram block(s) so each appears as its sentence is said"] if reordered else []
         text, completed = complete_flows(text)
         fixed += [f"drew {completed} diagram block(s) the script left out"] if completed else []
-        text, moved = move_doubt_checks_to_section_end(text)
-        fixed += [f"moved {moved} question break(s) to the end of their section"] if moved else []
-        text, added = add_doubt_checks(text, config.MAX_DOUBT_CHECKS)
-        fixed += [f"added {added} missing question break(s)"] if added else []
         segments, _ = parse_script(text, self.slides)
         text, removed = strip_typed_output(text, self._with_outputs(segments))
         fixed += [f"removed {removed} line(s) of typed program output"] if removed else []
@@ -154,6 +152,15 @@ class ScriptPipeline:
         text, empty = drop_empty_circles(text, self.pictures)
         if empty:
             self.auto_fixes.append(f"removed {empty} pen circle(s) on slides that have no picture")
+        text, unnamed = drop_unnamed_parts(text)
+        if unnamed:
+            self.auto_fixes.append(f"removed {unnamed} pen circle(s) on a part the sentence doesn't talk about")
+        text, sketched = tidy_sketches(text)
+        if sketched:
+            self.auto_fixes.append(f"removed or moved {sketched} sketch row(s) to the sentence that explains them")
+        text, steps = place_calc_steps(text)
+        if steps:
+            self.auto_fixes.append(f"moved {steps} calculation step(s) to the sentence that works them out")
         text, tidied = tidy_staging(text, getattr(self, "lesson_sentences", ()))
         if tidied:
             print(f"[generate] auto-fixed: removed {tidied} repeated slide(s), highlight(s) or circle(s)")

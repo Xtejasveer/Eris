@@ -300,11 +300,12 @@ export class Voice {
 }
 
 // Browser dictation (Chrome, Safari). Returns null when unsupported.
-export function createDictation(language, onText, onEnd) {
+// continuous: keep listening through pauses until stop() (hold-to-talk); otherwise it ends when the speaker stops.
+export function createDictation(language, onText, onEnd, continuous = false) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return null;
   const rec = new SR();
-  rec.lang = language || "en-IN"; rec.interimResults = true; rec.continuous = false;
+  rec.lang = language || "en-IN"; rec.interimResults = true; rec.continuous = continuous;
   rec.onresult = (e) => onText([...e.results].map(r => r[0].transcript).join(" "));
   rec.onend = onEnd; rec.onerror = onEnd;
   return rec;

@@ -4,8 +4,8 @@
 let onSignedOut = null;
 export function whenSignedOut(fn) { onSignedOut = fn; }
 
-async function request(method, path, body, { raw = false } = {}) {
-  const opts = { method, headers: {} };
+async function request(method, path, body, { raw = false, signal } = {}) {
+  const opts = { method, headers: {}, signal };
   if (body instanceof FormData) opts.body = body;
   else if (body !== undefined) {
     opts.headers["Content-Type"] = "application/json";
@@ -59,8 +59,32 @@ export const api = {
   doubtStart: (lid, context, section, final, cursor, question = "", lesson = {}) =>
     request("POST", `/api/lectures/${id(lid)}/doubts/start`, { context, section, final, cursor, question, ...lesson }),
   // One student question on the class's single agent conversation (threadId from the previous answer, or null).
-  doubtAsk: (lid, { question, context, section, final, cursor, threadId, visuals = "", lesson = {} }) =>
-    request("POST", `/api/lectures/${id(lid)}/doubts/ask`, { question, context, section, final, cursor, thread_id: threadId, visuals, ...lesson }),
+  doubtAsk: (lid, { question, context, section, final, cursor, threadId, visuals = "", interrupted = "", lesson = {} }) =>
+    request("POST", `/api/lectures/${id(lid)}/doubts/ask`, { question, context, section, final, cursor, thread_id: threadId, visuals, interrupted, ...lesson }),
+  // The same doubt, answered as it is written: onEvent gets each {type: "segments" | "done" | "error"} line.
+  async doubtStream(lid, { question, context, section, final, cursor, threadId, visuals = "", interrupted = "", lesson = {} }, onEvent, signal) {
+    const res = await request("POST", `/api/lectures/${id(lid)}/doubts/stream`,
+      { question, context, section, final, cursor, thread_id: threadId, visuals, interrupted, ...lesson }, { raw: true, signal });
+    if (!res.ok) {
+      if (res.status === 401) onSignedOut?.();
+      let detail = "";
+      try { detail = (await res.json()).detail; } catch {}
+      throw new Error(detail || `${res.status} ${res.statusText}`);
+    }
+    const reader = res.body.getReader(), decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+      let nl;
+      while ((nl = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, nl).trim();
+        buffer = buffer.slice(nl + 1);
+        if (line) onEvent(JSON.parse(line));
+      }
+      if (done) break;
+    }
+  },
   doubtReply: (lid, threadId, answer) =>
     request("POST", `/api/lectures/${id(lid)}/doubts/reply`, { thread_id: threadId, answer }),
 

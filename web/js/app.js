@@ -1,5 +1,7 @@
 // App shell: sign-in, hash router, sidebar (the person's courses), home and course pages, Studio and the lesson.
-//   #/                      home: course grid
+//   #/                      home: course grid (signed out: the landing page)
+//   #/signin                sign in or create an account (signed out)
+//   #/demo                  the demo accounts, one click to sign in (signed out; "Try the demo")
 //   #/course/<id>[/<tab>]   a course (classwork, people)
 //   #/lesson/<postId>       a shared lesson (a student's own session, or the teacher's preview)
 //   #/lecture/<id>/studio   build a lesson (teachers);  #/lecture/<id>/class  run its current script (teachers)
@@ -9,6 +11,7 @@ import { h, $, toast, initials, avatarTint } from "./ui.js";
 import { mountStudio } from "./studio.js";
 import { mountClassroom } from "./classroom.js";
 import { renderAuth } from "./auth.js";
+import { renderLanding } from "./landing.js";
 import { renderHome, mountCourse, newCourse, joinCourse } from "./courses.js";
 
 const main = $("#main");
@@ -63,7 +66,7 @@ export function setLectureStatus() {}
 
 async function route() {
   if (unmount) { try { unmount(); } catch {} unmount = null; }
-  if (!me) return;
+  if (!me) return signedOutPage();
   const r = currentRoute();
   applySidebar(r);
   renderSidebar();
@@ -86,12 +89,23 @@ function showSignIn() {
   me = null;
   coursesLoaded = false;
   appEl.classList.add("signed-out");
+  signedOutPage();
+}
+
+// Signed out, the root is the landing page; #/signin and any deep link (a shared lesson) ask to sign in, and then
+// open the page that was asked for.
+function signedOutPage() {
+  main.scrollTop = 0;
+  const hash = location.hash.replace(/^#\/?/, "");
+  appEl.classList.toggle("landing-page", !hash);
+  if (!hash) return renderLanding(main);
   renderAuth(main, (user) => {
     me = user;
-    appEl.classList.remove("signed-out");
+    appEl.classList.remove("signed-out", "landing-page");
     toast(`Signed in as ${user.name}.`, "success");
+    if (hash === "signin" || hash === "demo") history.replaceState(null, "", "#/");
     route();  // the page they asked for, or home
-  });
+  }, { demo: hash === "demo" });  // "Try the demo": the demo accounts first
 }
 whenSignedOut(() => { if (me) { toast("Please sign in again.", "info"); showSignIn(); } });
 

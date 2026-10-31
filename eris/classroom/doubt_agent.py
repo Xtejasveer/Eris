@@ -64,6 +64,126 @@ def build_doubt_agent(system_prompt, run_code=True):
     )
 
 
+# ---------- the fast answer: one model call, no tools ----------
+# Most doubts are about what was just taught. Everything the agent would look up with its tools (the approved
+# script of this part, the class screen, the material matching the question) is put in front of the model instead,
+# so the answer takes one call, not a call per tool. Doubts that need a program run go to the agent (fast_route).
+
+FAST_RULES = """
+
+# This answer: no tools
+Everything you would look up is given below: the approved lesson script around this point, the class screen
+(what read_board shows) and the material that matches the question (what search_material finds). Answer from it;
+there is nothing more to search. Reply with only what you say and the screen markers. Don't ask the class for more
+doubts at the end, and don't call any tool: the class asks for more doubts itself.
+Keep it spoken and short: about 60-80 words, unless the student asks for an example or the steps of a calculation.
+If you were stopped mid-sentence, never mention it ("you stopped me..."): just answer.
+Start straight with the answer: no opener such as "Good question" (the class is waiting for it)."""
+
+CODE_DOUBT_RE = re.compile(r"\b(code|program|run|output|print(?:s|ed)?|error|python|function|loop|variable|"
+                           r"debug|compile|syntax|bug)\b", re.I)
+_fast_model = None
+
+
+def fast_route(question, environments, run_code):
+    """True when one call can answer: anything but a doubt about a program in a class that runs code (that one needs
+    the agent's dry run, so the output the teacher describes is real)."""
+    return not (run_code and (environments or {}).get("code") and CODE_DOUBT_RE.search(question))
+
+
+def fast_answer(system_prompt, context, question):
+    """The answer, with its screen markers, from one model call."""
+    global _fast_model
+    from langchain.chat_models import init_chat_model
+    if _fast_model is None:
+        _fast_model = init_chat_model(f"openrouter:{config.LLM_MODEL}", temperature=0.3, max_retries=1)
+    reply = _fast_model.invoke([
+        {"role": "system", "content": system_prompt + FAST_RULES},
+        {"role": "user", "content": f'{context}\n\nStudent: "{question}"\nAnswer the student directly, talking to '
+                                    'them as "you" (never describe their question in the third person).'},
+    ])
+    return _text(reply).strip()
+
+
+def fast_stream(system_prompt, context, question):
+    """The same answer as fast_answer, as the model writes it: yields text pieces."""
+    global _fast_model
+    from langchain.chat_models import init_chat_model
+    if _fast_model is None:
+        _fast_model = init_chat_model(f"openrouter:{config.LLM_MODEL}", temperature=0.3, max_retries=1)
+    for chunk in _fast_model.stream([
+        {"role": "system", "content": system_prompt + FAST_RULES},
+        {"role": "user", "content": f'{context}\n\nStudent: "{question}"\nAnswer the student directly, talking to '
+                                    'them as "you" (never describe their question in the third person).'},
+    ]):
+        piece = _text(chunk)
+        if piece:
+            yield piece
+
+
+SPLIT_POINT_RE = re.compile(r"[\[\]]|(?<=[.!?।॥])\s+")
+
+
+def _sentences(text):
+    """The sentences of a spoken line, never cut inside a [MARKER ...] written in it (a quote in a marker may hold
+    a full stop). Returns (sentences, True if the text ends inside a marker that is still being written)."""
+    out, start, depth = [], 0, 0
+    for m in SPLIT_POINT_RE.finditer(text):
+        if m.group(0) == "[":
+            depth += 1
+        elif m.group(0) == "]":
+            depth = max(0, depth - 1)
+        elif depth == 0:
+            out.append(text[start:m.start()])
+            start = m.end()
+    out.append(text[start:])
+    return [s for s in out if s.strip()], depth > 0
+
+
+def answer_units(pieces):
+    """Cut a streamed answer into units the class can play at once: each spoken sentence together with the screen
+    markers written before it (a note, a slide, a pen circle). A block ([NOTE]..[/NOTE], a program) is never cut.
+    A sentence is let go as soon as it ends, before its line does, so the first one is heard early."""
+    from eris.generate.script_parser import BLOCK_MARKERS, parse_line_marker
+    pending, partial, block = "", "", None
+
+    def line_done(line):
+        nonlocal pending, block
+        out = []
+        marker = parse_line_marker(line)
+        if block:
+            pending += line + "\n"
+            if line.strip() == f"[/{block}]":
+                block = None
+        elif marker:
+            pending += line + "\n"
+            if marker[0] in BLOCK_MARKERS:
+                block = marker[0]
+        elif line.strip():
+            for sentence in _sentences(line.strip())[0]:
+                out.append(pending + sentence)
+                pending = ""
+        return out
+
+    for piece in pieces:
+        partial += piece
+        while "\n" in partial:
+            line, partial = partial.split("\n", 1)
+            yield from line_done(line)
+        # a spoken line still being written: let go of the sentences already finished in it
+        if not block and partial.strip() and not partial.lstrip().startswith("["):
+            done, _ = _sentences(partial)  # the last one is still being written (or holds an open marker)
+            if len(done) > 1:
+                for sentence in done[:-1]:
+                    yield pending + sentence
+                    pending = ""
+                partial = done[-1]
+    if partial.strip():
+        yield from line_done(partial)
+    if pending.strip():
+        yield pending
+
+
 def _text(message):
     content = message.content
     if isinstance(content, list):
@@ -155,17 +275,22 @@ def run_checkpoint(agent, thread_id, context_text, max_doubts, log_path, section
 
 # What a doubt answer may do on the class screen: notes, code, slides, and pointing back at what is
 # already there. No sections or doubt checks.
-ANSWER_MARKERS = {"NOTE", "NOTE_TITLE", "NOTE_HIGHLIGHT", "WRITE", "WRITE_CODE", "HIGHLIGHT",
+ANSWER_MARKERS = {"NOTE", "NOTE_TITLE", "NOTE_HIGHLIGHT", "WRITE", "SKETCH_ROW", "WRITE_CODE", "HIGHLIGHT",
                   "RUN", "READ_OUTPUT", "SLIDE", "SLIDE_HIGHLIGHT", "SLIDE_CIRCLE", "LOOK_BACK", "OPEN_FILE", "NEW_PAGE",
                   "VISUAL", "VISUAL_SET", "OPEN_VISUAL", "FLOW", "FLOW_NEXT", "FLOW_HIGHLIGHT", "OPEN_FLOW"}
 
 
 INLINE_BLOCK_RE = re.compile(r"\[([A-Z_]{3,})\b[^\]]*\].*?\[/\1\]")  # [RUN]cmd=...[/RUN]
 INLINE_TAG_RE = re.compile(r"\[/?[A-Z_]{3,}\b[^\]]*\]")                # [RUN cmd="..."]
+# Pieces of a marker cut in two: its start with no "]" (`[LOOK_BACK text="primary shear`), or its end before any "["
+# (`zone"] Now...`). Never spoken, whatever cut it.
+CUT_TAG_START_RE = re.compile(r"\[/?[A-Z_]{3,}\b[^\]]*$")
+CUT_TAG_END_RE = re.compile(r'^[^\[\]]*"\s*\]')
 
 
 def _strip_inline_markers(text):
     text = INLINE_TAG_RE.sub("", INLINE_BLOCK_RE.sub("", text))
+    text = CUT_TAG_END_RE.sub("", CUT_TAG_START_RE.sub("", text))
     return re.sub(r"\s{2,}", " ", text).strip()
 
 
@@ -194,7 +319,7 @@ def answer_segments(text, slide_count=None, board=None):
         if n:
             print(f"[doubts] left out {n} marker(s) from an environment this class doesn't use")
     # A visual the parser can't read is removed first, so no "Let me show you..." lead is added for it.
-    _, early = parse_script(text, slide_count, require_doubt_check=False, board=board)
+    _, early = parse_script(text, slide_count, board=board)
     text, broken = drop_bad_visuals(text, early)
     for e in broken:
         print(f"[doubts] left out a visual: {e}")
@@ -203,10 +328,11 @@ def answer_segments(text, slide_count=None, board=None):
         text, shown = show_picture_slides(text, (board or {}).get("pictures"), slide_count, (board or {}).get("figures"))
         if shown:
             print(f"[doubts] showed the slide with the picture being explained {shown} time(s)")
-    from eris.generate.script_fixes import drop_empty_circles
+    from eris.generate.script_fixes import drop_empty_circles, drop_unnamed_parts
     text, _ = drop_empty_circles(text, (board or {}).get("pictures"))  # a pen circle needs a picture
+    text, _ = drop_unnamed_parts(text)  # and a part circle, a sentence about that part
     text, _ = add_sync_flags(text)  # written first, then explained; only highlights and slider moves run while speaking
-    segments, errors = parse_script(text, slide_count, require_doubt_check=False, board=board)
+    segments, errors = parse_script(text, slide_count, board=board)
     for e in errors:
         print(f"[doubts] skipped in answer: {e.splitlines()[0]}")
     segments = [s for s in segments if s["kind"] == "say" or s["name"] in ANSWER_MARKERS]
