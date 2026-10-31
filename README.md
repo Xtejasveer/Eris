@@ -143,9 +143,8 @@ Edit `.env` (every setting is explained in `.env.example`):
 python main.py serve        # then open http://127.0.0.1:8000
 ```
 
-1. **Sign in.** Choose "I'm a teacher" or "I'm a student". With `python main.py seed`, demo accounts sit under the
-   form: three teachers with demo courses, three students, and a blank **Test Teacher** and **Test Student** with
-   nothing in them, to try everything from the start.
+1. **Sign in.** Choose "I'm a teacher" or "I'm a student", or open **Try the demo** for one-click sign-in as
+   **Mr Rohan Mehta** (teacher) or **Kabir Singh** (student), after running `python main.py seed`.
 2. **Make a course** (teacher). On Home, **New course**. In its **Classwork**, add a chapter, a topic, then a
    **Lesson** or a **Prerequisite**.
 3. **Create the lecture.** Click **Create lecture** on the lesson: upload the material, fill in the persona (or

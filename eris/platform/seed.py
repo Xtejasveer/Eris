@@ -50,8 +50,8 @@ MATERIAL_TYPES = {".pptx": "Slides", ".pdf": "Notes", ".docx": "Notes", ".txt": 
 
 
 def demo_accounts():
-    """The demo accounts that exist, for the sign-in page's one-click demo buttons."""
-    emails = list(dict.fromkeys([e for _, e, *_ in LESSONS] + [e for e, _ in STUDENTS] + [e for e, _, _ in BLANK]))  # a teacher may have two courses
+    """Rohan Mehta and Kabir Singh, when seeded, for the demo page's one-click sign-in buttons."""
+    emails = ("rohan@eris.test", "kabir@eris.test")
     with connect() as conn:
         rows = [one(conn, "SELECT u.email, u.name, u.role, (SELECT subject FROM courses c WHERE c.teacher_id = u.id "
                           "ORDER BY c.id LIMIT 1) AS subject FROM users u WHERE u.email = ?", e) for e in emails]

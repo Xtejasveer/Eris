@@ -38,7 +38,7 @@ def _claim_lectures():
 # a student may use only the class-time routes, and only for a lecture shared with a course they are in.
 PUBLIC_API = re.compile(r"^/api/(auth/(login|signup|logout|demo|options)|landing)$")
 LECTURE_PATH = re.compile(r"^/api/lectures/([^/]+)(/.*)?$")
-STUDENT_LECTURE_ROUTES = re.compile(r"^/(visuals/[^/]+|images/[^/]+|slides/[^/]+|doubts/(start|ask|reply)|recovery)$")
+STUDENT_LECTURE_ROUTES = re.compile(r"^/(visuals/[^/]+|images/[^/]+|slides/[^/]+|doubts/(start|ask|reply|stream)|recovery)$")
 TEACHER_ONLY = re.compile(r"^/api/(lectures|persona/template)$")
 
 
