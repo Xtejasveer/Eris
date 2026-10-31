@@ -1,494 +1,278 @@
-# AI Substitute Teacher (v1)
+# 🎓 Eris — AI Substitute Teacher Platform
 
-Index a teacher's files, generate a lecture script with inline markers, let the teacher
-approve it, then run a class session that previews the script and answers student doubts.
+> **Autonomous, pedagogical AI teaching assistant that transforms course materials into interactive, synchronized classroom lectures with 3D avatars, dynamic stages, and live doubt resolution.**
+
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Eris_on_Azure-1b6e66?style=for-the-badge&logo=azure&logoColor=white)](https://eris.indiasouthcentral.cloudapp.azure.com/#/)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Three.js](https://img.shields.io/badge/Three.js-WebGL_Avatar-black?style=for-the-badge&logo=three.js&logoColor=white)](https://threejs.org/)
+[![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+
+---
+
+### 🌐 Live Deployment
+
+Experience the live platform directly in your browser:  
+👉 **[https://eris.indiasouthcentral.cloudapp.azure.com/#/](https://eris.indiasouthcentral.cloudapp.azure.com/#/)**
+
+---
+
+## 💡 Overview
+
+Eris addresses teacher absence and prerequisite gaps by turning teacher slides, documents, and teaching style into an interactive, student-centered class session:
+
+1. **Teacher Control First**: The LLM writes the complete lesson script once; the teacher reviews, edits, and approves it before any class starts.
+2. **Deterministic Player (No Drift)**: In class, a plain-code player walks the approved `script.json` sequentially. Narration and board actions are strictly synchronized: speech never gets ahead of the writing or code execution.
+3. **Multi-Modal Classroom Stage**: Automatically coordinates four live environments: ruled handwritten **Notebook**, presentation **Slides**, interactive **Code Editor & Terminal**, and dynamic **Visual Boards** (flowcharts and graphs with live sliders).
+4. **Interactive 3D Avatar**: Browser-based Three.js avatar with real-time Web Audio API viseme lip-sync, blinking, gaze saccades, and expressive moods—running completely client-side without GPU server overhead.
+5. **Context-Aware Doubt Agent**: Students can ask questions anytime via text or voice. An autonomous LangGraph agent inspects the read-only board state, references indexed course materials, and can write code or draw diagrams live to explain answers.
+6. **Per-Student Device Sessions**: Students learn at their own pace on their own devices with exact attendance tracking based on segments actively watched.
 
 ```
-index ──► generate (draft) ──► approve ──► render (audio) ──► session
+┌────────────────────────┐      ┌─────────────────────────┐      ┌────────────────────────┐
+│  Teacher Materials     │ ───► │  Script Generation &    │ ───► │  Interactive Class     │
+│  • PPTX, PDF, DOCX     │      │  Quality Verification   │      │  • 3D Talking Avatar   │
+│  • Teacher Persona     │      │  • Strict Parser        │      │  • Synchronized Stage  │
+│  • Vision OCR & Schema │      │  • Code Dry-Runs        │      │  • Live Doubt Agent    │
+│  • ChromaDB Index      │      │  • Teacher Approval     │      │  • Audio Pre-render    │
+└────────────────────────┘      └─────────────────────────┘      └────────────────────────┘
 ```
 
-**How a class runs.** The LLM writes the script once and the teacher approves it. In class,
-a plain-code *player* (`eris/classroom/session.py`) walks the approved `script.json` one segment at a time:
-narration plays (Gnani TTS), then the next action runs on the board, then the next narration.
-Each step finishes before the next starts, so speech and actions can't drift apart.
-LLMs are used only for student doubts (`eris/classroom/doubt_agent.py`) and for a one-line recovery when an
-action fails (`eris/classroom/recovery.py`). They get a read-only snapshot of the class; only the player
-moves forward.
+---
 
-Each command is a separate run. They share state only through files in
-`workspace/lectures/<id>/` and the Chroma collection named `<id>`.
+## 🏛️ System Architecture
 
-## Project layout
+The following diagram illustrates the complete workflow from ingestion to classroom execution and deployment:
 
+```mermaid
+graph TB
+    subgraph Ingestion ["1. Material Ingestion & Indexing"]
+        Files["Teacher Files<br/>(PPTX, PDF, DOCX)"]
+        Persona["Teacher Persona<br/>(persona.md)"]
+        Vision["Vision Model<br/>(OCR + Image Descriptions)"]
+        Indexer["Indexer Engine<br/>(eris/material/)"]
+        Chroma[("ChromaDB<br/>Vector Store")]
+        Figures["Extracted Figures<br/>(figures.json)"]
+
+        Files --> Indexer
+        Persona --> Indexer
+        Files --> Vision --> Indexer
+        Indexer --> Chroma
+        Indexer --> Figures
+    end
+
+    subgraph Generation ["2. Generation & Verification Pipeline"]
+        ScriptAgent["Script Agent<br/>(Outline & Writer)"]
+        Validator["Pipeline Validator<br/>(Dry-run & Fixers)"]
+        Judge["Quality Judge Loop<br/>(Pacing & Pedagogy)"]
+        ScriptMD["script.md / script.json<br/>(Deterministic Segments)"]
+        Approval{"Teacher Approval<br/>(Studio Review)"}
+        TTS["Voice Pre-renderer<br/>(Gnani Timbre v2.5)"]
+        AudioCache[("Audio Cache<br/>WAV Clips")]
+
+        Chroma & Figures --> ScriptAgent
+        ScriptAgent --> Validator --> Judge --> ScriptMD
+        ScriptMD --> Approval
+        Approval -->|Approved| TTS --> AudioCache
+    end
+
+    subgraph Classroom ["3. Classroom Runtime & Doubt Handling"]
+        Player["Deterministic Player<br/>(Narration + Action Sync)"]
+        Avatar["3D Avatar Engine<br/>(Three.js + FFT Lip-Sync)"]
+        Stage["Classroom Stage<br/>(Notebook | Slides | Code | Visuals)"]
+        Student["Student<br/>(Voice / Text Doubts)"]
+        DoubtAgent["Doubt Agent<br/>(LangGraph + Tools)"]
+        Sandbox["Docker Sandbox<br/>(Code Execution)"]
+
+        AudioCache & ScriptMD --> Player
+        Player --> Avatar
+        Player --> Stage
+        Student --> DoubtAgent
+        Stage -.->|Read-only Snapshot| DoubtAgent
+        Chroma -.->|Semantic Search| DoubtAgent
+        DoubtAgent --> Sandbox
+        DoubtAgent -->|Live Answer + Board Update| Stage
+    end
+
+    subgraph Deployment ["4. Cloud Infrastructure"]
+        Azure["Azure VM (Standard_B2s)<br/>Ubuntu 24.04 LTS"]
+        Caddy["Caddy Reverse Proxy<br/>Auto HTTPS / SSL"]
+        FastAPI["FastAPI App Server<br/>(eris:8000)"]
+
+        Caddy --> FastAPI
+        FastAPI --> Classroom
+    end
+
+    classDef ing fill:#e1f5fe,stroke:#0288d1,stroke-width:1.5px;
+    classDef gen fill:#ede7f6,stroke:#512da8,stroke-width:1.5px;
+    classDef cls fill:#e8f5e9,stroke:#2e7d32,stroke-width:1.5px;
+    classDef dep fill:#fff3e0,stroke:#e65100,stroke-width:1.5px;
+
+    class Files,Persona,Vision,Indexer,Chroma,Figures ing;
+    class ScriptAgent,Validator,Judge,ScriptMD,Approval,TTS,AudioCache gen;
+    class Player,Avatar,Stage,Student,DoubtAgent,Sandbox cls;
+    class Azure,Caddy,FastAPI dep;
 ```
-main.py                 command line: serve / index / generate / approve / render / video / session
-eris/                   the Python package
-  config.py             settings (.env), paths and the lecture manifest
-  persona.py            reads persona.md
-  prompts.py            every agent's system prompt
-  tools.py              the agents' tools (search the material, run code, read the board, ask the class)
-  material/             reading the teacher's files: indexer.py (knowledge base), figures.py (diagrams,
-                        step lists, charts and which environments the material unlocks)
-  generate/             making the script: research + writer (script_agent.py), the generate command
-                        (script_writer.py), checks and repairs (script_pipeline.py, script_checks.py,
-                        script_fixes.py, format_fixes.py), the parser (script_parser.py) and the judge
-                        (script_judge.py, quality_loop.py)
-  visuals/              the Visual board: flow diagrams (flow_diagram.py) and interactive graphs
-                        (visual_builder.py, visual_controls.py, visual_smoke.mjs)
-  classroom/            running a class: doubt_agent.py, class_board.py, session.py (terminal class),
-                        actions.py, recovery.py, voice.py
-  api/                  the website backend: server.py, server_class.py, jobs.py
-web/                    the website (plain HTML/CSS/JS, no build step)
-templates/persona.md    the example persona
-docs/                   design notes
-talking_video.py, musetalk_modal.py   photorealistic teacher video (MuseTalk on Modal)
-data/, workspace/       lecture material and generated files (local, not in git)
-```
 
-A module's own command runs with `python -m`, e.g. `python -m eris.generate.script_parser script.md`.
+---
 
-## 1. Setup (about 5 minutes)
+## 🖥️ The 4 Classroom Environments
 
-You need [uv](https://docs.astral.sh/uv/) and an [OpenRouter](https://openrouter.ai) API key.
+The stage intelligently switches between four dedicated teaching environments based on the course material:
+
+| Environment | Purpose | When Used |
+|---|---|---|
+| **📝 Notebook** | Ruled blackboard with hand-drawn cursive writing, section headers, and inline highlights. | Always active as the primary whiteboard. |
+| **📑 Slides** | Slide viewer showing slides alongside vision-extracted diagrams, charts, and captions. | Unlocked when presentation decks (PPTX) exist. |
+| **💻 Code Editor** | Syntax-highlighted code editor with live terminal output and verified execution. | Unlocked when course files contain programming code. |
+| **📊 Visual Board** | Step-by-step whiteboard flowcharts and interactive graphs with real-time sliders. | Unlocked when processes or mathematical charts exist. |
+
+---
+
+## ⚡ Quick Start
+
+### 1. Prerequisites
+- **Python 3.12**
+- **[uv](https://docs.astral.sh/uv/)** (recommended) or standard `pip`
+- **[OpenRouter](https://openrouter.ai)** API key (with a tool-calling model such as `openai/gpt-4o-mini`)
+
+### 2. Installation
 
 ```bash
+# Clone the repository
+git clone https://github.com/Xtejasveer/Eris.git
+cd Eris
+
+# Create and activate virtual environment
 uv venv --python 3.12
-source .venv/bin/activate
+source .venv/bin/activate       # On Windows: .venv\Scripts\activate
+
+# Install dependencies
 uv pip install -r requirements.txt
-uv pip install -r requirements-extras.txt  # optional: teacher video (modal) and better lip sync (faster-whisper)
+uv pip install -r requirements-extras.txt  # Optional: photorealistic video avatar & faster-whisper
+
+# Setup environment variables
 cp .env.example .env
 ```
 
-Edit `.env`:
+### 3. Configure Environment
 
-| Variable | Meaning |
+Edit `.env` with your credentials:
+
+```ini
+OPENROUTER_API_KEY=your_openrouter_api_key
+LLM_MODEL=openai/gpt-4o-mini
+GNANI_API_KEY=your_gnani_api_key          # Optional: provides high-fidelity Indian English TTS/STT
+```
+
+> [!NOTE]
+> If `GNANI_API_KEY` is not provided, Eris automatically falls back to the browser's built-in speech synthesis engine.
+
+### 4. Run the Web Application
+
+```bash
+python main.py serve
+```
+
+Open your browser at **[http://127.0.0.1:8000](http://127.0.0.1:8000)**:
+- **Studio (Home)**: Upload materials, configure teacher persona, generate script, and click **Approve**.
+- **Classroom**: Click **Start class** to experience the interactive lecture, avatar, and live doubt Q&A.
+
+---
+
+## 🐳 Docker Deployment
+
+Run the complete production stack (Eris + Caddy with automatic SSL):
+
+```bash
+docker compose up -d --build
+```
+
+For full Azure VM setup and custom domain configuration, see [deploy/azure.md](file:///d:/Eris/deploy/azure.md).
+
+---
+
+## ⌨️ Command Line Interface
+
+Eris can also be completely managed and executed through the terminal:
+
+| Command | Description |
 |---|---|
-| `OPENROUTER_API_KEY` | required |
-| `LLM_MODEL` | required: an OpenRouter model that supports **tool calling**, e.g. `openai/gpt-4o-mini` |
-| `EMBED_MODEL` | embedding model (default `baai/bge-m3`) |
-| `LECTURE_DURATION_MIN` | default total lecture time in minutes (15): runs the class clock; each lecture can set its own |
-| `SPEAKING_MIN` | default speaking time in minutes (5): the only time the script writer is given |
-| `SPEAKING_WPM` | speaking speed: speaking time x this = the script's word budget (default 115). Measure your voice with `python main.py measure-voice`, which saves it here |
-| `GNANI_API_KEY` | needed only for voice (`render`, `session --voice/--mic`). Get one at app.gnani.ai/voice |
-| `TTS_VOICE` / `TTS_LANGUAGE` | Gnani Timbre v2.5 voice and language (default `Kaveri`, `en-IN`) |
-| `TTS_SPEED` | 0.85 to 1.15 (default 0.85, the slowest Gnani allows) |
-| `STT_LANGUAGE` | language for spoken doubts (default `en-IN`) |
+| `python main.py serve` | Start the web application server (`http://127.0.0.1:8000`). |
+| `python main.py index --lecture <id>` | Build knowledge base and figures index from `data/<id>/`. |
+| `python main.py generate --lecture <id>` | Write lesson outline and script (`status: draft`). |
+| `python main.py approve --lecture <id>` | Validate script, dry-run code blocks, and approve (`status: approved`). |
+| `python main.py render --lecture <id>` | Pre-render narration audio clips with Gnani TTS. |
+| `python main.py session --lecture <id>` | Run the interactive terminal classroom session. |
+| `python main.py doubts --lecture <id>` | Test doubt agent checkpoints against full topic context. |
+| `python main.py status --lecture <id>` | Display current manifest status and statistics. |
 
-## 2. The website (easiest way)
+---
 
-```bash
-python main.py serve        # then open http://127.0.0.1:8000
-```
+## 🏷️ Script Markers Cheat Sheet
 
-- **Home:** pick a Lecture in the sidebar, drop the study material on the upload area, check
-  the persona fields (prefilled from `templates/persona.md`), set the Topic, and click
-  **Generate script**. The log streams while it indexes and writes. The script appears on the
-  right as a readable document (speech, notebook cards, code, actions). **Edit** it if needed,
-  then **Approve**. **Reset lecture** clears that lecture's knowledge base (its Chroma
-  collection) and everything generated, but keeps the uploaded material and persona.
-- **Classroom:** click **Start class** (the sidebar folds into an icon rail to give the stage more room). The left panel shows the teacher, a voice visual and the
-  caption. The right panel is the stage with three environments: **Notebook** (a ruled page where
-  notes are hand-written), **Slides**, and **Code** (editor plus terminal). Only the AI teacher's
-  script switches between them; the indicator can't be clicked. At each question break, type a
-  student's question (or use Dictate in Chrome/Safari). The doubt agent can answer on the screen
-  too: it may write notes and small programs (`answer1.py`, ...) that are checked and run by the
-  backend without teacher approval.
-- **Voice:** with `GNANI_API_KEY` set, narration uses Gnani Timbre v2.5 (cached per line).
-  Without it, the browser's built-in voice is used, so the site works with no voice key.
+Scripts use clean inline markers parsed by `eris/generate/script_parser.py`:
 
-How it fits together: the browser runs the player (it's where the audio plays, so it keeps
-narration and actions in order). The backend (`eris/api/server.py`, `eris/api/server_class.py`, `eris/api/jobs.py`)
-only generates, approves, makes audio, runs code, writes recovery lines and runs doubt-agent turns.
-
-## 3. Add a lecture from the command line
-
-Pick a lecture id: 3 to 63 letters, digits, `_` or `-`, e.g. `py_listcomp_2026_10_17`.
-Put the teacher's files in `data/<id>/`:
-
-```
-data/<id>/
-├── persona.md      # required (copy templates/persona.md)
-├── lecture.pptx    # at least one PPTX, PDF or DOCX
-├── notes.pdf
-└── lab.docx        # code in Courier/Consolas font is kept as code
-```
-
-### Filling in `persona.md`
-
-Each `# Heading` holds `Key: value` lines. Every key below is required; `index` lists
-everything that is missing at once. A value can continue on the next lines.
-
-| Heading | Keys |
-|---|---|
-| `# Teacher` | Name, Subject, Class |
-| `# Absence Note` | Reason, Message to class |
-| `# Teaching Style` | Tone, Pace, Language, Habits |
-| `# Lecture Structure` | Order, Must cover, Avoid |
-| `# Next Class` | Topic, Prep |
-
-## 4. Run it from the command line
-
-```bash
-python main.py index    --lecture example    # build the knowledge base (set the topic and length in Studio)
-python main.py generate --lecture example    # write the script -> status: draft
-python main.py approve  --lecture example    # validate script.md -> status: approved
-python main.py render   --lecture example    # optional: pre-render narration audio, real duration
-python main.py session  --lecture example --voice --mic   # run the class
-```
-
-Session modes:
-
-| Flags | Narration | Student doubts |
+| Marker | Description | Example |
 |---|---|---|
-| (none) | printed | typed |
-| `--voice` | printed and spoken (Gnani TTS) | typed, answers spoken |
-| `--voice --mic` | printed and spoken | typed, or type `r` + Enter to speak (Gnani STT), Enter to stop |
+| `[NOTE]` | Writes handwritten lines onto the notebook page. | `[NOTE]\nRepeats while condition is True\n[/NOTE]` |
+| `[NOTE_TITLE]` | Underlined heading in the notebook. | `[NOTE_TITLE text="While Loops"]` |
+| `[NOTE_HIGHLIGHT]` | Yellow highlighter over existing notebook text. | `[NOTE_HIGHLIGHT text="condition is True"]` |
+| `[WRITE_CODE]` | Types code into the classroom code editor. | `[WRITE_CODE file="demo.py"]\nprint("Hello")\n[/WRITE_CODE]` |
+| `[RUN]` | Executes a file in the code terminal. | `[RUN cmd="python demo.py"]` |
+| `[READ_OUTPUT]` | Validates terminal output against expected result. | `[READ_OUTPUT]\nHello\n[/READ_OUTPUT]` |
+| `[SLIDE]` | Displays a specific slide from the presentation deck. | `[SLIDE num=3]` |
+| `[FLOW]` | Draws a block-by-block whiteboard flowchart. | `[FLOW id="loop" title="Loop Flow"]\nstep: Do work\n[/FLOW]` |
+| `[VISUAL]` | Interactive graph with real-time sliders. | `[VISUAL id="chart" title="Distribution"]\ncontrols: mean (slider 0-10)\n[/VISUAL]` |
+| `[DOUBT_CHECK]` | Pauses the lecture for student questions. | `[DOUBT_CHECK]` |
+| `while_speaking=true` | Types code or notes *simultaneously* while speaking. | `[WRITE_CODE file="sum.py" while_speaking=true]` |
 
-The session writes and runs the code for real in `workspace/lectures/<id>/board/`. It checks
-each live output against the approved one; if an action fails, it says one recovery line and
-carries on. Ctrl+C pauses: the position is saved in `session_state.json`, and `--resume`
-continues from there.
+---
 
-Before approving, read `workspace/lectures/example/script.md` and edit it by hand
-if you like. `approve` re-reads it, re-validates it and re-runs the code.
-
-Voice notes: narration clips are cached in `workspace/lectures/<id>/audio/` by text and voice,
-so `render` (or the first `--voice` session) is the only slow step. Re-running costs nothing
-unless the script or voice changes. Doubt answers are synthesized live.
-
-Other commands:
-
-```bash
-python main.py index   --lecture example --query "syntax"   # test a search
-python main.py index   --lecture example --no-reset         # add without wiping
-python main.py doubts  --lecture example                    # test one doubt checkpoint
-python main.py status  --lecture example                    # print lecture.json
-python main.py session --lecture example --force            # run a draft (warns)
-```
-
-During a session, type a student's doubt at each `Student doubt` prompt, or press
-Enter for none. Ctrl+C stops the session (it stays `approved`).
-
-Status flow: `indexed → draft → approved → completed`. Re-indexing resets to `indexed`;
-re-generating resets to `draft`.
-
-## 5. Where outputs go
+## 📁 Repository Structure
 
 ```
-workspace/lectures/<id>/
-├── lecture.json      # status, settings, parsed persona
-├── outline.json      # slide titles / sections / pages
-├── script.md         # the script (edit this)
-├── script.json       # parsed segments with expected outputs
-├── script_failed.md  # only if generation could not produce a valid script
-├── doubts_log.md     # every student question and answer
-├── session_state.json# player position + event log (pending/running/done/failed)
-├── audio/            # cached narration clips (WAV)
-├── board/            # code files the class saw, run live
-└── tmp/              # code files from dry runs
-chroma_db/            # the vector store
+Eris/
+├── main.py                     # CLI entry point (serve, index, generate, approve, render, session)
+├── eris/                       # Core Python package
+│   ├── config.py               # Settings, environment paths, and lecture manifest
+│   ├── persona.py              # Teacher persona parser
+│   ├── prompts.py              # System prompts for researcher, writer, judge, and doubt agents
+│   ├── material/               # Ingestion: PDF/PPTX/DOCX indexer, vision OCR, figure extractor
+│   ├── generate/               # Script pipeline: outline writer, parser, validator, and quality judge
+│   ├── visuals/                # Visual board: flowchart renderer and interactive graph builders
+│   ├── classroom/              # Class execution: doubt agent, session player, voice engine, actions
+│   └── api/                    # Web backend: FastAPI server, classroom endpoints, and job runners
+├── web/                        # Frontend application (Vanilla HTML/CSS/JS, Three.js avatar)
+│   ├── css/                    # Studio, classroom, and base design styles
+│   ├── js/                     # Client player, stage controllers, avatar engine, visual runtime
+│   └── assets/                 # 3D GLB avatar models and audio demo assets
+├── deploy/                     # Production deployment: Caddy reverse proxy, Azure guide
+├── templates/                  # Example persona templates (templates/persona.md)
+└── docs/                       # Architectural design notes and implementation plans
 ```
 
-## 6. Script markers
+---
 
-Every marker sits on its own line, e.g. `[RUN cmd="python demo.py"]`. Code goes between
-`[WRITE_CODE file="demo.py"]` and `[/WRITE_CODE]`. See `eris/prompts.py` for the full table.
+## 🔧 Common Troubleshooting
 
-The **notebook** is the teacher's blackboard, a ruled page on the Class screen:
+<details>
+<summary><b>Model does not call tools / returns tool error</b></summary>
+Ensure <code>LLM_MODEL</code> supports tool-calling on OpenRouter (e.g., <code>openai/gpt-4o-mini</code> or <code>anthropic/claude-3.5-sonnet</code>).
+</details>
 
-```
-[NOTE_TITLE text="while loop"]          an underlined heading
-[NOTE]                                  lines written by hand, one per line
-Repeats AS LONG AS the condition is True
-count = 1 -> 2 -> 3 -> stop
-[/NOTE]
-[NOTE_HIGHLIGHT text="AS LONG AS"]      highlighter over words already in the notebook (quoted, not counted)
-```
+<details>
+<summary><b>Script fails approval validation</b></summary>
+Inspect <code>workspace/lectures/<id>/script_failed.md</code> for syntax issues or code mismatch errors. Edit <code>script.md</code> to fix the lines, then run <code>python main.py approve --lecture <id></code>.
+</details>
 
-**Writing while speaking.** Add `while_speaking=true` to a notebook, code, highlight or slide marker
-to run it during the narration right after it, instead of in silence before it:
+<details>
+<summary><b>Audio not playing / No Gnani API key</b></summary>
+Gnani TTS is optional. Without <code>GNANI_API_KEY</code>, the web classroom automatically uses the browser's native Web Speech synthesis.
+</details>
 
-```
-[WRITE_CODE file="count.py" while_speaking=true]
-count = 1
-...
-[/WRITE_CODE]
-Let me write a loop that counts to three.     <- spoken while the code is typed
-```
+---
 
-The narration must come right after the marker (or after `[/NOTE]` / `[/WRITE_CODE]`). Only its **first
-sentence** is spoken while the writing appears (it should say what is being written: "Let me write the shape…");
-the rest is spoken after, as the explanation. If a generated script doesn't announce its writing, code adds a
-short lead ("Let me write this down: …") as a last resort. The writing is paced to fill most of the sentence,
-and the class moves on when both are done. It is not allowed on
-`RUN`, `READ_OUTPUT`, `PAUSE`, `SECTION` or `DOUBT_CHECK`. The website overlaps the two; the terminal
-`session` speaks the sentence first, then runs the action.
+## 📄 License
 
-Three markers point back at what is already on the screen. Doubt answers use them most
-(see "Doubt answers" below), but they work in a lecture script too:
-
-```
-[LOOK_BACK text="checked BEFORE every round"]   scroll the notebook back to that line and highlight it
-[OPEN_FILE file="count.py"]                     bring an earlier program back into the editor
-[NEW_PAGE title="Why it stops at 3"]            turn to a fresh notebook page (shown as a page tab)
-```
-
-Code highlights quote the code instead of counting lines, so they can't point at the wrong line:
-
-```
-[HIGHLIGHT file="count.py" text="while count <= 3:"]                      one line
-[HIGHLIGHT file="count.py" text="while count <= 3:" to="count = count + 1"]  a range
-```
-
-The quote must match exactly one line (spacing is ignored). `lines="3-5"` still works for
-hand-written scripts, but `generate` rejects it.
-
-`generate` requires a `[NOTE]` block in every section that has code.
-Check a script by hand with:
-
-```bash
-python -m eris.generate.script_parser workspace/lectures/example/script.md
-```
-
-
-### Doubt answers
-
-At a question break the doubt agent answers the students itself. It passes a question to the real
-teacher only when it needs them personally (marks, deadlines, exams, course decisions).
-It has a `read_board` tool that shows everything on the class screen: the notebook by page and
-section, the code files and the slides shown so far. The server rebuilds this from `script.json`
-up to the question break, plus whatever earlier answers in the same class run added.
-The answer is a short script, checked against that board before it plays. A `LOOK_BACK`,
-`OPEN_FILE`, `HIGHLIGHT` or `NOTE_HIGHLIGHT` that quotes something not on the screen is dropped,
-and new code is run first to record its real output. After the break, the stage returns to the
-page and view the class was on.
-
-### What the AI teacher may use: environments
-
-The classroom has four environments: **notebook**, **slides**, **code** and **visual**. The Visual board holds
-two kinds of pictures, each in its own tab: flow **diagrams** and interactive **graphs**. The notebook and slides
-are always used. Code and the Visual board depend on the teacher's material, so the agent never invents a program
-for a history class or a picture the material doesn't have:
-
-| Environment | Used when |
-|---|---|
-| Notebook | always |
-| Slides | the material has a PPTX deck |
-| Code (`WRITE_CODE`, `RUN`, ...) | the material contains code (several code lines in the slides, PDF or DOCX) |
-| Visual: diagrams (`FLOW`, ...) | the slides, PDF or DOCX have a diagram, or a written list of steps (1. 2. 3., Step 1/2/3, or A → B → C) |
-| Visual: graphs (`VISUAL`, ...) | the slides contain a chart (`VISUALS_ENABLED=true`, the default); otherwise it is explained on its slide |
-
-`index` finds them (`eris/material/figures.py`) and saves them in `lecture.json` (`environments`) and `figures.json` (each diagram,
-step list and chart with where it is). The writer is told which environments it has and which processes exist; a
-script that uses another environment goes back to the writer, and as a last resort code removes those markers
-(listed in the Log). In doubts, the agent may use only the environments the class itself used (notebook and slides
-always). Studio shows a note about this and which environments the material unlocks.
-
-### Pictures in the material (vision)
-
-Slides and documents often teach through pictures: a painting, a map, a photo, a diagram or a chart saved as an
-image. Text extraction can't see those, so `index` sends every picture (bigger than an icon) once to a vision
-model (`VISION_MODEL`, default `LLM_MODEL`; it must accept images) with the slide's text as context
-(`eris/material/images.py`). The model returns what kind of picture it is, what it shows and what to notice, every
-word written in it (OCR), a diagram's steps and a chart's data. Results are cached by the picture's content.
-
-- The descriptions join the knowledge base, so search and the agents find them ("Picture on slide 3: …").
-- A diagram picture with steps can be drawn as a flow, a chart picture recreated as a graph, and any other picture
-  is listed for the writer as something to show and explain.
-- The doubt agent's board says what the picture on each slide shows.
-- In class, the Slides view shows the slide's real pictures beside its text.
-
-### Flow diagrams, drawn block by block
-
-For a process in the material, the teacher draws a diagram on the **Visual** board the way a teacher does at a
-whiteboard: one block, an explanation, then the next block with its arrow. The script gives only the structure;
-our own code (`web/js/flow.js`) draws it, top to bottom, the same way every time (no model writes any code):
-
-```
-[FLOW id="for-loop" title="How a for loop runs" from="slide 2"]
-take: Take the next item
-body: Run the loop body
-more: Any items left? | yes -> take | no -> end
-[/FLOW]
-[FLOW_NEXT id="for-loop"]                      draws the next block and its arrows (in the order listed)
-Let me draw the first step: take the next item.
-[FLOW_HIGHLIGHT id="for-loop" block="more"]    points back at a drawn block
-[OPEN_FLOW id="for-loop"]                      shows the diagram again
-```
-
-One block per line (`id: label`); a label ending in `?` is a question (a diamond) with branches `| answer -> id`
-(or `end`). A loop back runs up the right side, a skip or exit down the left. Up to 8 blocks. `from` must name a
-diagram or step list in the material. The parser checks the order (no block drawn twice, highlights only on drawn
-blocks); the judge checks that each sentence said while a block appears is about that block, and that the diagram
-follows the material's steps. Doubt answers can point at blocks, or draw a new diagram if the class used diagrams.
-
-### Interactive graphs (on the Visual board; `VISUALS_ENABLED=false` turns them off)
-
-A `[VISUAL]` is an **interactive graph** the class explores with sliders, like the ones Claude draws in chat:
-a normal curve with mean and sd sliders, a fitted line with a slope slider and its error, how a value grows
-with `n`. Diagrams are left to the slides. The graph appears in the **Visual** workspace next to the notebook,
-slides and code, and redraws instantly as a slider moves.
-
-```
-[VISUAL id="normal" title="The normal distribution"]
-A normal curve of value against probability density, with the area within one sd shaded.
-controls: mean (slider -3-3 step 0.5), sd (slider 0.5-3 step 0.25)
-[/VISUAL]
-Let me show you this on a graph you can play with.
-[VISUAL_SET id="normal" control="mean" value=1.5]   the teacher drags the slider there (about a second)
-[VISUAL_SET id="normal" control="sd" value=2]
-[OPEN_VISUAL id="normal"]                             show it again later
-```
-
-Controls: `name (slider 1-10)` (optional `step 0.5`); `name (choice a/b/c)` and `name (toggle)` when needed.
-The parser checks every `VISUAL_SET` against them. A visual without a slider is sent back to the writer.
-
-- **Building** (`eris/visuals/visual_builder.py`, prompt `visual_prompt`): during `generate` (and on approve, if a
-  description changed), `VISUAL_MODEL` writes one script that draws with the graph helper `Visual.chart`
-  (`web/js/visual/chart.js`: axes, `fn`, `line`, `dots`, `bars`, `area`, reference lines, labels, a readout row).
-  The builder also sees the programs on the screen and what the teacher says after each `VISUAL_SET`.
-  Code checks it (handlers, `Visual.state`, no network or storage, JS syntax), then `eris/visuals/visual_smoke.mjs`
-  test-runs it in node: every slider is dragged across its range and must change the result, and text or
-  shapes on top of each other are reported. Problems go back to the builder (up to 3 tries). A visual that
-  still fails is removed and listed under auto-fixes in Studio. Built graphs are saved in
-  `workspace/lectures/<id>/visuals/`.
-- **In class**: each graph runs in a sandboxed frame (scripts only, no network) with a standard slider panel
-  from `web/js/visual/runtime.js`. `VISUAL_SET` lights the slider up and drags it; students can drag it too.
-- **In doubts**: `read_board` lists every graph with its sliders and values, and each question carries what
-  every graph shows right now. An answer can drag any graph's sliders, or build one new graph.
-- Settings (`.env`): `VISUALS_ENABLED=true`, `VISUAL_MODEL` (defaults to `LLM_MODEL`; a stronger coding model
-  draws better graphs). Needs `node` for the test run (skipped without it).
-
-## 7. Talking avatar
-
-The classroom shows a 3D teacher whose lips move with the voice, who blinks, looks at the class, and moves
-naturally. It is free and open source, runs entirely in the browser (no GPU server, no API keys), and does not
-change how the TTS makes audio. The investigation and design are in `docs/avatar-plan.md`.
-
-**Try it:** `python main.py serve`, then open **http://127.0.0.1:8000/avatar-demo.html** (debug overlay: FPS, current
-viseme, RMS, lip-sync mode, audio delay slider; buttons for Play, chunked streaming, word timings, Stop, Mood and a
-leak check). In a class, the avatar sits above the teacher card; the person button on the card turns it on or off.
-
-**Turn it off** for everyone with `AVATAR_ENABLED=false` in `.env` (three.js is then never downloaded and the class
-runs exactly as before, audio only). Each viewer can also hide it with the button; that choice is remembered.
-
-### How it works
-
-```
-Gnani clip (WAV, 48 kHz PCM16) → <audio> → Voice output node ─┐
-pushAudioChunk() → gapless AudioBufferSource queue ───────────┴→ avatar input → AnalyserNode → delay → speakers
-                                                                                    │
-                     every frame: RMS + spectrum → viseme → attack/release smoothing → blend shapes
-```
-
-- **One AudioContext** for the page (`web/js/avatar/audio-engine.js`), resumed on the first tap/click (iOS unlock).
-- **The avatar plays the audio** (or taps the existing playback node), and the analyser is on the real output path, so
-  the lips follow exactly what is heard and nothing is played twice.
-- **Lip sync, chosen automatically:**
-  - *Audio mode* (Gnani clips, streamed chunks): RMS with a noise gate opens the jaw; pre-emphasized spectral
-    centroid, band energies and zero-crossing rate pick closed / open / spread / rounded / fricative, mapped onto
-    the 15 Oculus visemes (or ARKit shapes for ARKit-only models).
-  - *Timestamp mode* (browser fallback voice, or `setTimestamps`): words → visemes with TalkingHead's `lipsync-en`
-    rules, scheduled on the clock. Used for the browser voice because its audio can't be routed into Web Audio;
-    its word-boundary events give the timings.
-  - Both: fast open (~50 ms), slower close (~100 ms), blended visemes, clamped weights, delay compensation ±150 ms.
-- **Alive:** blinks every 2–6 s (~150 ms, sometimes double, more at phrase ends), small eye saccades mostly at the
-  camera, slow noise-driven head sway and breathing, small nods and brow raises on loud syllables, moods
-  (neutral / happy while waiting for questions / thinking while the agent answers).
-- **Stop/pause** in the class calls `avatar.stop()`: queued audio fades out in 30 ms and the mouth is at rest in ~150 ms.
-
-### Module API (`web/js/avatar/avatar.js`)
-
-```js
-const avatar = await createAvatar({ container, modelUrl, options });  // options: background, delayMs, mood, tuning, …
-avatar.attachAudioStream(source);          // HTMLAudioElement, MediaStream or AudioNode (same AudioContext)
-avatar.pushAudioChunk(chunk, { type: "pcm16", sampleRate: 48000, channels: 1 });  // or "float32", "wav", "mp3", …
-avatar.setTimestamps({ words, times, durations });          // optional, ms; or { visemes, vtimes, vdurations }
-avatar.stop(); avatar.setMood("happy"); avatar.setDelay(40); avatar.dispose();
-avatar.addEventListener("speechstart" | "speechend" | "ready" | "error", …);
-```
-
-### Swap the avatar model
-
-Put a GLB in `web/assets/avatars/` and set `AVATAR_MODEL_URL=/assets/avatars/your-model.glb` in `.env` (or pass
-`modelUrl` to `createAvatar`). The camera frames head and shoulders from the model's own measurements.
-
-**Required blend shapes** (morph targets, exact names):
-- *Either* the Oculus visemes `viseme_PP, viseme_FF, viseme_TH, viseme_DD, viseme_kk, viseme_CH, viseme_SS,
-  viseme_nn, viseme_RR, viseme_aa, viseme_E, viseme_I, viseme_O, viseme_U` (at least 10 of them; `viseme_sil` is
-  optional, rest = all zero),
-- *or* ARKit mouth shapes (`jawOpen`, `mouthClose`, `mouthFunnel`, `mouthPucker`, `mouthStretchLeft/Right`,
-  `mouthSmileLeft/Right`, `mouthRollLower`, `mouthPressLeft/Right` …) — the module converts visemes to these.
-- *Recommended (ARKit):* `eyeBlinkLeft/Right`, `eyeLookIn/Out/Up/DownLeft/Right`, `browInnerUp`,
-  `browOuterUpLeft/Right`, `browDownLeft`, `cheekSquintLeft/Right`, `eyeSquintLeft/Right`.
-- *Bones (optional):* `Head`, `Neck`, `Spine2` for sway and nods; `LeftArm`/`RightArm` are lowered out of the shot.
-
-**Making a free avatar:**
-- **Blender + MPFB** (MakeHuman Plugin For Blender, free; its assets are CC0): create a character, add the ARKit
-  face rig and visemes, export as GLB. This is how the bundled avatar was made.
-- **MetaPerson Creator / Avaturn** (free tiers): export GLB with ARKit blend shapes. Check each service's terms for
-  your use; their free tiers are not always licensed for commercial use.
-- **VRoid Studio** makes VRM models whose mouth shapes are VRM expressions (`aa`, `ih`, `ou`, `ee`, `oh`), not
-  Oculus/ARKit names; it is not supported directly — rename the shape keys in Blender (VRM add-on) before export.
-- Make the file small: `npx @gltf-transform/cli resize in.glb a.glb --width 1024 --height 1024`, then `webp`, then
-  `meshopt` (the bundled avatar went from 36.8 MB to 3.15 MB).
-
-### Tuning (`options.tuning` / `DEFAULT_TUNING` in `web/js/avatar/lipsync.js`)
-
-| Setting | Default | Effect |
-|---|---|---|
-| `floorDb` | −52 | noise gate: below this the mouth is closed |
-| `fullDb`, `headroomDb`, `rangeDb`, `curve` | −26, 3, 20, 1.6 | how loudness opens the mouth (adapts to the voice's peak) |
-| `attackMs` / `releaseMs` | 50 / 100 | open fast, close slower |
-| `maxWeight`, `caps`, `maxTotal` | 0.85, `{viseme_aa: 0.75}`, 1.1 | keep the mouth from opening too wide |
-| `jawFromOpen` | 0.25 | extra ARKit `jawOpen` with loudness |
-| `options.delayMs` | 0 | −150…150: + delays the sound, − delays the lips |
-| `options.meshVisemeScale` | `{tongue: 0.3}` | damp visemes on matching meshes (tongue poking out) |
-| `options.lifeIntensity` | 1 | 0 = still, >1 = livelier idle motion |
-| `options.maxPixelRatio` | 2 | lower it on weak phones |
-
-
-### Licenses (everything the avatar ships)
-
-| Item | Where | License |
-|---|---|---|
-| three.js 0.170.0 (core, GLTFLoader, BufferGeometryUtils) | `web/vendor/three/` | MIT (`web/vendor/three/LICENSE`) |
-| meshoptimizer decoder (part of three.js) | `web/vendor/three/addons/libs/` | MIT |
-| TalkingHead `lipsync-en.mjs` (Mika Suominen) | `web/vendor/talkinghead/` | MIT (`web/vendor/talkinghead/LICENSE`) |
-| Avatar `mpfb.glb` (TalkingHead repo, made with MPFB) | `web/assets/avatars/` | CC0 (`web/assets/avatars/LICENSE.md`) |
-| Demo voice `sample.wav` | `web/assets/avatar-demo/` | generated by this project's own TTS |
-| gltf-transform, sharp (only used once to shrink the GLB, not shipped) | — | MIT, Apache-2.0 |
-
-Not used, on purpose: TalkingHead's other sample avatars (non-commercial licenses) and HeadAudio's trained model
-(no stated license). No paid service or API key is involved in the avatar.
-
-### Known limits
-
-- Audio-only lip sync is a heuristic (no phoneme recognition): vowels and fricatives are distinguished, but
-  `DD`/`kk`/`RR` only appear in timestamp mode. The browser fallback voice gets exact word timings.
-- Measured in Chrome: lips trail the heard sound by ~20 ms, Stop reaches rest in ~130 ms, ~1 ms CPU per frame.
-  Firefox and Safari (including iOS) use the same standard APIs but were not tested here.
-
-## 8. Troubleshooting
-
-- **The model does not use tools / errors about tools.** `LLM_MODEL` must support tool
-  calling. Check the model page on OpenRouter for "tools", or try `openai/gpt-4o-mini`.
-- **`Missing required settings in .env`.** Copy `.env.example` to `.env` and set
-  `OPENROUTER_API_KEY` and `LLM_MODEL`.
-- **Chroma metadata errors.** Chroma accepts only str, int, float and bool metadata.
-  The indexer drops anything else; if you changed a loader, never put `None` or lists
-  in metadata. To start clean, delete `chroma_db/` and run `index` again.
-- **The script fails validation.** `generate` asks the model to fix it once; if errors
-  remain it saves `script_failed.md`. Fix the listed lines, save it as `script.md`
-  and run `approve`, or run `generate` again.
-- **`GNANI_API_KEY is missing`.** Voice flags need it; run without `--voice/--mic` for text mode.
-- **No sound / microphone errors.** Check the system output and input devices. On macOS, allow
-  microphone access for your terminal under System Settings → Privacy & Security → Microphone.
-  If speaking fails, the prompt falls back to typing.
-- **Gnani `400 ... supported models are "timbre-v2.5"`.** The code always sends `timbre-v2.5`;
-  update `gnani-vachana` if you still see this.
-- **Gnani `429 RATE_LIMITED`.** Gnani allows one request at a time per key. `eris/classroom/voice.py` queues
-  calls and retries automatically; if a clip still fails, the browser voice is used for that line.
-- **The website shows "Approve the script on the Home page first".** Class needs status `approved`
-  (or `completed` to re-run). Saving an edit resets it to `draft`.
-- **`Lecture not approved`.** Run `approve`, or use `session --force` for a quick look.
+This project is licensed under the MIT License.

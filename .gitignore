@@ -1,29 +1,125 @@
+# ==============================================================================
+# Environment, Credentials & Secrets
+# ==============================================================================
 .env
-.venv/
-.uv-cache/
+.env.*
+!.env.example
+*.env
+*.pem
+*.key
+*.cert
+*.crt
+*.pub
+
+# ==============================================================================
+# Python Artifacts & Virtual Environments
+# ==============================================================================
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+.uv-cache/
+.uv/
+
+# Testing, Linting & Coverage
 .pytest_cache/
-*.pyc
-.DS_Store
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.ruff_cache/
+.mypy_cache/
+.deepeval/
+
+# ==============================================================================
+# Eris Application Data & Runtime Outputs
+# ==============================================================================
 chroma_db/
 workspace/
-# Teacher material stays local (the example persona lives in templates/persona.md).
+tmp/
+temp/
+
+# Teacher material stays local (the example persona lives in templates/persona.md)
 data/*
-
-# Frontend (web/ is plain HTML/CSS/JS with no build step; these cover tooling added later)
-node_modules/
-web/dist/
-npm-debug.log*
-
-# Editors, logs and local tool settings
-.vscode/
-.idea/
-*.log
-.claude/settings.local.json
 
 # Lectures moved out of the platform (kept, not shown)
 archive/
 
-# Teacher face videos for the talking-video renders (large, local only)
+# Teacher face videos and heavy audio/video renders (local only)
 media/
+*.wav
+*.mp3
+*.mp4
+!web/assets/**
+
+# ==============================================================================
+# Frontend & Tooling
+# ==============================================================================
+node_modules/
+web/dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+
+# ==============================================================================
+# Docker & Deployment
+# ==============================================================================
+caddy_data/
+caddy_config/
+
+# ==============================================================================
+# IDEs, Editors & AI Assistants
+# ==============================================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.log
+.claude/settings.local.json
+.claude/worktrees/
+.claude/*.local.json
+.gemini/
+
+# ==============================================================================
+# Operating System Artifacts
+# ==============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+ehthumbs_vista.db
+Thumbs.db
+desktop.ini
+
+# ==============================================================================
+# Project Specific Guardrails
+# ==============================================================================
 docs/
