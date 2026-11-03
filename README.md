@@ -1,310 +1,198 @@
-# 🎓 Eris — AI Substitute Teacher Platform
+# Eris
 
-> **Autonomous, pedagogical AI teaching platform that transforms course materials into interactive, synchronized classroom lectures with video tutors, 3D avatars, dynamic stages, and live doubt resolution.**
+**An AI substitute teacher that teaches a class from the teacher's own material, in the teacher's own style.**
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-Eris_on_Azure-1b6e66?style=for-the-badge&logo=azure&logoColor=white)](https://eris.indiasouthcentral.cloudapp.azure.com/#/)
-[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Three.js](https://img.shields.io/badge/Three.js-WebGL_Avatar-black?style=for-the-badge&logo=three.js&logoColor=white)](https://threejs.org/)
-[![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Eris-1b6e66?style=flat-square)](https://eris.indiasouthcentral.cloudapp.azure.com/#/)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com/)
 
----
-
-### 🌐 Live Deployment
-
-Experience the live platform directly in your browser:  
-👉 **[https://eris.indiasouthcentral.cloudapp.azure.com/#/](https://eris.indiasouthcentral.cloudapp.azure.com/#/)**
+**Live demo:** [eris.indiasouthcentral.cloudapp.azure.com](https://eris.indiasouthcentral.cloudapp.azure.com/#/)
 
 ---
 
-## 💡 Overview
+## Overview
 
-When a teacher is away, Eris steps in. Teachers upload their slides or notes and define their teaching persona; Eris generates a verified lecture script in the teacher's voice, which the teacher reviews and approves. Students then join the course with a class code and take the lesson on their own devices: a voiced tutor teaches across presentation slides, a handwriting notebook, a code editor, and interactive graphs—answering student doubts live.
+When a teacher is away, the class usually gets a free period, a worksheet, or a substitute reading from the textbook. Eris lets the teacher keep teaching.
 
-```
-upload + persona ──► index ──► generate (draft) ──► checks (code + Jev) ──► approve ──► share ──► students learn
-```
+The teacher uploads their slides, notes, textbook pages or lab sheets and describes how they teach. Eris writes a lecture script in that voice. The teacher reviews it, edits anything, and approves it. Students then join with a class code and take the lesson on their own devices. A voiced tutor teaches across slides, a notebook, a code editor and interactive graphs, and answers students' doubts as they come up.
 
-### Key Capabilities
+## How it works
 
-- **Teacher-in-the-Loop Control**: The LLM drafts the lesson script; the teacher reviews, edits, and locks it before any student sees it.
-- **Deterministic Player (No Speech Drift)**: In class, a plain-code player walks `script.json` sequentially. Narration and board actions are strictly synchronized: speech never outpaces writing or code execution.
-- **4 Dynamic Classroom Environments**: Intelligently coordinates a ruled **Notebook**, presentation **Slides** (with pen highlights & circles), a live **Code Editor & Terminal**, and a **Visual Board** (step-by-step whiteboard flowcharts and interactive graphs with real-time sliders).
-- **Video Tutor & 3D Avatar**: Displays a lifelike video tutor talking in sync with the audio, with a browser-based Three.js 3D avatar (Web Audio FFT viseme lip-sync) as a lightweight fallback.
-- **10 Indian Languages**: Native voice and grammar support for English, Hindi, Tamil, Telugu, Kannada, Malayalam, Marathi, Bengali, Gujarati, and Punjabi.
-- **Context-Aware Doubt Agent**: Students can ask doubts at any time by speaking or typing. A LangGraph agent reads the live board snapshot, searches course materials, and can write code or draw diagrams to answer without losing class progress.
-- **Coursework & Attendance**: Organizes subjects into courses, chapters, topics, and prerequisite lessons. Tracks verified attendance based on segments students actively listen to.
+1. **Upload.** The teacher adds PPTX, PDF, DOCX, TXT or Markdown files and a short teaching persona (tone, language, voice).
+2. **Index.** Eris extracts text, slides, figures and book pages, describes images with a vision model, and builds a searchable index.
+3. **Generate.** A planner sizes each part of the topic from the material itself. A writer produces the lesson in the teacher's voice, and a stager places every board action (slides, highlights, notes, graphs, code).
+4. **Check.** Automated checks dry-run the code, verify the formulas and book answers, and confirm every key point is covered.
+5. **Approve.** The teacher reviews the script in Studio, edits any line, and approves it. Nothing reaches students before approval.
+6. **Teach.** A deterministic player runs the approved script. Speech and board actions stay in sync, and students can pause to ask a doubt by voice or text.
 
-```
-┌────────────────────────┐      ┌─────────────────────────┐      ┌────────────────────────┐
-│  Teacher Materials     │ ───► │  Script Generation &    │ ───► │  Interactive Class     │
-│  • PPTX, PDF, DOCX     │      │  Quality Verification   │      │  • Video Tutor / Avatar│
-│  • Teacher Persona     │      │  • Strict Parser        │      │  • Synchronized Stage  │
-│  • Vision OCR & Schema │      │  • Code Dry-Runs        │      │  • Live Doubt Agent    │
-│  • ChromaDB Index      │      │  • Teacher Approval     │      │  • Audio Pre-render    │
-└────────────────────────┘      └─────────────────────────┘      └────────────────────────┘
-```
+## Features
 
----
+- **Teacher in the loop.** Every script is a draft until the teacher approves it. Any section can be edited or regenerated.
+- **Length from the material.** There is no fixed duration. Eris goes deeper where the topic needs it and keeps simple parts brief.
+- **Textbook teaching.** Eris opens the actual book page, highlights and underlines it, and works through book examples with the answer hidden until the class has solved them.
+- **Four classroom boards.** Slides, a handwritten notebook, a code editor with a sandboxed terminal, and a visual board with flow diagrams and interactive graphs.
+- **Live doubts.** Students ask by voice or text at any point. A LangGraph agent reads the current board and the course material, then answers with speech, notes, code or a graph. Guardrails screen both the question and the answer.
+- **Ten Indian languages.** English, Hindi, Tamil, Telugu, Kannada, Malayalam, Marathi, Bengali, Gujarati and Punjabi, voiced with Gnani Timbre TTS.
+- **Video tutor.** A talking video tutor in sync with the narration, with a browser-based 3D avatar as a lightweight fallback.
+- **Courses and attendance.** Courses, chapters, prerequisite lessons and shared study material. Attendance records which parts of the lesson each student actually heard.
 
-## 🏛️ System Architecture
+## Classroom boards
 
-The end-to-end architecture from ingestion to classroom execution and deployment:
-
-```mermaid
-graph TB
-    subgraph Ingestion ["1. Material Ingestion & Indexing"]
-        Files["Teacher Files<br/>(PPTX, PDF, DOCX)"]
-        Persona["Teacher Persona<br/>(persona.md)"]
-        Vision["Vision Model<br/>(OCR + Image Descriptions)"]
-        Indexer["Indexer Engine<br/>(eris/material/)"]
-        Chroma[("ChromaDB<br/>Vector Store")]
-        Figures["Extracted Figures<br/>(figures.json)"]
-
-        Files --> Indexer
-        Persona --> Indexer
-        Files --> Vision --> Indexer
-        Indexer --> Chroma
-        Indexer --> Figures
-    end
-
-    subgraph Generation ["2. Generation & Verification Pipeline"]
-        ScriptAgent["Script Agent<br/>(Outline & Writer)"]
-        Validator["Pipeline Validator<br/>(Dry-run & Fixers)"]
-        Judge["Quality Judge Loop<br/>(Jev / Pedagogy Checks)"]
-        ScriptMD["script.md / script.json<br/>(Deterministic Segments)"]
-        Approval{"Teacher Approval<br/>(Studio Review)"}
-        TTS["Voice Pre-renderer<br/>(Gnani Timbre v2.5)"]
-        AudioCache[("Audio Cache<br/>WAV Clips")]
-
-        Chroma & Figures --> ScriptAgent
-        ScriptAgent --> Validator --> Judge --> ScriptMD
-        ScriptMD --> Approval
-        Approval -->|Approved| TTS --> AudioCache
-    end
-
-    subgraph Classroom ["3. Classroom Runtime & Doubt Handling"]
-        Player["Deterministic Player<br/>(Narration + Action Sync)"]
-        Tutor["Video Tutor & 3D Avatar<br/>(Three.js + FFT Lip-Sync)"]
-        Stage["Classroom Stage<br/>(Notebook | Slides | Code | Visuals)"]
-        Student["Student<br/>(Voice / Text Doubts)"]
-        DoubtAgent["Doubt Agent<br/>(LangGraph + Tools)"]
-        Sandbox["Docker Sandbox<br/>(Code Execution)"]
-
-        AudioCache & ScriptMD --> Player
-        Player --> Tutor
-        Player --> Stage
-        Student --> DoubtAgent
-        Stage -.->|Read-only Snapshot| DoubtAgent
-        Chroma -.->|Semantic Search| DoubtAgent
-        DoubtAgent --> Sandbox
-        DoubtAgent -->|Live Answer + Board Update| Stage
-    end
-
-    subgraph Deployment ["4. Cloud Infrastructure"]
-        Azure["Azure VM (Standard_B2s)<br/>Ubuntu 24.04 LTS"]
-        Caddy["Caddy Reverse Proxy<br/>Auto HTTPS / SSL"]
-        FastAPI["FastAPI App Server<br/>(eris:8000)"]
-
-        Caddy --> FastAPI
-        FastAPI --> Classroom
-    end
-
-    classDef ing fill:#e1f5fe,stroke:#0288d1,stroke-width:1.5px;
-    classDef gen fill:#ede7f6,stroke:#512da8,stroke-width:1.5px;
-    classDef cls fill:#e8f5e9,stroke:#2e7d32,stroke-width:1.5px;
-    classDef dep fill:#fff3e0,stroke:#e65100,stroke-width:1.5px;
-
-    class Files,Persona,Vision,Indexer,Chroma,Figures ing;
-    class ScriptAgent,Validator,Judge,ScriptMD,Approval,TTS,AudioCache gen;
-    class Player,Tutor,Stage,Student,DoubtAgent,Sandbox cls;
-    class Azure,Caddy,FastAPI dep;
-```
-
----
-
-## 🖥️ The 4 Classroom Environments
-
-The classroom stage dynamically adapts its workspace based on course materials:
-
-| Environment | Purpose | When Used |
+| Board | What it shows | Used when |
 |---|---|---|
-| **📝 Notebook** | Ruled blackboard with animated cursive handwriting, titles, and live text highlights. | Always active as the primary whiteboard. |
-| **📑 Slides** | Slide viewer displaying presentations as images, highlighting specific lines, and circling figures. | Active when a PPTX deck or PDF slide deck is uploaded. |
-| **💻 Code Editor** | Syntax-highlighted code editor with a sandboxed terminal for live code execution. | Active when lecture files contain programming code. |
-| **📊 Visual Board** | Step-by-step whiteboard flowcharts and interactive graphs with real-time sliders. | Active when processes or mathematical charts are detected. |
+| Slides | The teacher's deck, with highlights and circles drawn on it | A PPTX or PDF deck is uploaded |
+| Book | Textbook pages with highlights, underlines and worked examples | A textbook PDF is uploaded |
+| Notebook | Handwritten notes, titles and highlights | Every lesson |
+| Code | An editor and a sandboxed terminal that runs the program | The material contains code |
+| Visual | Step-by-step flow diagrams and graphs with sliders | The topic has a process or a chart |
 
 ---
 
-## ⚡ Quick Start
+## Getting started
 
-### 1. Prerequisites
-- **Python 3.12**
-- **[uv](https://docs.astral.sh/uv/)** (recommended) or `pip`
-- **[OpenRouter](https://openrouter.ai)** API key (with a tool-calling model like `openai/gpt-4o-mini` or `anthropic/claude-haiku-5.5`)
+### Prerequisites
 
-### 2. Installation
+- Python 3.12
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- An [OpenRouter](https://openrouter.ai) API key for a model that supports tool calling
+- Optional: a Gnani API key for voice, LibreOffice for rendering PPTX slides as images, and Docker for the code sandbox
+
+### Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/Xtejasveer/Eris.git
 cd Eris
 
-# Create and activate virtual environment
 uv venv --python 3.12
-source .venv/bin/activate       # On Windows: .venv\Scripts\activate
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 
-# Install dependencies
 uv pip install -r requirements.txt
-uv pip install -r requirements-extras.txt  # Optional: photorealistic video avatar & faster-whisper
+uv pip install -r requirements-extras.txt   # optional: video tutor and local speech recognition
 
-# Setup environment variables
 cp .env.example .env
 ```
 
-### 3. Configure Environment
+### Configuration
 
-Edit `.env` with your API keys:
+Set at least these values in `.env`:
 
 ```ini
-OPENROUTER_API_KEY=your_openrouter_api_key
+OPENROUTER_API_KEY=your_openrouter_key
 LLM_MODEL=openai/gpt-4o-mini
-GNANI_API_KEY=your_gnani_api_key          # Optional: high-fidelity Indian English TTS/STT
+GNANI_API_KEY=your_gnani_key      # optional; without it the browser's speech synthesis is used
 ```
 
-> [!NOTE]
-> If `GNANI_API_KEY` is omitted, Eris automatically falls back to the browser's native speech synthesis.
+Other useful settings:
 
-### 4. Run the Web Application
+| Variable | Purpose | Default |
+|---|---|---|
+| `TTS_VOICE`, `TTS_LANGUAGE`, `TTS_SPEED` | Classroom voice | `Kaveri`, `en-IN`, `0.85` |
+| `JUDGE_ENABLED` | Run quality checks on generated scripts | `true` |
+| `GUARDRAILS_ENABLED` | Screen students' questions and the answers | `true` |
+| `VISION_ENABLED` | Describe pictures in the material at index time | `true` |
+| `ERIS_SANDBOX` | Where programs run: `auto`, `docker`, `os` or `off` | `auto` |
+| `ERIS_DEMO_LOGINS` | Show the demo accounts on the sign-in page | `true` |
+| `ERIS_DEMO_CAN_GENERATE` | Allow demo accounts to generate scripts | `false` |
+| `ERIS_TEACHER_SIGNUP` | Allow anyone to create a teacher account | `false` |
+
+See [.env.example](.env.example) for the full list.
+
+### Run
 
 ```bash
-# (Optional) Seed demo accounts and courses for local testing:
-python main.py seed
-
-# Start the local server
+python main.py seed     # optional: demo accounts, courses and approved lessons
 python main.py serve
 ```
 
-Open your browser at **[http://127.0.0.1:8000](http://127.0.0.1:8000)**:
-- **Teacher View**: Manage courses, upload materials, generate scripts, review quality checks, and approve.
-- **Student View**: Join with a course code, attend interactive lessons, and ask doubts in real time.
+Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
+
+- **Teachers** create courses, upload material, generate and review scripts, and share approved lessons.
+- **Students** join with a class code, attend lessons and ask doubts.
+
+The seed adds five ready-to-use demo lessons: Physics (projectile motion), History (French society), Mathematics (quadratic factorisation), Chemistry (carbonyl compounds) and Python (while loops).
 
 ---
 
-## 🐳 Docker Deployment
+## Deployment
 
-Run the complete production stack (Eris + Caddy with automatic SSL):
+The Docker setup runs Eris behind Caddy with automatic HTTPS:
 
 ```bash
 docker compose up -d --build
 ```
 
-For full Azure VM setup and custom domain configuration, see [deploy/azure.md](file:///d:/Eris/deploy/azure.md).
+See [deploy/README.md](deploy/README.md) and [deploy/azure.md](deploy/azure.md) for server setup and custom domains.
 
----
-
-## ⌨️ Command Line Interface
-
-Eris can be completely controlled via the CLI:
+## Command-line interface
 
 | Command | Description |
 |---|---|
-| `python main.py serve` | Start the web application server (`http://127.0.0.1:8000`). |
-| `python main.py seed` | Add demo accounts and courses built from lectures in `data/`. |
-| `python main.py index --lecture <id>` | Build knowledge base and figures index from `data/<id>/`. |
-| `python main.py generate --lecture <id>` | Write lesson outline and draft script (`status: draft`). |
-| `python main.py approve --lecture <id>` | Validate script, dry-run code blocks, and approve (`status: approved`). |
-| `python main.py render --lecture <id>` | Pre-render narration audio clips with Gnani TTS. |
-| `python main.py session --lecture <id>` | Run the interactive terminal classroom session. |
-| `python main.py stage --lecture <id>` | Re-stage saved `lesson.md` and report metrics. |
-| `python main.py doubts --lecture <id>` | Test doubt agent checkpoints against full topic context. |
-| `python main.py status --lecture <id>` | Display current manifest status and statistics. |
-| `python main.py measure-voice` | Measure voice speed and persist `SPEAKING_WPM` in `.env`. |
-| `python main.py tutor-video` | Generate classroom video tutor from idle and talking clips. |
+| `python main.py serve` | Start the web application |
+| `python main.py seed` | Add the demo accounts, courses and lessons |
+| `python main.py demo-snapshot` | Save the demo lessons' approved scripts into `templates/demo/` |
+| `python main.py index --lecture <id>` | Build the knowledge base from `data/<id>/` |
+| `python main.py generate --lecture <id>` | Write a draft script |
+| `python main.py stage --lecture <id>` | Re-stage the saved lesson and report the result |
+| `python main.py approve --lecture <id>` | Validate the script, dry-run its code and approve it |
+| `python main.py render --lecture <id>` | Pre-render narration audio with Gnani TTS |
+| `python main.py session --lecture <id>` | Run the lesson in the terminal, with doubts |
+| `python main.py doubts --lecture <id>` | Test a doubt checkpoint |
+| `python main.py status --lecture <id>` | Show the lecture's status |
+| `python main.py measure-voice` | Measure the voice's speaking rate and save it to `.env` |
+| `python main.py tutor-video` | Build the classroom video tutor from an idle and a talking clip |
 
----
+## Script format
 
-## 🏷️ Script Markers Cheat Sheet
+An approved script is plain text with inline markers, parsed by `eris/generate/script_parser.py`. Narration sits between the markers. Adding `while_speaking=true` runs an action during the next line instead of before it.
 
-Scripts use clean inline markers parsed by `eris/generate/script_parser.py`:
+| Marker | Action |
+|---|---|
+| `[SECTION title="..."]` | Starts a section of the lesson |
+| `[SLIDE n=3]` | Shows a slide |
+| `[SLIDE_HIGHLIGHT n=3 text="..."]`, `[SLIDE_CIRCLE n=3 part="..."]` | Highlights a line or circles a part of a slide |
+| `[BOOK page=14]` | Opens a textbook page |
+| `[BOOK_HIGHLIGHT page=14 text="..."]`, `[BOOK_UNDERLINE ...]`, `[BOOK_CIRCLE ...]` | Marks text on the page |
+| `[BOOK_EXAMPLE page=14 name="..."]`, `[BOOK_ANSWER ...]` | Works a book example with the answer hidden, then reveals it |
+| `[NOTE_TITLE text="..."]`, `[NOTE] ... [/NOTE]`, `[NOTE_HIGHLIGHT text="..."]` | Writes and highlights in the notebook |
+| `[WRITE_CODE file="..."] ... [/WRITE_CODE]`, `[RUN cmd="..."]`, `[READ_OUTPUT]` | Types, runs and reads a program |
+| `[FLOW id="..." title="..."]`, `[FLOW_NEXT id="..."]` | Draws a flow diagram step by step |
+| `[VISUAL id="..." title="..."]`, `[VISUAL_SET id="..." control="..." value=45]` | Shows an interactive graph and moves its controls |
+| `[DOUBT_CHECK]` | Pauses for students' questions |
 
-| Marker | Description | Example |
-|---|---|---|
-| `[NOTE]` | Writes handwritten lines onto the notebook page. | `[NOTE]\nRepeats while condition is True\n[/NOTE]` |
-| `[NOTE_TITLE]` | Underlined heading in the notebook. | `[NOTE_TITLE text="While Loops"]` |
-| `[NOTE_HIGHLIGHT]` | Yellow highlighter over existing notebook text. | `[NOTE_HIGHLIGHT text="condition is True"]` |
-| `[WRITE_CODE]` | Types code into the classroom code editor. | `[WRITE_CODE file="demo.py"]\nprint("Hello")\n[/WRITE_CODE]` |
-| `[RUN]` | Executes a file in the code terminal. | `[RUN cmd="python demo.py"]` |
-| `[READ_OUTPUT]` | Validates terminal output against expected result. | `[READ_OUTPUT]\nHello\n[/READ_OUTPUT]` |
-| `[SLIDE]` | Displays a specific slide from the presentation deck. | `[SLIDE num=3]` |
-| `[SLIDE_HIGHLIGHT]` | Highlights a specific line on the slide image. | `[SLIDE_HIGHLIGHT text="Key concept"]` |
-| `[FLOW]` | Draws a block-by-block whiteboard flowchart. | `[FLOW id="loop" title="Loop Flow"]\nstep: Do work\n[/FLOW]` |
-| `[VISUAL]` | Interactive graph with real-time sliders. | `[VISUAL id="chart" title="Distribution"]\ncontrols: mean (slider 0-10)\n[/VISUAL]` |
-| `[DOUBT_CHECK]` | Pauses the lecture for student questions. | `[DOUBT_CHECK]` |
-| `while_speaking=true` | Types code or notes *simultaneously* while speaking. | `[WRITE_CODE file="sum.py" while_speaking=true]` |
-
----
-
-## 📁 Repository Structure
+## Project structure
 
 ```
 Eris/
-├── main.py                     # CLI entry point (serve, index, generate, approve, render, session, seed)
-├── eris/                       # Core Python package
-│   ├── config.py               # Settings, environment paths, and lecture manifest
-│   ├── persona.py              # Teacher persona parser
-│   ├── prompts.py              # System prompts for researcher, writer, judge, and doubt agents
-│   ├── material/               # Ingestion: PDF/PPTX/DOCX indexer, vision OCR, figure extractor, slides
-│   ├── generate/               # Script pipeline: outline writer, parser, validator, and quality judge
-│   ├── visuals/                # Visual board: flowchart renderer and interactive graph builders
-│   ├── classroom/              # Class execution: doubt agent, session player, voice engine, actions
-│   ├── platform/               # Multi-course database, attendance tracking, and demo seeders
-│   └── api/                    # Web backend: FastAPI server, classroom endpoints, and job runners
-├── web/                        # Frontend application (Vanilla HTML/CSS/JS, Three.js avatar)
-│   ├── css/                    # Studio, classroom, platform, and landing styles
-│   ├── js/                     # Client player, stage controllers, avatar engine, visual runtime
-│   └── assets/                 # Video tutors, 3D avatar GLB models, and audio assets
-├── deploy/                     # Production deployment: Caddy reverse proxy, Azure guide
-├── templates/                  # Example persona templates (templates/persona.md)
-└── docs/                       # Architectural design notes and implementation plans
+├── main.py            CLI entry point
+├── eris/
+│   ├── config.py      Settings and lecture paths
+│   ├── prompts.py     Prompts for the planner, writer, stager, judge and doubt agent
+│   ├── material/      Ingestion: PDF, PPTX and DOCX parsing, vision, figures, slides
+│   ├── generate/      Script pipeline: planning, writing, staging, checks and fixes
+│   ├── visuals/       Flow diagrams and interactive graphs
+│   ├── classroom/     Session player, doubt agent and voice
+│   ├── platform/      Accounts, courses, attendance and demo seeding
+│   └── api/           FastAPI server and background jobs
+├── web/               Frontend (HTML, CSS, JavaScript, Three.js avatar)
+├── templates/         Persona template and demo lessons
+├── deploy/            Caddy configuration and deployment guides
+└── docs/              Design notes
 ```
 
----
+## Troubleshooting
 
-## 🔧 Common Troubleshooting
+| Problem | Fix |
+|---|---|
+| The model does not call tools | Use an `LLM_MODEL` that supports tool calling on OpenRouter. |
+| A script fails approval | Check `workspace/lectures/<id>/script_failed.md`, fix `script.md`, and run `approve` again. |
+| Slides appear as text, not images | Install LibreOffice (`soffice`) to render PPTX decks. PDF decks need nothing extra. |
+| Code lessons cannot run programs | Start Docker and run `docker pull python:3.12-slim`, or set `ERIS_SANDBOX=os` on macOS or Linux. |
+| No voice in the classroom | Gnani is optional. Without `GNANI_API_KEY`, the browser's speech synthesis is used. |
+| "This is a teacher account" on sign-in | Choose the matching role (teacher or student) on the sign-in page. |
 
-<details>
-<summary><b>Model does not call tools / returns tool error</b></summary>
-Ensure <code>LLM_MODEL</code> supports tool-calling on OpenRouter (e.g., <code>openai/gpt-4o-mini</code> or <code>anthropic/claude-haiku-5.5</code>).
-</details>
+## License
 
-<details>
-<summary><b>Script fails approval validation</b></summary>
-Inspect <code>workspace/lectures/<id>/script_failed.md</code> for syntax issues or code mismatch errors. Edit <code>script.md</code> to fix the lines, then run <code>python main.py approve --lecture <id></code>.
-</details>
+Copyright (c) 2026 the Eris authors. All rights reserved.
 
-<details>
-<summary><b>Slides show as text, not pictures</b></summary>
-PPTX decks require LibreOffice (<code>soffice</code>) installed to render slides as high-resolution images. PDF decks are rendered natively without LibreOffice.
-</details>
-
-<details>
-<summary><b>Code lessons can't run programs</b></summary>
-Start Docker (and pull <code>docker pull python:3.12-slim</code>) for containerized sandboxing, or set <code>ERIS_SANDBOX=os</code> in <code>.env</code> on macOS/Linux.
-</details>
-
-<details>
-<summary><b>Sign-in refused with "This is a teacher account"</b></summary>
-Select "I'm a teacher" or "I'm a student" on the landing page to match the created account role, then sign in.
-</details>
-
-<details>
-<summary><b>Audio not playing / No Gnani API key</b></summary>
-Gnani TTS is optional. Without <code>GNANI_API_KEY</code>, the web classroom automatically uses the browser's native Web Speech synthesis.
-</details>
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License.
+This code is proprietary. No part of it may be copied, modified, distributed or used without written permission from the authors.
