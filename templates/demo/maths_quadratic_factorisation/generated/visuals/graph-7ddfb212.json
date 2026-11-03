@@ -1,0 +1,19 @@
+{
+  "id": "graph",
+  "title": "Roots on the Graph",
+  "brief": "plots: y = 2x\u00b2 \u2013 5x + 3 as a line chart with markers\nx values: 0, 0.5, 1, 1.5, 2, 2.5, 3\nseries 'y': 3.0, 1.0, 0.0, 0.0, 1.0, 3.0, 6.0",
+  "controls": [
+    {
+      "name": "x",
+      "type": "slider",
+      "label": "X",
+      "min": 0,
+      "max": 3,
+      "step": 1
+    }
+  ],
+  "html": "<script>\nconst c = Visual.chart({ x: [0, 3], y: [-1, 7], xLabel: \"x\", yLabel: \"y\" });\nconst data = [[0, 3], [0.5, 1], [1, 0], [1.5, 0], [2, 1], [2.5, 3], [3, 6]];\nconst f = x => 2 * x * x - 5 * x + 3;\nconst roots = data.filter(p => p[1] === 0);\nconst said = {\n  0: \"Here, at the start, x equals 0.\",\n  1: \"Let's check.\",\n  1.5: \"Last, here at x equals 1.5.\"\n};\nlet n = 0;\n\nfunction draw() {\n  c.clear();\n  const y = f(n);\n  c.fn(f, { color: \"var(--muted)\", dashed: true });\n  c.line(data);\n  c.dots(data);\n  c.dots(roots, { color: \"var(--good)\" });\n  c.vline(n);\n  c.dots([[n, y]], { color: \"var(--warn)\" });\n  // label sits low and away from the y-axis so it never collides with tick labels\n  c.label(Math.min(Math.max(n, 0.5), 2.5), -0.7, `x = ${n}`);\n  c.readout([\n    `x = ${n}`,\n    `y = 2x\u00b2 \u2013 5x + 3 = ${y}`,\n    y === 0 ? \"On the x-axis: a root\" : \"Not a root yet\"\n  ]);\n  const base = `At x = ${n}, y = ${y}.`;\n  Visual.state(said[n] ? `${said[n]} ${base}` : base);\n}\n\nVisual.on(\"x\", v => { n = v; draw(); });\ndraw();\n</script>",
+  "model": "anthropic/claude-haiku-5.5",
+  "layout_advice": [],
+  "agrees": 0.97
+}

@@ -1,0 +1,349 @@
+{
+  "model": "typesafe/jev-1.13",
+  "findings": [
+    {
+      "check": "covers_must_cover",
+      "section": null,
+      "value": 0.58,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "Teach every item in the persona's Must cover list.",
+      "stage": "lesson"
+    },
+    {
+      "check": "respects_avoid",
+      "section": null,
+      "value": 0.85,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "Remove everything the persona lists under Avoid.",
+      "stage": "lesson"
+    },
+    {
+      "check": "opening_absence",
+      "section": null,
+      "value": 0.97,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In the Opening, say why the teacher is absent and give the teacher's message to the class.",
+      "stage": "lesson"
+    },
+    {
+      "check": "closing_next_class",
+      "section": null,
+      "value": 0.96,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "End with the next class topic and what to prepare.",
+      "stage": "lesson"
+    },
+    {
+      "check": "sounds_like_teacher",
+      "section": null,
+      "value": 0.81,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "Make the narration follow the persona's tone, pace, language and habits.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Opening",
+      "value": 0.82,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Opening\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Structures and the carbonyl group",
+      "value": 0.83,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Structures and the carbonyl group\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "pictures_explained",
+      "section": "Structures and the carbonyl group",
+      "value": 0.6,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Structures and the carbonyl group\", explain each picture you show: say what it shows (what whole, data or scene, as it really is) and what to notice in it.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "Structures and the carbonyl group",
+      "value": 0.79,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Structures and the carbonyl group\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "Structures and the carbonyl group",
+      "value": 0.54,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Structures and the carbonyl group\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "States at room temperature",
+      "value": 0.85,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"States at room temperature\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "States at room temperature",
+      "value": 0.71,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"States at room temperature\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "States at room temperature",
+      "value": 0.9,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"States at room temperature\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Boiling points: between hydrocarbons and alcohols",
+      "value": 0.71,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Boiling points: between hydrocarbons and alcohols\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "Boiling points: between hydrocarbons and alcohols",
+      "value": 0.88,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Boiling points: between hydrocarbons and alcohols\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "Boiling points: between hydrocarbons and alcohols",
+      "value": 0.88,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Boiling points: between hydrocarbons and alcohols\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Solubility in water",
+      "value": 0.79,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Solubility in water\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "Solubility in water",
+      "value": 0.83,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Solubility in water\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "Solubility in water",
+      "value": 0.8,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Solubility in water\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Odour",
+      "value": 0.76,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Odour\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "Odour",
+      "value": 0.72,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Odour\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "Odour",
+      "value": 0.87,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Odour\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "NCERT Example 8.2",
+      "value": 0.8,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"NCERT Example 8.2\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "NCERT Example 8.2",
+      "value": 0.85,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"NCERT Example 8.2\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "NCERT Example 8.2",
+      "value": 0.8,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"NCERT Example 8.2\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Recap",
+      "value": 0.86,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Recap\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Closing",
+      "value": 0.81,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Closing\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "Structures and the carbonyl group",
+      "value": 0.68,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Structures and the carbonyl group\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "States at room temperature",
+      "value": 0.96,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"States at room temperature\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "Boiling points: between hydrocarbons and alcohols",
+      "value": 0.51,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Boiling points: between hydrocarbons and alcohols\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "Solubility in water",
+      "value": 0.77,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Solubility in water\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "Odour",
+      "value": 0.47,
+      "passed": false,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Odour\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "evidence": "Highlights now: SLIDE_HIGHLIGHT lights up \"Lower aldehydes smell sharp and pungent; bigger molecules smell more …\" then says \"The lower aldehydes, such as methanal and ethanal, have sharp, pungent odours.\"",
+      "stage": "staging"
+    }
+  ],
+  "pairs": [],
+  "cost": 0.0011,
+  "error": "",
+  "unflagged": 0,
+  "score": 0.78,
+  "blockers": 0,
+  "failed_minor": 1,
+  "rounds": [
+    {
+      "kind": "lesson",
+      "problems": 2
+    },
+    {
+      "kind": "rules",
+      "problems": 1
+    }
+  ],
+  "advice": [],
+  "auto_fixes": [
+    "removed 1 pen circle(s) on slides that have no picture",
+    "removed 1 pen circle(s) on a part the sentence doesn't talk about",
+    "removed or moved 2 sketch row(s) to the sentence that explains them"
+  ]
+}

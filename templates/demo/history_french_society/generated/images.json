@@ -1,0 +1,182 @@
+[
+  {
+    "ext": "png",
+    "where": "slide 4",
+    "ref": "slide 4",
+    "slide": 4,
+    "context": "The Society of Estates: Fig. 2 in Your Book / Fig. 2, NCERT page 4.\n1st estate: clergy.\n2nd estate: nobility.\n3rd estate: three groups, from rich businessmen and lawyers down to landless labourers and servants.\nWithin the third estate, some were rich and others poor.",
+    "alt": "Fig. 2 from the NCERT book (page 4): a diagram of the society of estates. The 1st estate (clergy) is at the top, the 2nd estate (nobility) below it, and the 3rd estate at the bottom in three groups: big businessmen, merchants, court officials and lawyers; peasants and artisans; small peasants, landless labour and servants.",
+    "box": [
+      0.06,
+      0.2311,
+      0.3004,
+      0.9422
+    ],
+    "key": "665abd3321b140d5",
+    "source": "french_society_old_regime.pptx",
+    "kind": "diagram",
+    "description": "A diagram of the Society of Estates in pre-revolutionary France, showing three estates stacked from top to bottom: the clergy (1st estate), the nobility (2nd estate), and the third estate. The third estate is enlarged and split into three groups, from big businessmen, merchants, court officials and lawyers at the top, through peasants and artisans, to small peasants, landless labourers and servants at the bottom, so students should notice that the third estate contained both rich and poor people.",
+    "text": "1st estate, Clergy, 2nd estate, Nobility, 3rd estate, Big businessmen, merchants, court officials, lawyers etc., Peasants and artisans, Small peasants, landless labour, servants",
+    "steps": [
+      "1st estate: Clergy",
+      "2nd estate: Nobility",
+      "3rd estate: Big businessmen, merchants, court officials, lawyers etc.",
+      "3rd estate: Peasants and artisans",
+      "3rd estate: Small peasants, landless labour, servants"
+    ],
+    "data": "",
+    "decoration": false,
+    "parts": [
+      {
+        "name": "1st estate: Clergy",
+        "box": [
+          0.31,
+          0.09,
+          0.68,
+          0.19
+        ]
+      },
+      {
+        "name": "2nd estate: Nobility",
+        "box": [
+          0.31,
+          0.27,
+          0.68,
+          0.37
+        ]
+      },
+      {
+        "name": "3rd estate",
+        "box": [
+          0.15,
+          0.44,
+          0.87,
+          0.84
+        ]
+      },
+      {
+        "name": "Big businessmen, merchants, court officials, lawyers etc.",
+        "box": [
+          0.19,
+          0.49,
+          0.83,
+          0.58
+        ]
+      },
+      {
+        "name": "Peasants and artisans",
+        "box": [
+          0.19,
+          0.61,
+          0.83,
+          0.69
+        ]
+      },
+      {
+        "name": "Small peasants, landless labour, servants",
+        "box": [
+          0.19,
+          0.72,
+          0.83,
+          0.82
+        ]
+      }
+    ]
+  },
+  {
+    "ext": "png",
+    "where": "slide 6",
+    "ref": "slide 6",
+    "slide": 6,
+    "context": "The Society of Estates: The Spider and the Fly / Fig. 3, NCERT page 5: an anonymous etching.\nThe nobleman sits; the peasant brings grain, fruit and money.\n'The nobleman is the spider, the peasant the fly.'\nWhy did the artist draw the noble as a spider and the peasant as a fly?",
+    "alt": "Fig. 3 from the NCERT book (page 5), The Spider and the Fly, an anonymous etching: a well-dressed nobleman sits at ease while a poor peasant brings him a bag of money and a basket of produce; a spider's web with a fly hangs in the window above.",
+    "box": [
+      0.06,
+      0.2311,
+      0.4296,
+      0.9422
+    ],
+    "key": "8e263d0173030a74",
+    "source": "french_society_old_regime.pptx",
+    "kind": "illustration",
+    "description": "An anonymous 17th-century French etching shows a seated, richly dressed nobleman with a dog, receiving a money bag, a basket of fruit and a sack of grain from a thin, bearded peasant. A spider web with a spider and trapped fly appears at top left, and a fly is drawn near the verses. Students should notice how the verses and the web image frame the noble as a predator who feeds on the labour of the poor peasant.",
+    "text": "Plus on a de moyens, plus on en veut avoir / Ce pauvre apporte tout, bled, fruit, argent, volaille / Ce gros Atilord assis, prest a tout receuoir / Ne luy veut pas donner la douceur d'vne cuiller\u00e9e / A tous Seigneurs tous honneurs. / Maigre comme un leurier d'attache. / Il faut plier ou agr\u00e9er. / a la mouche / que volle / il ne faut / point dans la toile",
+    "steps": [],
+    "data": "",
+    "decoration": false,
+    "parts": [
+      {
+        "name": "spider web with spider and trapped fly",
+        "box": [
+          0.03,
+          0.0,
+          0.36,
+          0.25
+        ]
+      },
+      {
+        "name": "fly with verse \"A la mouche que volle\"",
+        "box": [
+          0.42,
+          0.02,
+          0.55,
+          0.19
+        ]
+      },
+      {
+        "name": "verses \"Plus on a de moyens...\"",
+        "box": [
+          0.58,
+          0.0,
+          1.0,
+          0.12
+        ]
+      },
+      {
+        "name": "seated nobleman",
+        "box": [
+          0.03,
+          0.2,
+          0.42,
+          1.0
+        ]
+      },
+      {
+        "name": "thin peasant",
+        "box": [
+          0.66,
+          0.18,
+          1.0,
+          1.0
+        ]
+      },
+      {
+        "name": "money bag",
+        "box": [
+          0.68,
+          0.5,
+          0.79,
+          0.65
+        ]
+      },
+      {
+        "name": "sack of grain",
+        "box": [
+          0.49,
+          0.85,
+          0.82,
+          1.0
+        ]
+      },
+      {
+        "name": "basket of fruit",
+        "box": [
+          0.79,
+          0.72,
+          0.98,
+          0.88
+        ]
+      }
+    ]
+  }
+]

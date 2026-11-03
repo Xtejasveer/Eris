@@ -33,7 +33,7 @@ const sentences = (text) => text.split(/(?<=[.!?।॥])\s+/).reduce((out, s) =>
 const BREATH_MS = 500;          // a short breath after each spoken line, before the next step
 const SECTION_BREATH_MS = 1100; // a longer one when a new part of the lesson starts
 const SLIDE_DWELL_MS = 3000;    // a slide nobody talks about stays this long before the next workspace opens
-const SLIDE_MARKERS = new Set(["SLIDE", "SLIDE_HIGHLIGHT", "SLIDE_CIRCLE"]);
+const SLIDE_MARKERS = new Set(["SLIDE", "SLIDE_HIGHLIGHT", "SLIDE_CIRCLE", "BOOK", "BOOK_HIGHLIGHT", "BOOK_UNDERLINE", "BOOK_CIRCLE"]);
 const DOUBT_WAIT_S = 10;    // how long the class has to start asking before the lesson goes on
 const ANSWER_WAIT_S = 25;   // when the teacher asked the student something back, they get longer to reply
 const BREAK_MAX_QUESTIONS = 4;   // a mid-lecture break takes at most this many questions…
@@ -205,7 +205,17 @@ export class Player {
       const a = seg.args || {};
       if (seg.kind === "say") { this.state.sectionText.push(seg.text); continue; }
       switch (seg.name) {
-        case "SECTION": this.state.section = a.title; this.state.covered.push(a.title); this.state.sectionText = []; break;
+        case "SECTION":
+          if (this.stage.split) this.stage.bookSplit(false);
+          this.state.section = a.title; this.state.covered.push(a.title); this.state.sectionText = []; break;
+        case "BOOK": this.board.currentSlide = null; this.stage.showBook(a.page); break;
+        case "BOOK_HIGHLIGHT": case "BOOK_UNDERLINE": case "BOOK_CIRCLE":
+          this.stage.bookMark(a.page, seg.name === "BOOK_UNDERLINE" ? "underline" : seg.name === "BOOK_CIRCLE" ? "circle" : "highlight", a.text);
+          break;
+        case "BOOK_EXAMPLE":
+          this.board.currentSlide = null; this.board.notebook.push("## " + a.name);
+          await this.stage.bookExample(a.page, a.name); break;
+        case "BOOK_ANSWER": this.stage.bookAnswer(a.page, a.name, a.matches || []); break;
         case "WRITE_CODE": this.board.files[a.file] = a.code; await this.stage.writeCode(a.file, a.code); break;
         case "RUN":  // the terminal shows each run again, with its approved output
           this.board.lastOutput = this.board.expectedOutput = seg.expected_output || "";
@@ -309,6 +319,7 @@ export class Player {
     }
     const a = seg.args || {};
     if (seg.name === "SECTION") {
+      if (this.stage.split) this.stage.bookSplit(false);  // a worked example's book-and-notebook view ends with its part
       this.state.section = a.title; this.state.covered.push(a.title); this.state.sectionText = [];
       this.ui.onSection?.(a.title);
       await this.tick(SECTION_BREATH_MS);
@@ -396,6 +407,23 @@ export class Player {
         b.currentSlide = a.n;
         if (!st.slideCircle(a.n, a.part)) { st.showSlide(a.n); return ""; }  // no picture on it: just show the slide
         await this.tick(750); return "";
+      case "BOOK":
+        b.currentSlide = null; b.bookPage = a.page; await this.tick(150);
+        return st.showBook(a.page) ? "" : `book page ${a.page} not found`;
+      case "BOOK_HIGHLIGHT": case "BOOK_UNDERLINE": case "BOOK_CIRCLE": {
+        b.currentSlide = null; b.bookPage = a.page;
+        const kind = seg.name === "BOOK_UNDERLINE" ? "underline" : seg.name === "BOOK_CIRCLE" ? "circle" : "highlight";
+        if (!st.bookMark(a.page, kind, a.text)) return `'${a.text}' is not printed on book page ${a.page}`;
+        await this.tick(450); return "";
+      }
+      case "BOOK_EXAMPLE":
+        b.currentSlide = null; b.bookPage = a.page;
+        if (!(await st.bookExample(a.page, a.name, ctl))) return `${a.name} is not on book page ${a.page}`;
+        b.notebook.push("## " + a.name);  // its fresh notebook page starts with its name
+        await this.tick(900); return "";  // the page zooms to it
+      case "BOOK_ANSWER":
+        if (!st.bookAnswer(a.page, a.name, a.matches || [])) return `${a.name} is not on book page ${a.page}`;
+        await this.tick(900); return "";
       case "WRITE_CODE":
         b.files[a.file] = a.code; await st.writeCode(a.file, a.code, ctl); return "";
       case "HIGHLIGHT":

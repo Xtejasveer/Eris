@@ -1,0 +1,19 @@
+{
+  "id": "range_graph",
+  "title": "Range against launch angle",
+  "brief": "Plots: range in metres against launch angle, from 0\u00b0 to 90\u00b0, for u = 20 m/s with no air resistance.\nPoints: 0\u00b0: 0.0, 15\u00b0: 20.4, 30\u00b0: 35.3, 45\u00b0: 40.8, 60\u00b0: 35.3, 75\u00b0: 20.4, 90\u00b0: 0.0",
+  "controls": [
+    {
+      "name": "angle",
+      "type": "slider",
+      "label": "Angle",
+      "min": 0,
+      "max": 90,
+      "step": 1
+    }
+  ],
+  "html": "<script>\nconst c = Visual.chart({ x: [0, 90], y: [0, 50], xLabel: \"Launch angle (degrees)\", yLabel: \"Range (m)\" });\nconst g = 9.8, u = 20;\nlet angle = 45;\nconst data = [[0, 0.0], [15, 20.4], [30, 35.3], [45, 40.8], [60, 35.3], [75, 20.4], [90, 0.0]];\nconst rangeAt = a => u * u * Math.sin(2 * a * Math.PI / 180) / g;\nfunction draw() {\n  c.clear();\n  c.fn(a => rangeAt(a), { color: \"var(--muted)\", dashed: true });\n  c.line(data);\n  c.dots(data);\n  const R = rangeAt(angle);\n  const Rr = Math.round(R * 10) / 10;\n  c.vline(angle, `${angle}\u00b0`);\n  c.dots([[angle, R]], { color: \"var(--warn)\" });\n  c.label(angle, R, `${Rr.toFixed(1)} m`);\n  c.readout([`angle = ${angle}\u00b0`, `range = ${Rr.toFixed(1)} m`, `u = ${u} m/s`]);\n  let msg;\n  if (angle === 45) msg = `Here, at the peak, 45 degrees, the range is ${Rr.toFixed(1)} m.`;\n  else if (angle === 15) msg = `Here, at 15 degrees, the range is ${Rr.toFixed(1)} m.`;\n  else if (angle === 90) msg = `Here, at 90 degrees, the range is ${Rr.toFixed(1)} m.`;\n  else msg = `At ${angle} degrees, the range is ${Rr.toFixed(1)} m.`;\n  Visual.state(`${msg} Range = u\u00b2 sin(2\u03b8)/g with u = 20 m/s, g = 9.8 m/s\u00b2, no air resistance.`);\n}\nVisual.on(\"angle\", v => { angle = v; draw(); });\ndraw();\n</script>",
+  "model": "anthropic/claude-haiku-5.5",
+  "layout_advice": [],
+  "agrees": 0.98
+}

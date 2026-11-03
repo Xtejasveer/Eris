@@ -68,17 +68,7 @@ def build_doubt_agent(system_prompt, run_code=True):
 # Most doubts are about what was just taught. Everything the agent would look up with its tools (the approved
 # script of this part, the class screen, the material matching the question) is put in front of the model instead,
 # so the answer takes one call, not a call per tool. Doubts that need a program run go to the agent (fast_route).
-
-FAST_RULES = """
-
-# This answer: no tools
-Everything you would look up is given below: the approved lesson script around this point, the class screen
-(what read_board shows) and the material that matches the question (what search_material finds). Answer from it;
-there is nothing more to search. Reply with only what you say and the screen markers. Don't ask the class for more
-doubts at the end, and don't call any tool: the class asks for more doubts itself.
-Keep it spoken and short: about 60-80 words, unless the student asks for an example or the steps of a calculation.
-If you were stopped mid-sentence, never mention it ("you stopped me..."): just answer.
-Start straight with the answer: no opener such as "Good question" (the class is waiting for it)."""
+# Its system prompt is doubt_prompt(..., fast=True): the same teacher and screen rules, with a task of its own.
 
 CODE_DOUBT_RE = re.compile(r"\b(code|program|run|output|print(?:s|ed)?|error|python|function|loop|variable|"
                            r"debug|compile|syntax|bug)\b", re.I)
@@ -98,7 +88,7 @@ def fast_answer(system_prompt, context, question):
     if _fast_model is None:
         _fast_model = init_chat_model(f"openrouter:{config.LLM_MODEL}", temperature=0.3, max_retries=1)
     reply = _fast_model.invoke([
-        {"role": "system", "content": system_prompt + FAST_RULES},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": f'{context}\n\nStudent: "{question}"\nAnswer the student directly, talking to '
                                     'them as "you" (never describe their question in the third person).'},
     ])
@@ -112,7 +102,7 @@ def fast_stream(system_prompt, context, question):
     if _fast_model is None:
         _fast_model = init_chat_model(f"openrouter:{config.LLM_MODEL}", temperature=0.3, max_retries=1)
     for chunk in _fast_model.stream([
-        {"role": "system", "content": system_prompt + FAST_RULES},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": f'{context}\n\nStudent: "{question}"\nAnswer the student directly, talking to '
                                     'them as "you" (never describe their question in the third person).'},
     ]):

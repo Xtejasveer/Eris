@@ -24,7 +24,9 @@ _lock = threading.Lock()
 def soffice():
     """The LibreOffice program, or None when it isn't installed."""
     return (shutil.which("soffice") or shutil.which("libreoffice")
-            or next((p for p in ("/Applications/LibreOffice.app/Contents/MacOS/soffice",) if Path(p).exists()), None))
+            or next((p for p in ("/Applications/LibreOffice.app/Contents/MacOS/soffice",
+                                 "C:/Program Files/LibreOffice/program/soffice.exe",  # Windows puts it off the PATH
+                                 "C:/Program Files (x86)/LibreOffice/program/soffice.exe") if Path(p).exists()), None))
 
 
 def _deck(lecture_id):
@@ -72,7 +74,7 @@ def _render(lecture_id, deck):
             pictures = _pdf_boxes(pdf)
         else:
             # A private profile: a LibreOffice the teacher has open doesn't block the conversion.
-            subprocess.run([soffice(), f"-env:UserInstallation=file://{tmp}/profile", "--headless", "--convert-to", "pdf",
+            subprocess.run([soffice(), f"-env:UserInstallation={(Path(tmp) / 'profile').as_uri()}", "--headless", "--convert-to", "pdf",
                             "--outdir", tmp, str(deck)], check=True, capture_output=True, timeout=180)
             pdf = pymupdf.open(Path(tmp) / f"{deck.stem}.pdf")
             pictures = _boxes(deck)

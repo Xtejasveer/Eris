@@ -145,7 +145,13 @@ export class Voice {
   clip(text) {
     if (!this.clips.has(text)) {
       this.clips.set(text, api.tts(this.lectureId, text).then(async (res) => {
-        if (res.status === 204 || !res.ok) return null;
+        if (res.status === 204 || !res.ok) {
+          // No reason given: this server has no Gnani voice, so the browser speaks every line. With a reason (busy,
+          // a failed call), only this line falls back, and it is asked for again next time.
+          if (res.status === 204 && !res.headers.get("X-TTS-Error")) this.noVoice = true;
+          else this.clips.delete(text);
+          return null;
+        }
         const url = URL.createObjectURL(await res.blob());
         this.timing(text);  // the clip exists now, so its word timings can be made
         return url;
@@ -211,7 +217,7 @@ export class Voice {
         this.timing(text).then((t) => { if (t && this._token === token) { this._timing = t; this._timingToAvatar(); } });
         await this._playUrl(url);
       }
-      else { if (this.mode !== "gnani") this.mode = "browser"; await this._speakBrowser(text); }
+      else { if (this.noVoice) this.mode = "browser"; await this._speakBrowser(text); }
     } finally { this.speaking = false; this._sounding = false; this._done = 1; this._token = null; this._timing = null; }
   }
 

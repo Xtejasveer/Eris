@@ -1,0 +1,22 @@
+[
+  {
+    "kind": "graph",
+    "title": "Boiling points (K), molecular mass 58-60",
+    "where": "slide 5 (Boiling Points: The Numbers)",
+    "ref": "slide 5",
+    "details": "column clustered chart; x values: n-Butane, Methoxyethane, Propanal, Acetone, Propan-1-ol; series 'b.p. (K)': 273.0, 281.0, 322.0, 329.0, 370.0",
+    "source": "carbonyl_physical_properties.pptx",
+    "use": "show",
+    "use_p": 0.23,
+    "use_why": "its point is clear as it is on the slide"
+  },
+  {
+    "source": "carbonyl_physical_properties.pptx",
+    "where": "slide 2",
+    "ref": "slide 2",
+    "title": "Four structural formulas show aldehydes and ketones, with each carbonyl group (C=O) highlighted in pink",
+    "kind": "picture",
+    "details": "diagram: Four structural formulas show aldehydes and ketones, with each carbonyl group (C=O) highlighted in pink. Students should notice that an aldehyde's C=O sits at the end of a carbon chain as -CHO, while a ketone's C=O sits inside the chain, flanked by carbon on both sides. Text in it: H3C CH2 C CH2 C H O O 3-Oxopentanal CH3 CH C CH CH3 CH3 O CH3 2,4-Dimethylpentan-3-one CHO NO2 4-Nitrobenzenecarbaldehyde or 4-Nitrobenzaldehyde OHC C",
+    "use": "show"
+  }
+]

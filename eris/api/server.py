@@ -20,6 +20,7 @@ from main import LECTURE_ID_RE
 from eris.persona import REQUIRED, parse_persona, persona_to_markdown
 from eris.generate.script_parser import parse_script
 from eris.generate.script_writer import approve_script, count_slides
+from eris.material import book
 from eris.platform import access
 from eris.platform.auth import user_from_request
 
@@ -38,7 +39,7 @@ def _claim_lectures():
 # a student may use only the class-time routes, and only for a lecture shared with a course they are in.
 PUBLIC_API = re.compile(r"^/api/(auth/(login|signup|logout|demo|options)|landing)$")
 LECTURE_PATH = re.compile(r"^/api/lectures/([^/]+)(/.*)?$")
-STUDENT_LECTURE_ROUTES = re.compile(r"^/(visuals/[^/]+|images/[^/]+|slides/[^/]+|doubts/(start|ask|reply|stream)|recovery)$")
+STUDENT_LECTURE_ROUTES = re.compile(r"^/(visuals/[^/]+|images/[^/]+|slides/[^/]+|book/[^/]+|doubts/(start|ask|reply|stream)|recovery)$")
 TEACHER_ONLY = re.compile(r"^/api/(lectures|persona/template)$")
 
 
@@ -49,17 +50,19 @@ def _deny(status, message):
 # While the sign-in page offers the demo accounts, anyone can sign in as them (their password is on the page), so they
 # may look, teach and generate but not delete or reset anything.
 DEMO_BLOCKED = re.compile(r"^/api/lectures/[^/]+/reset$")
-
-
-def _demo_emails():
-    from eris.platform.seed import LESSONS, STUDENTS
-    return {e for _, e, *_ in LESSONS} | {e for e, _ in STUDENTS}
+# Writing a script costs model credit, and the demo passwords are public: demo accounts can't (seed.can_generate).
+DEMO_NO_SCRIPTS = re.compile(r"^/api/lectures/[^/]+/(generate|regenerate-section)$")
 
 
 def _demo_limited(user, request):
-    if not config.DEMO_LOGINS or user["email"] not in _demo_emails():
-        return False
-    return request.method == "DELETE" or bool(DEMO_BLOCKED.match(request.url.path))
+    """The reason a demo account may not do this, or None."""
+    from eris.platform.seed import can_generate, demo_emails
+    if request.method == "POST" and DEMO_NO_SCRIPTS.match(request.url.path) and not can_generate(user):
+        return "This is a demo account. Sign in to create your own lectures."
+    if config.DEMO_LOGINS and user["email"] in demo_emails() and (
+            request.method == "DELETE" or DEMO_BLOCKED.match(request.url.path)):
+        return "Demo accounts can't delete or reset anything. Create your own account for that."
+    return None
 
 
 @app.middleware("http")
@@ -70,8 +73,8 @@ async def auth_gate(request, call_next):
         if not user:
             return _deny(401, "Please sign in")
         request.state.user = user
-        if _demo_limited(user, request):
-            return _deny(403, "Demo accounts can't delete or reset anything. Create your own account for that.")
+        if (reason := _demo_limited(user, request)):
+            return _deny(403, reason)
         m = LECTURE_PATH.match(path)
         if m:
             lecture_id, rest = m.group(1), m.group(2) or ""
@@ -96,6 +99,7 @@ async def no_stale_frontend(request, call_next):
 
 UPLOAD_TYPES = {".pptx", ".pdf", ".docx", ".txt", ".md"}
 MAX_UPLOAD_MB = 25
+BOOK_MAX_MB = 80  # a whole textbook chapter or book; only the chosen pages are read
 
 
 def _check_id(lecture_id):
@@ -193,6 +197,10 @@ class LectureSetup(BaseModel):
     speaking_min: int | None = None
     language: str = ""
     voice: str = ""   # a Gnani voice for the language ("" = the language's default)
+    book_first: int | None = None  # the printed page numbers of the book the topic spans (material/book.py)
+    book_last: int | None = None
+    focus_theory: str = ""      # where the theory is taught from: slides, book or both
+    focus_numericals: str = ""  # and the numericals
 
 
 @app.put("/api/lectures/{lecture_id}/setup")
@@ -212,8 +220,32 @@ def save_setup(lecture_id: str, body: LectureSetup, request: Request):
         manifest["voice"] = body.voice
     else:
         manifest.pop("voice", None)  # a voice for another language: back to this language's default
+    if body.book_first and body.book_last and 0 < body.book_first <= body.book_last <= body.book_first + 60:
+        manifest["book"] = {"first": body.book_first, "last": body.book_last}
+    elif body.book_first is None and body.book_last is None:
+        pass  # an older Studio that doesn't send them: keep what is set
+    else:
+        manifest.pop("book", None)
+    focus = {k: v for k, v in (("theory", body.focus_theory), ("numericals", body.focus_numericals)) if v in book.FOCUS_CHOICES}
+    if focus:
+        manifest["focus"] = {**book.focus(manifest), **focus}
     config.save_manifest(lecture_id, manifest)
-    return {"saved": True, "voice": config.lecture_voice(manifest)}
+    return {"saved": True, "voice": config.lecture_voice(manifest), "book": _book_summary(lecture_id, manifest)}
+
+
+def _book_summary(lecture_id, manifest):
+    """The book for Studio: its file, the pages chosen, the worked examples found on them, and the focus."""
+    path = book.book_file(lecture_id)
+    if not path:
+        return None
+    pages = book.page_range(manifest)
+    scanned = book.is_scanned(path)
+    # A scan's pages are read by OCR (a minute or more) when the lecture is indexed, not while the setup is saved.
+    info = book.load(lecture_id, manifest, render=not scanned) if pages else None
+    return {"file": path.name, "size": path.stat().st_size, "first": pages[0] if pages else None,
+            "last": pages[1] if pages else None, "focus": book.focus(manifest), "scanned": scanned,
+            "found": len(info["pages"]) if info else 0, "read": bool(info),
+            "examples": [f'{e["name"]} (page {e["page"]})' for e in book.examples(info)]}
 
 
 @app.get("/api/lectures/{lecture_id}")
@@ -243,7 +275,7 @@ def get_lecture(lecture_id: str):
         except ValueError:
             judge = None
     return {"id": lecture_id, "manifest": _manifest_or_none(lecture_id), "files": files, "judge": judge,
-            "persona": persona, "script_md": text, "segments": segments, "errors": errors, "failed_draft": failed,
+            "persona": persona, "book": _book_summary(lecture_id, _manifest_or_none(lecture_id) or {}), "script_md": text, "segments": segments, "errors": errors, "failed_draft": failed,
             "job": jobs.get_job(lecture_id), "course": access.course_of_lecture(lecture_id),
             "model": config.model_name(config.LLM_MODEL),  # writes the next script
             "script_model": config.model_name((_manifest_or_none(lecture_id) or {}).get("llm_model") or config.LLM_MODEL)}
@@ -265,6 +297,37 @@ async def upload_files(lecture_id: str, files: list[UploadFile]):
             (folder / name).write_bytes(data)
             saved.append(name)
     return {"saved": saved, "skipped": skipped}
+
+
+@app.post("/api/lectures/{lecture_id}/book")
+async def upload_book(lecture_id: str, file: UploadFile, request: Request):
+    """The textbook's PDF (one per lecture; a new one replaces it). Kept apart from the slides and notes."""
+    folder = book.folder(_check_id(lecture_id))
+    name = Path(file.filename or "").name
+    data = await file.read()
+    if Path(name).suffix.lower() != ".pdf":
+        raise HTTPException(400, "The book must be a PDF")
+    if len(data) > BOOK_MAX_MB * 1024 * 1024:
+        raise HTTPException(400, f"The book is larger than {BOOK_MAX_MB} MB")
+    if folder.exists():
+        for old in folder.iterdir():
+            old.unlink()
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / name).write_bytes(data)
+    return {"book": _book_summary(lecture_id, _manifest_or_none(lecture_id) or {})}
+
+
+@app.delete("/api/lectures/{lecture_id}/book")
+def delete_book(lecture_id: str, request: Request):
+    folder = book.folder(_check_id(lecture_id))
+    if folder.exists():
+        for old in folder.iterdir():
+            old.unlink()
+        folder.rmdir()
+    manifest = _manifest_or_none(lecture_id)
+    if manifest and manifest.pop("book", None) is not None:
+        config.save_manifest(lecture_id, _own(manifest, request))
+    return {"ok": True}
 
 
 @app.delete("/api/lectures/{lecture_id}/files/{name}")

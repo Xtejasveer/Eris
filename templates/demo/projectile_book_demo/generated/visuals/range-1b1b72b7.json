@@ -1,0 +1,19 @@
+{
+  "id": "range",
+  "title": "Range against launch angle",
+  "brief": "plots: line with markers, Range (m) against launch angle, for u = 20 m/s, no air resistance\npoints: 0\u00b0, 15\u00b0, 30\u00b0, 45\u00b0, 60\u00b0, 75\u00b0, 90\u00b0 give 0.0, 20.4, 35.3, 40.8, 35.3, 20.4, 0.0",
+  "controls": [
+    {
+      "name": "angle",
+      "type": "slider",
+      "label": "Angle",
+      "min": 0,
+      "max": 90,
+      "step": 1
+    }
+  ],
+  "html": "<script>\nconst u = 20, g = 9.8;\nconst c = Visual.chart({ x: [0, 90], y: [0, 45], xLabel: \"Launch angle (\u00b0)\", yLabel: \"Range (m)\" });\n\nconst data = [[0, 0.0], [15, 20.4], [30, 35.3], [45, 40.8], [60, 35.3], [75, 20.4], [90, 0.0]];\nlet angle = 0;\n\n// Range on level ground with no air resistance: R = u\u00b2 sin(2\u03b8) / g\nfunction rangeAt(deg) {\n  const th = deg * Math.PI / 180;\n  return Math.round(u * u * Math.sin(2 * th) / g * 10) / 10;\n}\n\nfunction draw() {\n  c.clear();\n  const R = rangeAt(angle);\n\n  // smooth reference curve from the same formula\n  c.fn(x => u * u * Math.sin(2 * x * Math.PI / 180) / g, { color: \"var(--muted)\", dashed: true });\n\n  // the plotted data: line with markers\n  c.line(data);\n  c.dots(data);\n\n  // selected angle\n  c.vline(angle, `${angle}\u00b0`);\n  c.label(angle, R, `${R.toFixed(1)} m`);\n\n  c.readout([\n    `angle = ${angle}\u00b0`,\n    `range = ${R.toFixed(1)} m`,\n    `peak = ${rangeAt(45).toFixed(1)} m at 45\u00b0`,\n    `u = ${u} m/s, g = ${g} m/s\u00b2`\n  ]);\n\n  let msg;\n  if (angle === 0) {\n    msg = \"At 0\u00b0, the range is 0.0 m, because the ball goes straight along the ground and never comes back up.\";\n  } else if (angle === 30) {\n    msg = \"At 30\u00b0, the graph shows 35.3 metres.\";\n  } else if (angle === 45) {\n    msg = \"At 45\u00b0, this is the peak on the graph: 40.8 m, the maximum range for u = 20 m/s.\";\n  } else {\n    msg = `At ${angle}\u00b0, the range is ${R.toFixed(1)} m.`;\n  }\n  Visual.state(msg);\n}\n\nVisual.on(\"angle\", v => { angle = v; draw(); });\ndraw();\n</script>",
+  "model": "anthropic/claude-haiku-5.5",
+  "layout_advice": [],
+  "agrees": 0.92
+}

@@ -5,10 +5,12 @@ and every clip's real duration is known before the lecture starts.
 """
 
 import hashlib
+import io
 import os
 import re
 import threading
 import time
+import uuid
 import wave
 from pathlib import Path
 
@@ -143,17 +145,13 @@ def _synthesize_chunk(chunk, voice, language):
     raise RuntimeError("unreachable")
 
 
-def _pcm_frames(wav_bytes, path_hint):
+def _pcm_frames(wav_bytes, path_hint=None):
     """(params, frames) from WAV bytes. Gnani's header has placeholder sizes (0xFFFFFFFF),
-    so read until the data ends instead of trusting nframes."""
-    tmp = path_hint.with_suffix(".part.wav")
-    tmp.write_bytes(wav_bytes)
-    try:
-        with wave.open(str(tmp), "rb") as src:
-            params = (src.getnchannels(), src.getsampwidth(), src.getframerate())
-            frames = src.readframes(2**31 - 1)
-    finally:
-        tmp.unlink()
+    so read until the data ends instead of trusting nframes. Read in memory: a temporary file named after the clip
+    clashed when two threads made the same clip (Windows refuses to delete a file another thread has open)."""
+    with wave.open(io.BytesIO(wav_bytes), "rb") as src:
+        params = (src.getnchannels(), src.getsampwidth(), src.getframerate())
+        frames = src.readframes(2**31 - 1)
     return params, frames
 
 
@@ -169,7 +167,7 @@ def synthesize(text, path, voice=None, language=None):
         if n < len(pieces) - 1:  # a real pause between sentences, like a teacher taking a breath
             channels, width, rate = params
             frames.append(b"\x00" * int(rate * _pause_after(piece)) * channels * width)
-    tmp = path.with_suffix(".tmp.wav")
+    tmp = path.with_name(f"{path.stem}.{uuid.uuid4().hex[:8]}.tmp.wav")  # one per call: two threads never share it
     with wave.open(str(tmp), "wb") as out:
         out.setnchannels(params[0])
         out.setsampwidth(params[1])
@@ -183,12 +181,20 @@ def wav_seconds(path):
         return w.getnframes() / w.getframerate()
 
 
+_clip_locks = {}  # clip path -> lock: the class and the background pre-render may ask for the same clip at once
+_clip_locks_guard = threading.Lock()
+
+
 def ensure_clip(lecture_id, text):
-    """Return the cached clip for `text`, synthesizing it if needed."""
+    """Return the cached clip for `text`, synthesizing it if needed. A clip already being made by another thread is
+    waited for, not made twice (that would also pay for it twice)."""
     path = clip_path(lecture_id, text)
-    if not path.exists() or path.stat().st_size <= 44:  # 44 bytes = an empty WAV header
-        language, voice = lecture_speech(lecture_id)
-        synthesize(text, path, voice, language)
+    with _clip_locks_guard:
+        lock = _clip_locks.setdefault(str(path), threading.Lock())
+    with lock:
+        if not path.exists() or path.stat().st_size <= 44:  # 44 bytes = an empty WAV header
+            language, voice = lecture_speech(lecture_id)
+            synthesize(text, path, voice, language)
     return path
 
 

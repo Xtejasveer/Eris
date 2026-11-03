@@ -1,0 +1,19 @@
+{
+  "id": "range_angle",
+  "title": "Range against launch angle",
+  "brief": "Plots: range for u = 20 m/s (no air resistance). Line markers chart. X values: 0\u00b0, 15\u00b0, 30\u00b0, 45\u00b0, 60\u00b0, 75\u00b0, 90\u00b0. Series 'Range (m)': 0.0, 20.4, 35.3, 40.8, 35.3, 20.4, 0.0",
+  "controls": [
+    {
+      "name": "angle",
+      "type": "slider",
+      "label": "Angle",
+      "min": 0,
+      "max": 90,
+      "step": 1
+    }
+  ],
+  "html": "<script>\nconst data = [[0, 0.0], [15, 20.4], [30, 35.3], [45, 40.8], [60, 35.3], [75, 20.4], [90, 0.0]];\nconst u = 20, g = 9.8;     // Range series: u = 20 m/s\nconst u2 = 28;             // Example 3.8 program: u = 28 m/s\nlet angle = 0;\nconst c = Visual.chart({ x: [0, 90], y: [0, 45], xLabel: \"launch angle \u03b8 (\u00b0)\", yLabel: \"range R (m)\" });\n\nfunction rangeAt(a, speed) {\n  return speed * speed * Math.sin(2 * a * Math.PI / 180) / g;   // R = u\u00b2 sin 2\u03b8 / g\n}\n\nfunction draw() {\n  c.clear();\n  const R = rangeAt(angle, u);\n  c.fn(x => rangeAt(x, u), { color: \"var(--muted)\", dashed: true });\n  c.line(data);\n  c.dots(data);\n  c.vline(angle, `\u03b8 = ${angle}\u00b0`);\n  c.dots([[angle, R]], { color: \"var(--warn)\" });\n  c.label(angle, R, `${R.toFixed(1)} m`);\n\n  // Example 3.8 program logic, evaluated at the same angle with u = 28 m/s\n  const th = angle * Math.PI / 180;\n  const ux = u2 * Math.cos(th), uy = u2 * Math.sin(th);\n  const h = uy * uy / (2 * g);\n  const T = 2 * uy / g;\n  const Rp = ux * T;\n  c.readout([\n    `Range, u = 20 m/s: ${R.toFixed(1)} m`,\n    `Example 3.8 (u = 28): max height ${h.toFixed(1)} m`,\n    `Time of flight ${T.toFixed(1)} s`,\n    `Range ${Math.round(Rp)} m`\n  ]);\n  Visual.state(`At \u03b8 = ${angle}\u00b0, the range for u = 20 m/s is ${R.toFixed(1)} m; the maximum range of 40.8 m occurs at 45\u00b0.`);\n}\n\nVisual.on(\"angle\", v => { angle = v; draw(); });\ndraw();\n</script>",
+  "model": "anthropic/claude-haiku-5.5",
+  "layout_advice": [],
+  "agrees": 0.95
+}

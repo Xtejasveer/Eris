@@ -35,6 +35,25 @@ def _int_env(name, default):
         sys.exit(1)
 
 
+def _float_env(name, default):
+    value = os.getenv(name, "").strip()
+    if not value:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        print(f"[config] {name} must be a number, got '{value}'. Fix it in .env.")
+        sys.exit(1)
+
+
+# How free each writing step is (model temperature). The planner and the stager do structure and placement, where the
+# same input should give the same result; the lesson writer writes what the class hears, so a little variety keeps it
+# sounding like a person and lets a retry after failed checks come out different.
+PLAN_TEMPERATURE = _float_env("PLAN_TEMPERATURE", 0.0)
+STAGE_TEMPERATURE = _float_env("STAGE_TEMPERATURE", 0.0)
+LESSON_TEMPERATURE = _float_env("LESSON_TEMPERATURE", 0.7)
+
+
 # Defaults for a new lecture; each lecture keeps its own. The total runs the class clock (warnings when 10% and 5%
 # of it is left); only the speaking time goes to the script writer (doubts, writing and code fill the rest).
 LECTURE_DURATION_MIN = _int_env("LECTURE_DURATION_MIN", 15)
@@ -58,6 +77,10 @@ TEACHER_SIGNUP = os.getenv("ERIS_TEACHER_SIGNUP", "false").strip().lower() in ("
 SECURE_COOKIES = os.getenv("ERIS_SECURE_COOKIES", "false").strip().lower() in ("1", "true", "yes")
 # The sign-in page offers the demo accounts (python main.py seed). Local pilots only: turn off for real users.
 DEMO_LOGINS = os.getenv("ERIS_DEMO_LOGINS", "true").strip().lower() in ("1", "true", "yes")
+# The demo accounts' passwords are public, so on the website they can't write scripts (generate, regenerate, rewrite a
+# section): anyone could spend the model credit. The command line (main.py generate) is not affected. True only for
+# local work on the demo lessons in Studio.
+DEMO_CAN_GENERATE = os.getenv("ERIS_DEMO_CAN_GENERATE", "false").strip().lower() in ("1", "true", "yes")
 TTS_VOICE = os.getenv("TTS_VOICE", "Kaveri").strip()
 TTS_LANGUAGE = os.getenv("TTS_LANGUAGE", "en-IN").strip()
 STT_LANGUAGE = os.getenv("STT_LANGUAGE", "en-IN").strip()
@@ -128,7 +151,8 @@ MIC_MAX_SECONDS = 55       # Gnani REST STT accepts clips up to 60 s
 FIX_ATTEMPTS = 2           # times generate asks the model to fix a script that fails the checks
 TYPE_DELAY_S = 0.04        # per-line delay when "typing" code on the board
 NOTE_CHARS_PER_S = 25      # "handwriting" speed in the notebook, used for time estimates
-NOTE_MAX_LINES = 10        # generate rejects a [NOTE] longer than this (the prompt asks for 2-6 lines)
+NOTE_MAX_LINES = 10        # generate rejects a [NOTE] longer than this; the rule the prompts and messages state is
+                           # 2-6 lines (a calculation step: 1), and this margin keeps a 7-line note from costing a rewrite
 PAUSE_MAX_S = 3            # generate shortens longer [PAUSE]s: silence in class feels broken
 MAX_SENTENCE_WORDS = 30    # longer narration sentences go back to the writer (they sound rushed when spoken)
 WORDS_PER_NOTE = 180       # about one [NOTE] per this many spoken words, or the writer is told to use the notebook more

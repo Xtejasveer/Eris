@@ -55,11 +55,12 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
   const segments = info.segments;
   const sections = segments.map((s, i) => ({ s, i })).filter(x => x.s.name === "SECTION").map(x => ({ title: x.s.args.title, index: x.i }));
   const voice = new Voice(lectureId, info.language);
-  const ENV_OF = { SLIDE: "slides", SLIDE_HIGHLIGHT: "slides", SLIDE_CIRCLE: "slides", WRITE_CODE: "code", RUN: "code", OPEN_FILE: "code",
+  const ENV_OF = { SLIDE: "slides", SLIDE_HIGHLIGHT: "slides", SLIDE_CIRCLE: "slides", BOOK: "slides", BOOK_HIGHLIGHT: "slides",
+    BOOK_UNDERLINE: "slides", BOOK_CIRCLE: "slides", BOOK_EXAMPLE: "slides", BOOK_ANSWER: "slides", WRITE_CODE: "code", RUN: "code", OPEN_FILE: "code",
     FLOW: "visual", VISUAL: "visual" };
   const used = [...new Set(info.segments.map(s => ENV_OF[s.name]).filter(Boolean))];
   if (Object.keys(info.slides || {}).length) used.push("slides");  // doubt answers may always show slides
-  const stage = new Stage(info.slides, used, info.slide_pictures, info.slide_images);
+  const stage = new Stage(info.slides, used, info.slide_pictures, info.slide_images, info.book);
   stage.setTopic(info.topic);
   let player = null;
   let running = false;
@@ -86,8 +87,10 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
   const preview = postId && !student;
   const scriptBtn = preview ? h("button", { class: "pv-btn", title: "Read the script students get",
     onclick: () => toggleScript() }, icon("book"), h("span", {}, "Script")) : null;
-  const regenBtn = preview ? h("button", { class: "pv-btn primary", title: "Write this lesson's script again, in its lecture workspace",
-    onclick: () => regenerate() }, icon("sparkle"), h("span", {}, "Regenerate")) : null;
+  const noScripts = ctx.me?.can_generate === false;  // a demo account can't write scripts (the server refuses it)
+  const regenBtn = preview ? h("button", { class: `pv-btn primary ${noScripts ? "locked" : ""}`,
+    title: noScripts ? "This is a demo account. Sign in to create your own lectures." : "Write this lesson's script again, in its lecture workspace",
+    onclick: () => (noScripts ? toast("This is a demo account. Sign in to create your own lectures.", "info") : regenerate()) }, icon("sparkle"), h("span", {}, "Regenerate")) : null;
   const topRight = h("div", { class: "ls-top-right" },
     h("div", { class: "ls-controls" }, playBtn),
     clockChip,

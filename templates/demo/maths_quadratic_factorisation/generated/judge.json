@@ -1,0 +1,300 @@
+{
+  "model": "typesafe/jev-1.13",
+  "findings": [
+    {
+      "check": "covers_must_cover",
+      "section": null,
+      "value": 0.91,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "Teach every item in the persona's Must cover list.",
+      "stage": "lesson"
+    },
+    {
+      "check": "respects_avoid",
+      "section": null,
+      "value": 0.87,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "Remove everything the persona lists under Avoid.",
+      "stage": "lesson"
+    },
+    {
+      "check": "opening_absence",
+      "section": null,
+      "value": 0.95,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In the Opening, say why the teacher is absent and give the teacher's message to the class.",
+      "stage": "lesson"
+    },
+    {
+      "check": "closing_next_class",
+      "section": null,
+      "value": 0.95,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "End with the next class topic and what to prepare.",
+      "stage": "lesson"
+    },
+    {
+      "check": "sounds_like_teacher",
+      "section": null,
+      "value": 0.9,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "Make the narration follow the persona's tone, pace, language and habits.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Opening",
+      "value": 0.9,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Opening\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "What is a root?",
+      "value": 0.77,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"What is a root?\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "What is a root?",
+      "value": 0.78,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"What is a root?\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "What is a root?",
+      "value": 0.68,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"What is a root?\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Splitting the middle term",
+      "value": 0.7,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Splitting the middle term\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "Splitting the middle term",
+      "value": 0.81,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Splitting the middle term\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "Splitting the middle term",
+      "value": 0.68,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Splitting the middle term\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Roots on the graph",
+      "value": 0.8,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Roots on the graph\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "Roots on the graph",
+      "value": 0.79,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Roots on the graph\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "Roots on the graph",
+      "value": 0.81,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Roots on the graph\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "NCERT Example 3",
+      "value": 0.8,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"NCERT Example 3\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "NCERT Example 3",
+      "value": 0.81,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"NCERT Example 3\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "NCERT Example 3",
+      "value": 0.71,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"NCERT Example 3\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Recap",
+      "value": 0.84,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Recap\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Closing",
+      "value": 0.91,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Closing\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "What is a root?",
+      "value": 0.74,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"What is a root?\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    },
+    {
+      "check": "flow_matches_material",
+      "section": "Splitting the middle term",
+      "value": 0.92,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Splitting the middle term\", make the diagram follow the steps from the material, in the same order.",
+      "stage": "staging"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "Splitting the middle term",
+      "value": 0.93,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Splitting the middle term\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    },
+    {
+      "check": "graph_matches_text",
+      "section": "Roots on the graph",
+      "value": 0.95,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "In section \"Roots on the graph\", make the [VISUAL] plot what the lesson teaches. Set each [VISUAL_SET] to the value that the next sentence is about. Move a [VISUAL_SET] if it is before the wrong sentence. Do not change the sentences.",
+      "stage": "staging"
+    },
+    {
+      "check": "graph_matches_material",
+      "section": "Roots on the graph",
+      "value": 0.96,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Roots on the graph\", make the [VISUAL] recreate the graph from the material: same quantity, axes and kind of graph, with a slider for the value worth exploring.",
+      "stage": "staging"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "Roots on the graph",
+      "value": 0.92,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Roots on the graph\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "Recap",
+      "value": 0.92,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Recap\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    }
+  ],
+  "pairs": [],
+  "cost": 0.00091,
+  "error": "",
+  "unflagged": 0,
+  "score": 0.83,
+  "blockers": 0,
+  "failed_minor": 0,
+  "rounds": [
+    {
+      "kind": "lesson",
+      "problems": 6
+    },
+    {
+      "kind": "lesson",
+      "problems": 2
+    },
+    {
+      "kind": "rules",
+      "problems": 1
+    }
+  ],
+  "advice": [],
+  "auto_fixes": [
+    "kept 1 note(s) or pointer(s) on the book example's own page"
+  ]
+}

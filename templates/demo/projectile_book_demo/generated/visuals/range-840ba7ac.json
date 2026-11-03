@@ -1,0 +1,19 @@
+{
+  "id": "range",
+  "title": "Range against launch angle",
+  "brief": "Plots: line chart with markers, range in metres against launch angle, for u = 20 m/s with no air resistance, at 0, 15, 30, 45, 60, 75 and 90 degrees, values 0.0, 20.4, 35.3, 40.8, 35.3, 20.4, 0.0",
+  "controls": [
+    {
+      "name": "angle",
+      "type": "slider",
+      "label": "Angle",
+      "min": 0,
+      "max": 90,
+      "step": 1
+    }
+  ],
+  "html": "<script>\nconst u = 20.0, g = 9.8;\nconst c = Visual.chart({ x: [0, 90], y: [0, 45], xLabel: \"Launch angle (degrees)\", yLabel: \"Range (m)\" });\nconst R = a => u * u * Math.sin(2 * a * Math.PI / 180) / g;\nconst data = [[0, 0.0], [15, 20.4], [30, 35.3], [45, 40.8], [60, 35.3], [75, 20.4], [90, 0.0]];\nlet angle = 0;\n\nfunction draw() {\n  c.clear();\n  c.fn(x => R(x), { color: \"var(--muted)\", dashed: true });\n  c.line(data);\n  c.dots(data);\n  const r = R(angle);\n  c.vline(angle, `${angle}\u00b0`);\n  c.dots([[angle, r]], { color: \"var(--warn)\" });\n  c.label(angle, r, `${r.toFixed(1)} m`);\n  c.readout([\n    `Launch angle = ${angle}\u00b0`,\n    `Range = ${r.toFixed(1)} m`,\n    `Max at 45\u00b0: 40.8 m`\n  ]);\n\n  let msg;\n  if (Math.abs(angle) < 0.5) {\n    msg = \"Zero, because the ball just rolls along the ground and never flies.\";\n  } else if (Math.abs(angle - 90) < 0.5) {\n    msg = \"Also zero, because the ball goes straight up and comes straight back down to the same spot.\";\n  } else if (Math.abs(angle - 30) < 0.5) {\n    msg = \"Now look at 30 degrees. Let's check it: 35.3 metres.\";\n  } else if (Math.abs(angle - 60) < 0.5) {\n    msg = \"Now 60 degrees: also 35.3 metres.\";\n  } else {\n    msg = `At ${angle.toFixed(1)}\u00b0, R = u\u00b2 sin 2\u03b8 / g = ${r.toFixed(1)} m.`;\n  }\n  Visual.state(`Launch angle ${angle.toFixed(1)}\u00b0 with u = 20 m/s gives range ${r.toFixed(1)} m. ${msg}`);\n}\n\nVisual.on(\"angle\", v => { angle = v; draw(); });\ndraw();\n</script>",
+  "model": "anthropic/claude-haiku-5.5",
+  "layout_advice": [],
+  "agrees": 0.96
+}

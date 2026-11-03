@@ -41,7 +41,9 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
   const drop = h("label", { class: "dropzone" }, fileInput,
     h("div", { class: "dz-icon" }, icon("upload")),
     h("div", {}, h("strong", {}, "Drop files here"), " or ", h("span", { class: "link" }, "browse")),
-    h("small", {}, "PPTX, PDF, DOCX, TXT or MD · up to 25 MB each"));
+    h("small", {}, "PPTX, PDF, DOCX, TXT or MD · up to 25 MB each"),
+    // Version 1 reads English material only (slides, notes and the textbook); the class may still be taught in another language.
+    h("small", { class: "english-note" }, icon("info"), "This version reads English material only: slides, notes and textbooks must be in English."));
   drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
   drop.addEventListener("dragleave", () => drop.classList.remove("over"));
   drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); upload([...e.dataTransfer.files]); });
@@ -93,8 +95,76 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
   renderVoices(data.manifest?.voice);
   const previewBtn = h("button", { class: "icon-btn voice-play", type: "button", title: "Hear this voice", onclick: () => previewVoice() }, icon("play"));
   const previewAudio = new Audio();
+  // ---------- the textbook: the book's PDF, the printed pages the topic spans, and what is taught from it ----------
+  let book = data.book;  // {file, size, first, last, found, examples, focus} or null
+  const bookInput = h("input", { type: "file", accept: ".pdf", class: "hidden",
+    onchange: (e) => { if (e.target.files[0]) uploadBook(e.target.files[0]); e.target.value = ""; } });
+  const bookDrop = h("label", { class: "dropzone compact" }, bookInput,
+    h("div", { class: "dz-icon" }, icon("book")),
+    h("div", {}, h("strong", {}, "Add the textbook"), " or ", h("span", { class: "link" }, "browse")),
+    h("small", {}, "The book or chapter as a PDF (e.g. NCERT) · in English · up to 80 MB"));
+  const pageInput = (value, label) => h("input", { class: "input", type: "number", min: 1, inputmode: "numeric", value: value ?? "",
+    placeholder: label, "aria-label": label, oninput: () => saveSetupSoon() });
+  const firstPage = pageInput(book?.first, "e.g. 38"), lastPage = pageInput(book?.last, "e.g. 40");
+  const FOCUS = [["slides", "Slides"], ["book", "Book"], ["both", "Both"]];
+  const focusPick = (key) => {
+    let value = book?.focus?.[key] || "both";
+    const el = h("div", { class: "seg", role: "radiogroup" });
+    const draw = () => el.replaceChildren(...FOCUS.map(([v, label]) => h("button", { type: "button", role: "radio",
+      class: `seg-btn ${v === value ? "on" : ""}`, "aria-checked": String(v === value),
+      onclick: () => { value = v; draw(); saveSetupSoon(); } }, label)));
+    draw();
+    el.pick = () => value;
+    return el;
+  };
+  const focusTheory = focusPick("theory"), focusNumericals = focusPick("numericals");
+  const bookInfo = h("div", { class: "book-info stack" });
+  const bookFields = h("div", { class: "stack" },
+    bookInfo,
+    h("div", { class: "grid-2" },
+      h("label", { class: "field" }, h("span", {}, "From page (as printed)"), firstPage),
+      h("label", { class: "field" }, h("span", {}, "To page"), lastPage)),
+    h("div", { class: "field" }, h("span", {}, "Teach the theory from"), focusTheory),
+    h("div", { class: "field" }, h("span", {}, "Worked examples & exercises from"), focusNumericals),
+    h("small", { class: "muted" }, "Each part's time is set automatically from how much your slides and these pages say ",
+      "about it, and from the worked examples. A book example is worked in the notebook beside the page with the book's ",
+      "answer covered, then the answer is shown; when it is a number, the script's results must match it."));
+  function renderBook() {
+    bookDrop.classList.toggle("hidden", !!book);
+    bookFields.classList.toggle("hidden", !book);
+    if (!book) return bookInfo.replaceChildren();
+    const range = book.first && book.last;
+    bookInfo.replaceChildren(
+      h("ul", { class: "file-list" }, h("li", {},
+        h("span", { class: "file-type pdf" }, "PDF"), h("span", { class: "file-name", title: book.file }, book.file),
+        h("button", { class: "icon-btn sm", title: "Remove the book", onclick: () => removeBook() }, icon("trash")))),
+      // A scan (pictures of pages) has no printed numbers to read, and its text is read by OCR when generating.
+      book.scanned ? h("small", { class: "book-warn" }, "This book is scanned: its pages are read by OCR when you generate ",
+        "(about half a minute a page), so highlights may sit slightly off. Give the PDF's own page numbers, as your PDF ",
+        "viewer counts them.") : null,
+      range && (book.found || !book.scanned) ? h("small", { class: book.found ? "muted" : "book-warn" }, book.found
+        ? `Pages ${book.first}–${book.last}: ${book.found} page${book.found > 1 ? "s" : ""} found` +
+          (book.examples.length ? `. Worked examples: ${book.examples.join(", ")}` : ", no worked examples on them")
+        : `Pages ${book.first}–${book.last} are not in this PDF. Use the page numbers printed in the book.`)
+        : !range ? h("small", { class: "muted" }, "Enter the pages the topic spans, as numbered in the book.") : null);
+  }
+  async function uploadBook(file) {
+    bookDrop.classList.add("busy");
+    try { book = (await api.uploadBook(lectureId, file)).book; renderBook(); toast("Textbook added", "success"); }
+    catch (e) { toast(e.message, "error"); }
+    bookDrop.classList.remove("busy");
+  }
+  async function removeBook() {
+    try { await api.deleteBook(lectureId); book = null; firstPage.value = lastPage.value = ""; renderBook(); }
+    catch (e) { toast(e.message, "error"); }
+  }
+  renderBook();
+
   // No lecture or speaking time: the lesson's length comes from how the material treats each part (generate/depth.py).
-  const setupBody = () => ({ persona, topic: topicInput.value.trim(), language: languageInput.value, voice: voiceInput.value });
+  const pageNo = (el) => (/^\d+$/.test(el.value.trim()) ? Number(el.value) : null);
+  const setupBody = () => ({ persona, topic: topicInput.value.trim(), language: languageInput.value, voice: voiceInput.value,
+    ...(book ? { book_first: pageNo(firstPage), book_last: pageNo(lastPage),
+      focus_theory: focusTheory.pick(), focus_numericals: focusNumericals.pick() } : {}) });
   async function previewVoice() {
     const sample = languageInfo().sample;
     if (!sample) return;
@@ -114,7 +184,9 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
   let setupTimer = null;
   function saveSetupSoon() {
     clearTimeout(setupTimer);
-    setupTimer = setTimeout(() => api.saveSetup(lectureId, setupBody()).catch(e => toast(`Could not save: ${e.message}`, "error")), 700);
+    setupTimer = setTimeout(() => api.saveSetup(lectureId, setupBody())
+      .then(res => { if (book && res.book) { book = res.book; renderBook(); } })
+      .catch(e => toast(`Could not save: ${e.message}`, "error")), 700);
   }
   topicInput.addEventListener("input", saveSetupSoon);
   languageInput.addEventListener("change", () => { renderVoices(voiceInput.value); saveSetupSoon(); });
@@ -145,6 +217,9 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
   }
   renderPersona();
 
+  // A demo account (its password is public) can look, edit and approve, but not write scripts: the server refuses it.
+  const noScripts = ctx.me?.can_generate === false;
+  const NO_SCRIPTS = "This is a demo account. Sign in to create your own lectures.";
   const generateBtn = h("button", { class: "btn primary lg block", onclick: generate }, icon("sparkle"), "Generate script");
   const resetBtn = h("button", { class: "btn ghost danger sm", onclick: reset }, icon("reset"), "Reset lecture");
 
@@ -170,14 +245,55 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     env ? envChips(env) : h("small", { class: "muted" }, "Generate the script to see which environments this material unlocks."));
   // How deep each part is taught comes from the material, so the teacher learns here what earns a part more time.
   const DEPTH_ORDER = ["in depth", "normal", "brief"];
+  const depthName = (d) => d === "in depth" ? "In depth" : d[0].toUpperCase() + d.slice(1);
+  const depthTag = (d) => h("span", { class: `depth-tag ${d.replace(" ", "-")}` }, depthName(d));
+  // The rule the lesson was planned by (depth.py, saved with the plan); these are its values for an older plan.
+  const RULE = { brief_below: 2, in_depth_at: 3.5, depth_min: { brief: 0.6, normal: 1.2, "in depth": 2.2 },
+    framing_min: { Opening: 0.6, Recap: 0.5, Closing: 0.3 }, max_speaking_min: 30 };
+  const mins = (m) => `${(Math.round(m * 10) / 10).toFixed(1)} min`;
+  // How the lesson's length was decided: each part's score, its depth and the speaking time that depth gets, then
+  // the parts plus the opening, recap and closing.
   const depthList = (depth) => depth?.parts?.length ? h("div", { class: "depth-list" },
     DEPTH_ORDER.map(d => {
       const parts = depth.parts.filter(p => p.depth === d);
-      return parts.length ? h("div", { class: "depth-row" }, h("span", { class: `depth-tag ${d.replace(" ", "-")}` }, d === "in depth" ? "In depth" : d[0].toUpperCase() + d.slice(1)),
+      return parts.length ? h("div", { class: "depth-row" }, depthTag(d),
         h("div", { class: "depth-parts" }, parts.map(p => h("span", { class: "depth-part", title: p.why.length ? `Because the material has ${p.why.join(", ")}` : "The material states it without examples or steps" }, p.title)))) : null;
     }),
-    depth.too_long ? h("p", { class: "depth-warn" }, icon("info"), "This material needs more than 30 min of speaking (about 35 min of lesson), so every part was shortened. ",
-      "Split it into two lessons to teach it all fully.") : null) : null;
+    h("button", { class: "btn ghost sm", type: "button", onclick: () => setTab("duration") }, icon("clock"), "How the length was decided")) : null;
+  const durationBreakdown = (depth) => {
+    if (!depth?.parts?.length) return null;
+    const rule = { ...RULE, ...(depth.rule || {}) };
+    const partMin = (p) => p.minutes ?? rule.depth_min[p.depth];
+    const parts = depth.parts.reduce((a, p) => a + partMin(p), 0);
+    const framing = Object.values(rule.framing_min).reduce((a, b) => a + b, 0);
+    const lesson = data.manifest?.estimated_min;
+    const why = (p) => [...p.why, ...(p.must_cover ? ["Must cover"] : [])];
+    return h("div", { class: "dur" },
+      h("div", { class: "dur-card" },
+        h("div", { class: "dur-head" }, h("strong", {}, "How deep each part goes"),
+          h("span", {}, "Six yes/no questions about how your material explains each part")),
+        h("table", { class: "dur-table" },
+          h("thead", {}, h("tr", {}, h("th", {}, "Part and why"), h("th", { class: "num" }, "Score"), h("th", {}, "Depth"),
+            h("th", { class: "num" }, "Speaking"))),
+          h("tbody", {}, depth.parts.map(p => h("tr", {},
+            h("td", {}, h("div", { class: "dur-title" }, p.title),
+              h("div", { class: "dur-why" }, (why(p).length ? why(p) : ["stated only"]).map(w =>
+                h("span", { class: `dur-chip ${w === "Must cover" ? "must" : ""}` }, w)))),
+            h("td", { class: "num" }, p.score != null ? Number(p.score).toFixed(1) : "–"),
+            h("td", {}, depthTag(p.depth)),
+            h("td", { class: "num" }, mins(partMin(p)))))))),
+      h("div", { class: "dur-legend" }, ["brief", "normal", "in depth"].map((d, k) => h("div", { class: `dur-band ${d.replace(" ", "-")}` },
+        h("strong", {}, `${depthName(d)} · ${mins(rule.depth_min[d])}`),
+        h("small", {}, [`score under ${rule.brief_below.toFixed(1)}`, `${rule.brief_below.toFixed(1)} to ${rule.in_depth_at}`,
+          `${rule.in_depth_at} and up`][k])))),
+      h("small", { class: "muted" }, "Each yes adds to the score, and so does each slide beyond the first. A Must cover part is ",
+        "never Brief, and the lesson's main idea is always In depth."),
+      depth.too_long ? h("p", { class: "depth-warn" }, icon("info"), `This material needs more than ${rule.max_speaking_min} min of speaking, so every part was shortened. `,
+        "Split it into two lessons to teach it all fully.") : null,
+      h("div", { class: "dur-total" },
+        h("span", {}, `${depth.parts.length} parts ${mins(parts)} + opening, recap, closing ${mins(framing)}`),
+        h("strong", {}, `${mins(depth.speaking_min ?? parts + framing)} speaking${lesson ? ` ≈ ${Math.round(lesson)} min lesson` : ""}`)));
+  };
   const depthNote = h("div", { class: "env-note" },
     h("div", { class: "env-note-head" }, icon("layers"), h("strong", {}, "How your slides set the depth")),
     h("p", {}, "Each part of your material is taught ", h("strong", {}, "Brief"), ", ", h("strong", {}, "Normal"), " or ",
@@ -198,7 +314,8 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
   const setupSummary = h("section", { class: "card setup-summary" },
     h("div", { class: "card-header" }, icon("layers"), h("h3", {}, "Lecture setup"), h("div", { class: "spacer" }),
       h("button", { class: "btn ghost sm", onclick: () => setFolded(false) }, icon("edit"), "Edit setup")),
-    summaryBody, h("div", { class: "setup-summary-foot" }, regenBtn, modelTag(data.model, "center")));
+    summaryBody, h("div", { class: "setup-summary-foot" }, regenBtn,
+      modelTag(data.model, "center")));
   const doneBtn = h("button", { class: "btn ghost sm", onclick: () => setFolded(true) }, icon("chevron"), "Done");
   const setupFull = h("div", { class: "setup-full" },
     h("div", { class: "setup-full-head" }, h("strong", {}, "Lecture setup"), h("div", { class: "spacer" }), doneBtn),
@@ -206,10 +323,15 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
       h("div", { class: "card-header" }, materialStep, h("h3", {}, "Study material")),
       h("div", { class: "card-body stack" }, drop, fileList, envNote, depthNote)),
     h("section", { class: "card" },
+      h("div", { class: "card-header" }, icon("book"), h("h3", {}, "Textbook"), h("div", { class: "spacer" }),
+        h("small", { class: "muted" }, "optional")),
+      h("div", { class: "card-body stack" }, bookDrop, bookFields)),
+    h("section", { class: "card" },
       h("div", { class: "card-header" }, h("span", { class: "step-num" }, "2"), h("h3", {}, "Lecture")),
       h("div", { class: "card-body grid-2" },
         h("label", { class: "field span-2" }, h("span", {}, "Topic"), topicInput),
-        h("label", { class: "field" }, h("span", {}, "Teaching language"), languageInput),
+        h("label", { class: "field" }, h("span", {}, "Teaching language"), languageInput,
+          h("small", { class: "muted" }, "The language the class is taught in. Your material stays in English.")),
         h("div", { class: "field" }, h("span", {}, "Voice"), template.gnani
           ? h("div", { class: "voice-row" }, voiceInput, previewBtn)
           : h("div", { class: "pill-note" }, icon("volume"), "Browser voice")))),
@@ -229,6 +351,7 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     const row = (ic, text) => h("div", { class: "sum-row" }, icon(ic), h("span", {}, text));
     summaryBody.replaceChildren(...[
       row("file", files.length ? `${files.length} file${files.length > 1 ? "s" : ""}: ${files.join(", ")}` : "No material yet"),
+      book ? row("book", `${book.file}${book.first ? `, pages ${book.first}–${book.last}` : ""} · theory from ${book.focus.theory}, worked examples from ${book.focus.numericals}`) : null,
       row("user", persona.Teacher?.Name || "No teacher yet"),
       row("clock", `${topicInput.value || "No topic"}${data.manifest?.estimated_min ? ` · about ${formatDuration(data.manifest.estimated_min)}` : ""} · ${languageName()}${template.gnani ? ` · ${voiceInput.value} voice` : ""}`),
       data.manifest?.environments ? envChips(data.manifest.environments) : null,
@@ -248,7 +371,7 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
   const tabBtn = (key, label, ic) => h("button", { class: "tab", dataset: { tab: key }, onclick: () => setTab(key) }, icon(ic), label);
   const qualityBadge = h("span", { class: "tab-badge" });
   const tabs = h("div", { class: "tabs" }, tabBtn("preview", "Preview", "eye"), tabBtn("quality", "Quality", "checkCircle"),
-    tabBtn("edit", "Edit", "edit"), tabBtn("log", "Progress", "log"));
+    tabBtn("duration", "Duration", "clock"), tabBtn("edit", "Edit", "edit"), tabBtn("log", "Progress", "log"));
   tabs.querySelector('[data-tab="quality"]').append(qualityBadge);
   const saveBtn = h("button", { class: "btn sm", onclick: save, disabled: true }, icon("save"), "Save");
   const approveBtn = h("button", { class: "btn success sm", onclick: approve }, icon("check"), "Approve");
@@ -271,10 +394,17 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
   const logActions = h("div", { class: "progress-actions" });
   const logPane = h("div", { class: "script-pane log" }, h("div", { class: "progress-card" }, logStatus, logList, logActions));
   const qualityPane = h("div", { class: "script-pane quality" });
+  const durationPane = h("div", { class: "script-pane duration" });
+  function renderDuration() {
+    const table = durationBreakdown(data.manifest?.depth);
+    durationPane.replaceChildren(table ? h("div", { class: "duration-wrap" },
+      data.manifest?.environments ? h("div", { class: "dur-unlocks" }, h("strong", {}, "Your material unlocks"), envChips(data.manifest.environments)) : null,
+      table) : h("div", { class: "empty" }, icon("clock"), "Generate the script to see how its length was decided."));
+  }
 
   const right = h("section", { class: "card studio-right" },
     h("div", { class: "card-header script-head" }, h("h3", {}, "Lecture script"), tabs, h("div", { class: "spacer" }), saveBtn, approveBtn, classBtn),
-    statsEl, notices, previewPane, qualityPane, editPane, logPane);
+    statsEl, notices, previewPane, qualityPane, durationPane, editPane, logPane);
 
   const page = h("div", { class: "page studio" }, left, right);
   main.replaceChildren(header, page);
@@ -405,10 +535,10 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     const s = scriptStats(state.segments);
     const est = data.manifest?.estimated_min;
     const item = (ic, v, l) => h("div", { class: "s-item" }, icon(ic), h("strong", {}, v), h("span", {}, l));
-    statsEl.replaceChildren(item("layers", s.sections, "sections"), item("clock", est ? formatDuration(est) : `~${formatDuration(s.words / 115)}`, ""),
+    statsEl.replaceChildren(...[item("layers", s.sections, "sections"), item("clock", est ? formatDuration(est) : `~${formatDuration(s.words / 115)}`, ""),
       item("book", s.notes, "notes"), item("code", s.files, "programs"),
       s.breaks ? item("question", s.breaks, "question breaks") : null,  // only older scripts have them
-      modelTag(data.script_model, "s-model"));
+      modelTag(data.script_model, "s-model")].filter(Boolean));  // replaceChildren would write a null as "null"
     statsEl.classList.toggle("hidden", !state.segments.length);
   }
 
@@ -433,6 +563,8 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     generateBtn.replaceChildren(...(running ? [h("span", { class: "spinner" }), "Generating…"] : [icon("sparkle"), data.script_md ? "Regenerate script" : "Generate script"]));
     // Both buttons rest while a script is being written: a second click would start a second generation.
     regenBtn.disabled = running || state.busy;
+    // greyed out but still clickable for a demo account, so the click can say why (generate() shows the note)
+    for (const b of [generateBtn, regenBtn]) { b.classList.toggle("locked", noScripts); b.title = noScripts ? NO_SCRIPTS : ""; }
     regenBtn.replaceChildren(...(running ? [h("span", { class: "spinner" }), "Generating…"] : [icon("sparkle"), "Regenerate script"]));
     resetBtn.disabled = running || state.busy;
     header.setStatus(running ? "running" : status());
@@ -443,7 +575,7 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     const generating = job === "running";
     if (generating) key = "log";  // the old script is being replaced: only the progress is shown
     state.tab = key;
-    const visible = { preview: !generating, quality: !generating && !!data.judge, edit: !generating,
+    const visible = { preview: !generating, quality: !generating && !!data.judge, duration: !generating && !!data.manifest?.depth?.parts?.length, edit: !generating,
       log: generating || job === "failed" };
     tabs.querySelectorAll(".tab").forEach(b => {
       b.classList.toggle("active", b.dataset.tab === key);
@@ -451,6 +583,7 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     });
     previewPane.classList.toggle("hidden", key !== "preview");
     qualityPane.classList.toggle("hidden", key !== "quality");
+    durationPane.classList.toggle("hidden", key !== "duration");
     editPane.classList.toggle("hidden", key !== "edit");
     logPane.classList.toggle("hidden", key !== "log");
     statsEl.classList.toggle("hidden", generating || !state.segments.length);
@@ -481,7 +614,7 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
   }
 
   function renderAll() {
-    renderFiles(); renderStats(); renderNotices(); renderPreview(); renderQuality(); renderGutter(); renderLog(); renderActions();
+    renderFiles(); renderStats(); renderNotices(); renderPreview(); renderQuality(); renderDuration(); renderGutter(); renderLog(); renderActions();
     setFolded(folded);
   }
 
@@ -523,8 +656,10 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
   }
 
   async function generate() {
+    if (noScripts) return toast(NO_SCRIPTS, "info");
     if (data.job?.status === "running" || state.busy) return toast("A script is already being generated. Wait for it to finish.", "info");
-    if (!data.files.some(f => f !== "persona.md")) return toast("Upload at least one PPTX, PDF or DOCX first.", "error");
+    if (!data.files.some(f => f !== "persona.md") && !book) return toast("Upload at least one PPTX, PDF or DOCX, or a textbook, first.", "error");
+    if (book && !(pageNo(firstPage) && pageNo(lastPage))) return toast("Enter the textbook pages this topic spans.", "error");
     const missing = collectPersona();
     if (missing.length) {
       personaBody.querySelectorAll("details").forEach(d => d.open = true);
@@ -533,6 +668,8 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
     if (!topicInput.value.trim()) return toast("Enter this lecture's topic.", "error");
     if (state.segments.length && !await confirmDialog("Regenerate the script?", "This replaces the current script, including any edits.", "Regenerate")) return;
     try {
+      clearTimeout(setupTimer);
+      await api.saveSetup(lectureId, setupBody());  // the book's pages and focus are read from the saved setup
       await api.generate(lectureId, { persona, topic: topicInput.value.trim(), language: languageInput.value });
       data.job = { status: "running", steps: [], error: "" };
       data.judge = null;  // the old quality result belongs to the old script
@@ -588,7 +725,7 @@ export async function mountStudio(lectureId, ctx, opts = {}) {
   setTab(data.job?.status === "running" ? "log" : data.failed_draft ? "edit" : "preview");
   if (data.job?.status === "running") poll();
   window.onbeforeunload = () => (state.dirty ? true : undefined);
-  if (opts.regenerate) {
+  if (opts.regenerate && !noScripts) {
     history.replaceState(null, "", `#/lecture/${encodeURIComponent(lectureId)}/studio`);  // a reload doesn't ask again
     generate();
   }

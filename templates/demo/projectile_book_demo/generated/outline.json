@@ -1,0 +1,61 @@
+[
+  {
+    "source": "persona.md",
+    "type": "md",
+    "items": [],
+    "figures": []
+  },
+  {
+    "source": "projectile_motion.pptx",
+    "type": "pptx",
+    "items": [
+      "1: Projectile Motion",
+      "2: What is a projectile?",
+      "3: Two motions at the same time",
+      "4: Splitting the launch speed",
+      "5: Three formulas for a throw",
+      "6: Where the range formula comes from",
+      "7: Worked example: u = 20 m/s at 30°",
+      "8: Same speed, different angles",
+      "9: Range against launch angle",
+      "10: Why 45° wins",
+      "11: In real sport, a bit less than 45°",
+      "12: Takeaways"
+    ],
+    "deck": true,
+    "count": 12,
+    "figures": [
+      "graph slide 9: Range for u = 20 m/s (no air resistance)"
+    ]
+  },
+  {
+    "source": "projectile_notes.docx",
+    "type": "docx",
+    "items": [
+      "Introduction",
+      "How to solve any projectile problem (steps)",
+      "Example 3.8 from the NCERT book",
+      "A program that checks Example 3.8",
+      "A program that tries every angle (why 45 degrees goes farthest)"
+    ],
+    "figures": [
+      "flow projectile_notes.docx How to solve any projectile problem (steps): How to solve any projectile problem (steps)"
+    ]
+  },
+  {
+    "source": "ncert_projectile_pages.pdf",
+    "type": "book",
+    "book": true,
+    "pages": "38-40",
+    "items": [
+      "page 38: (",
+      "page 39: Fig 3.16 Motion of an object projected with velocity",
+      "page 40: range, R. It is the distance travelled during the time",
+      "Example 3.5 (page 38)",
+      "Example 3.6 (page 40)",
+      "Example 3.7 (page 40)",
+      "Example 3.8 (page 40)"
+    ],
+    "figures": []
+  }
+]

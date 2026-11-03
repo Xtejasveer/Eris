@@ -1,0 +1,39 @@
+[
+  {
+    "source": "persona.md",
+    "type": "md",
+    "items": [],
+    "figures": []
+  },
+  {
+    "source": "while_loop.pptx",
+    "type": "pptx",
+    "items": [
+      "1: The while Loop in Python",
+      "2: Writing a while Loop",
+      "3: How a while Loop Runs",
+      "4: Examples: Countdown",
+      "5: Examples: Adding 1 to 10",
+      "6: Watch Out: Infinite Loops"
+    ],
+    "deck": true,
+    "count": 6,
+    "figures": [
+      "flow slide 3: How a while Loop Runs"
+    ]
+  },
+  {
+    "source": "while_loop_notes.docx",
+    "type": "docx",
+    "items": [
+      "Introduction",
+      "How a while loop runs (steps)",
+      "Program 1: countdown",
+      "Program 2: adding 1 to 10",
+      "Common mistake"
+    ],
+    "figures": [
+      "flow while_loop_notes.docx How a while loop runs (steps): How a while loop runs (steps)"
+    ]
+  }
+]

@@ -126,9 +126,10 @@ def run_research(system_prompt, thread_id):
 
 class ScriptWriter:
     """Step 2: a plain model call with no tools. Keeps the conversation so fixes see the script and notes."""
+    TEMPERATURE = config.LESSON_TEMPERATURE  # the stager (staging.py) places markers, so it runs at its own, lower one
 
     def __init__(self, system_prompt):
-        self.model = init_chat_model(f"openrouter:{config.LLM_MODEL}")
+        self.model = init_chat_model(f"openrouter:{config.LLM_MODEL}", temperature=self.TEMPERATURE)
         self.messages = [SystemMessage(system_prompt)]
 
     def ask(self, content):

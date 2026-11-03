@@ -212,7 +212,20 @@ def flow_highlight(board, args):
     return {"ok": True, "error": ""}
 
 
+def book_mark(board, args):
+    """The textbook in the terminal class: say which page and what is pointed at (the browser shows the page)."""
+    what = args.get("text") or args.get("name") or ""
+    print(f"\n📖 [book page {args['page']}{': ' + what if what else ''}]")
+    return {"ok": True, "error": ""}
+
+
 ACTIONS = {
+    "BOOK": book_mark,
+    "BOOK_HIGHLIGHT": book_mark,
+    "BOOK_UNDERLINE": book_mark,
+    "BOOK_CIRCLE": book_mark,
+    "BOOK_EXAMPLE": book_mark,
+    "BOOK_ANSWER": book_mark,
     "WRITE_CODE": write_code,
     "HIGHLIGHT": highlight,
     "READ_OUTPUT": read_output,

@@ -1,0 +1,37 @@
+[
+  {
+    "source": "persona.md",
+    "type": "md",
+    "items": [],
+    "figures": []
+  },
+  {
+    "source": "quadratic_factorisation.pptx",
+    "type": "pptx",
+    "items": [
+      "1: Quadratic Equations by Factorisation",
+      "2: What Is a Root?",
+      "3: Splitting the Middle Term",
+      "4: Roots on the Graph",
+      "5: Example 3 (NCERT page 42)",
+      "6: Remember"
+    ],
+    "deck": true,
+    "count": 6,
+    "figures": [
+      "flow slide 3: Splitting the Middle Term",
+      "graph slide 4: y = 2x² – 5x + 3"
+    ]
+  },
+  {
+    "source": "jemh104.pdf",
+    "type": "book",
+    "book": true,
+    "pages": "42-42",
+    "items": [
+      "page 42: 42",
+      "Example 3 (page 42)"
+    ],
+    "figures": []
+  }
+]

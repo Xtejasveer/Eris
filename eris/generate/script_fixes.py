@@ -43,7 +43,8 @@ def _narration_follows(lines, after):
 
 # Write first, then explain: notes, programs, graphs and diagram blocks appear BEFORE the sentence about them. Only
 # instant pointers run while their sentence is spoken: a highlight, a pen circle, a slider move.
-PARALLEL = {"HIGHLIGHT", "NOTE_HIGHLIGHT", "SLIDE_HIGHLIGHT", "FLOW_HIGHLIGHT", "LOOK_BACK", "SLIDE_CIRCLE", "VISUAL_SET"}
+PARALLEL = {"HIGHLIGHT", "NOTE_HIGHLIGHT", "SLIDE_HIGHLIGHT", "FLOW_HIGHLIGHT", "LOOK_BACK", "SLIDE_CIRCLE", "VISUAL_SET",
+            "BOOK_HIGHLIGHT", "BOOK_UNDERLINE", "BOOK_CIRCLE"}
 FLAG_RE = re.compile(r"\s+while_speaking=(?:true|false)")
 
 
@@ -296,7 +297,7 @@ PICTURE_VERB_RE = re.compile(r"\b(?:picture|imagine|visuali[sz]e)\s+(?:a|an|the|
                              r"\bchart\s+a\s+course\b", re.I)
 SLIDE_NAMED_RE = re.compile(r"\bslide\s+(\d+)\b", re.I)
 STAY_AFTER = {"NOTE", "NOTE_TITLE", "SKETCH_ROW", "WRITE_CODE", "NOTE_HIGHLIGHT", "HIGHLIGHT", "LOOK_BACK", "FLOW_HIGHLIGHT",
-              "SLIDE_HIGHLIGHT", "SLIDE_CIRCLE",
+              "SLIDE_HIGHLIGHT", "SLIDE_CIRCLE", "BOOK_HIGHLIGHT", "BOOK_UNDERLINE", "BOOK_CIRCLE", "BOOK_ANSWER",
               "FLOW_NEXT", "VISUAL_SET", "RUN", "READ_OUTPUT", "OPEN_FILE"}
 SUMMARY_RE = re.compile(r"^\s*(takeaway|in short|to sum up|so remember|remember)\b", re.I)
 FRAMING_RE = re.compile(r"\b(opening|introduction|intro|welcome|recap|summary|review|closing|conclusion|wrap)", re.I)
@@ -306,6 +307,8 @@ SCREEN_OF = {  # which workspace a marker brings to the front
     "WRITE_CODE": "code", "HIGHLIGHT": "code", "RUN": "code", "READ_OUTPUT": "code", "OPEN_FILE": "code",
     "FLOW": "visual", "FLOW_NEXT": "visual", "FLOW_HIGHLIGHT": "visual", "OPEN_FLOW": "visual",
     "VISUAL": "visual", "VISUAL_SET": "visual", "OPEN_VISUAL": "visual",
+    "BOOK": "book", "BOOK_HIGHLIGHT": "book", "BOOK_UNDERLINE": "book", "BOOK_CIRCLE": "book", "BOOK_EXAMPLE": "book",
+    "BOOK_ANSWER": "book",
 }
 _COMMON = set("""this that these those there their them they with from have will what when where which while about into
 onto over under than then your yours ours look see shows show showing shown here just like also very more most some
@@ -570,6 +573,163 @@ def _flashes(lines, i):
     """True if the [SLIDE] at i is followed (after its own highlights and circles) by another [SLIDE]."""
     j = _skip_slide_markers(lines, i)
     return j < len(lines) and (parse_line_marker(lines[j]) or ("",))[0] == "SLIDE"
+
+
+def _short_label(label, limit):
+    """A block label cut to fit: the words before a colon when they say the step ("Write down what is given: u, theta
+    and g" -> "Write down what is given"), else whole words up to the limit. A question keeps its "?"."""
+    question = label.endswith("?")
+    head = label.split(":", 1)[0].strip()
+    if ":" in label and 12 <= len(head) < limit:
+        return head + ("?" if question and not head.endswith("?") else "")
+    words, out = label.rstrip("?").split(), ""
+    for w in words:
+        if len(out) + len(w) + (1 if out else 0) > limit - 2:
+            break
+        out = f"{out} {w}" if out else w
+    return out.rstrip(",;:-") + ("?" if question else "")
+
+
+def shorten_flow_labels(text):
+    """Diagram blocks whose labels are too long for the board (often copied from a step list in the material) are
+    shortened here, so one long label doesn't fail the whole diagram and every [FLOW_NEXT] after it.
+    Returns (text, number of labels shortened)."""
+    from eris.visuals.flow_diagram import BULLET_RE as FLOW_BULLET_RE, LINE_RE, MAX_LABEL
+    lines, out, n, in_flow = text.splitlines(), [], 0, False
+    for line in lines:
+        marker = parse_line_marker(line)
+        if marker and marker[0] == "FLOW":
+            in_flow = True
+        elif line.strip() == "[/FLOW]":
+            in_flow = False
+        elif in_flow and line.strip():
+            head, sep, branches = line.partition("|")
+            m = LINE_RE.match(FLOW_BULLET_RE.sub("", head).strip())
+            if m and len(m.group(2).strip()) > MAX_LABEL:
+                label = _short_label(m.group(2).strip(), MAX_LABEL)
+                line = (f"{m.group(1)}: " if m.group(1) else "") + label + (f" {sep}{branches}" if sep else "")
+                n += 1
+        out.append(line)
+    return "\n".join(out), n
+
+
+VISUAL_FROM_SLIDE_RE = re.compile(r"\bslide\s+(\d+)\b", re.I)
+SCREEN_CHANGES = {"SLIDE", "BOOK", "BOOK_EXAMPLE", "VISUAL", "OPEN_VISUAL", "FLOW", "OPEN_FLOW", "WRITE_CODE",
+                  "OPEN_FILE", "RUN", "NEW_PAGE"}
+
+
+def reopen_same_code(text):
+    """A program typed out again exactly as it already is (same file, same code) only repeats the typing: it becomes
+    [OPEN_FILE], which brings the file back into the editor. A changed program is typed out as usual.
+    Returns (text, number of programs reopened)."""
+    lines, out, latest, n, i = text.splitlines(), [], {}, 0, 0
+    same = lambda code: "\n".join(ln.rstrip() for ln in code.strip("\n").splitlines())  # noqa: E731
+    while i < len(lines):
+        marker = parse_line_marker(lines[i])
+        if marker and marker[0] == "WRITE_CODE" and marker[1].get("file"):
+            end = _block_end(lines, i, "WRITE_CODE")
+            if end is not None:
+                file, code = marker[1]["file"], "\n".join(lines[i + 1:end])
+                if file in latest and latest[file] == same(code):
+                    out.append(f'[OPEN_FILE file="{file}"]')
+                    n += 1
+                else:
+                    out += lines[i:end + 1]
+                latest[file] = same(code)
+                i = end + 1
+                continue
+        out.append(lines[i])
+        i += 1
+    return "\n".join(out), n
+
+
+NOTEBOOK_WRITES = {"NOTE", "NOTE_TITLE", "SKETCH_ROW"}
+
+
+def open_examples_first(text):
+    """A book example opens a fresh notebook page, and while it is worked only that page shows beside the book
+    (web/js/stage.js bookExample). So:
+    - notes written right before its [BOOK_EXAMPLE] (the equation, the given values) would land on the page before
+      and be hidden: the [BOOK_EXAMPLE] moves up to just before them;
+    - a [LOOK_BACK] or [NOTE_HIGHLIGHT] while it is open that points at a line not on its page would light up
+      nothing the class can see: it goes.
+    Returns (text, number of changes)."""
+    lines, changes = text.splitlines(), 0
+    i = 0
+    while i < len(lines):
+        marker = parse_line_marker(lines[i])
+        if not marker or marker[0] != "BOOK_EXAMPLE":
+            i += 1
+            continue
+        # the notes written straight before it (blank lines between them are fine), as whole blocks
+        start, j = i, i - 1
+        while j >= 0:
+            if not lines[j].strip():
+                j -= 1
+                continue
+            if lines[j].strip() in ("[/NOTE]",):  # the end of a [NOTE] block: step back to its start
+                k = j - 1
+                while k >= 0 and (parse_line_marker(lines[k]) or ("",))[0] != "NOTE":
+                    k -= 1
+                if k < 0:
+                    break
+                start, j = k, k - 1
+                continue
+            m = parse_line_marker(lines[j])
+            if m and m[0] in NOTEBOOK_WRITES - {"NOTE"}:
+                start, j = j, j - 1
+                continue
+            break
+        if start < i:
+            lines.insert(start, lines.pop(i))
+            changes += 1
+        i += 1
+    # while an example is open: drop look-backs and highlights whose words are not on its page
+    out, on_page, open_example = [], [], False
+    for n, line in enumerate(lines):
+        marker = parse_line_marker(line)
+        name, args = marker if marker else ("", {})
+        if name == "BOOK_EXAMPLE":
+            open_example, on_page = True, []
+        elif name in ("BOOK_ANSWER", "SECTION"):
+            open_example = False
+        elif open_example and name == "NOTE":
+            end = _block_end(lines, n, "NOTE")
+            on_page += lines[n + 1:end] if end is not None else []
+        elif open_example and name == "NOTE_TITLE":
+            on_page.append(args.get("text", ""))
+        elif open_example and name in ("LOOK_BACK", "NOTE_HIGHLIGHT"):
+            want = " ".join(str(args.get("text", "")).lower().split())
+            if name == "LOOK_BACK" or not any(want in " ".join(l.lower().split()) for l in on_page):
+                changes += 1
+                continue
+        out.append(line)
+    return "\n".join(out), changes
+
+
+def reopen_graphs(text):
+    """Once a graph has been built from a slide's chart ([VISUAL from="slide 9"]), that slide is the graph: a later
+    [SLIDE n=9] brings back the static picture the class has already explored. It becomes [OPEN_VISUAL id=..], and
+    the slide's highlights and pen circles that follow it (until the screen changes) go, since they would only bring
+    the static slide back. Returns (text, number of slides replaced)."""
+    graph_of = {}  # slide number -> id of the graph built from it, from where that graph first appears
+    out, replaced, on_graph_slide = [], 0, None
+    for line in text.splitlines():
+        marker = parse_line_marker(line)
+        name, args = marker if marker else ("", {})
+        if name == "VISUAL" and (m := VISUAL_FROM_SLIDE_RE.search(str(args.get("from", "")))):
+            graph_of.setdefault(int(m.group(1)), args.get("id"))
+        if name == "SLIDE" and str(args.get("n", "")).isdigit() and int(args["n"]) in graph_of:
+            out.append(f'[OPEN_VISUAL id="{graph_of[int(args["n"])]}"]')
+            replaced, on_graph_slide = replaced + 1, int(args["n"])
+            continue
+        if on_graph_slide is not None and name in ("SLIDE_HIGHLIGHT", "SLIDE_CIRCLE") \
+                and str(args.get("n")) == str(on_graph_slide):
+            continue
+        if name in SCREEN_CHANGES or name == "SECTION":
+            on_graph_slide = None
+        out.append(line)
+    return "\n".join(out), replaced
 
 
 def tidy_staging(text, lesson_sentences=()):

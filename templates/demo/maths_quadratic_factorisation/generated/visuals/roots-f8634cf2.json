@@ -1,0 +1,19 @@
+{
+  "id": "roots",
+  "title": "Roots on the Graph",
+  "brief": "plots: y = 2x\u00b2 \u2013 5x + 3, as a line chart with markers\nx values: 0, 0.5, 1, 1.5, 2, 2.5, 3\nseries 'y': 3.0, 1.0, 0.0, 0.0, 1.0, 3.0, 6.0",
+  "controls": [
+    {
+      "name": "x",
+      "type": "slider",
+      "label": "X",
+      "min": 0,
+      "max": 3,
+      "step": 1
+    }
+  ],
+  "html": "<script>\nconst c = Visual.chart({ x: [0, 3], y: [-1, 7], xLabel: \"x\", yLabel: \"y\" });\nlet x = 0;\nconst f = t => 2 * t * t - 5 * t + 3;\nconst data = [0, 0.5, 1, 1.5, 2, 2.5, 3].map(t => [t, f(t)]);\n\nfunction draw() {\n  c.clear();\n  c.fn(t => f(t), { color: \"var(--muted)\", dashed: true });\n  c.line(data);\n  c.dots(data);\n  const y = f(x);\n  c.vline(x);\n  c.dots([[x, y]], { color: \"var(--warn)\" });\n  c.label(x + 0.12, y + 0.5, `x = ${x}`);\n  c.readout([\n    `x = ${x}`,\n    `y = ${y.toFixed(1)}`,\n    y === 0 ? \"y = 0: x is a root\" : `y = ${y.toFixed(1)}, not a root`\n  ]);\n  Visual.state(`At x = ${x}, y = 2x\u00b2 \u2013 5x + 3 = ${y.toFixed(1)}${y === 0 ? \", so x is a root\" : \"\"}`);\n}\n\nVisual.on(\"x\", v => { x = v; draw(); });\ndraw();\n</script>",
+  "model": "anthropic/claude-haiku-5.5",
+  "layout_advice": [],
+  "agrees": 0.97
+}

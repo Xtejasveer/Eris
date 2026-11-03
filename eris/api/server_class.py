@@ -15,7 +15,7 @@ from eris.classroom import actions
 from eris.classroom import class_board
 from eris import config
 from eris.classroom import doubt_agent
-from eris.material import figures
+from eris.material import book, figures
 from eris.sandbox import CODE_FILE_RE
 from eris.material.slide_images import slide_images
 from main import LECTURE_ID_RE
@@ -90,9 +90,12 @@ def class_data(lecture_id: str):
         }
         return {"ready": False, "status": status, "message": reasons.get(status, "Approve the lecture's script first.")}
     manifest = manifest_or_none(lecture_id)
-    return {"ready": True, "segments": json.loads(script_json.read_text(encoding="utf-8")),
+    from eris.generate.book_checks import mark_answers  # the book's matches as today's check reads them
+    return {"ready": True, "segments": mark_answers(json.loads(script_json.read_text(encoding="utf-8")),
+                                                     book.load(lecture_id, manifest)),
             "slides": actions.new_board(lecture_id)["slides"], "slide_pictures": _slide_pictures(lecture_id),
             "slide_images": slide_images(lecture_id),  # the real slides as pictures, when LibreOffice can draw them
+            "book": book.player_pages(lecture_id, manifest),  # the textbook pages, when the teacher chose some
             "teacher": manifest["persona"]["Teacher"]["Name"], "topic": manifest["topic"],
             "estimated_min": manifest.get("estimated_min"), "duration_min": config.lecture_times(manifest)[0], "voice": bool(config.GNANI_API_KEY),
             "language": config.lecture_language(manifest), "voice_name": config.lecture_voice(manifest),
@@ -191,6 +194,17 @@ def slide_file(lecture_id: str, name: str):
     if not path.exists():
         raise HTTPException(404, "Slide not found")
     return FileResponse(path, headers={"Cache-Control": "no-cache"})  # a new deck draws over the same names
+
+
+@router.get("/lectures/{lecture_id}/book/{name}")
+def book_page(lecture_id: str, name: str):
+    """One page of the textbook as a picture (see material/book.py)."""
+    if not re.match(r"^[0-9]{1,4}\.png$", name):
+        raise HTTPException(400, "Bad page name")
+    path = config.lecture_dir(_check_id(lecture_id)) / "book" / name
+    if not path.exists():
+        raise HTTPException(404, "Page not found")
+    return FileResponse(path, headers={"Cache-Control": "no-cache"})
 
 
 @router.post("/lectures/{lecture_id}/complete")
@@ -614,7 +628,7 @@ def _fast_prompt(lecture_id):
         from eris.classroom.session import doubt_prompt, persona_to_text, speaker_rule
         manifest = manifest_or_404(lecture_id)
         persona, language = manifest["persona"], config.lecture_language(manifest)
-        _fast_prompts[lecture_id] = (doubt_prompt(persona, persona_to_text(persona), manifest["topic"], language)
+        _fast_prompts[lecture_id] = (doubt_prompt(persona, persona_to_text(persona), manifest["topic"], language, fast=True)
                                      + speaker_rule(language, config.voice_gender(manifest)))
     return _fast_prompts[lecture_id]
 

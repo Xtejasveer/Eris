@@ -1,0 +1,24 @@
+[
+  {
+    "kind": "flow",
+    "title": "Splitting the Middle Term",
+    "where": "slide 3 (Splitting the Middle Term)",
+    "ref": "slide 3",
+    "details": "steps: Write the equation as ax² + bx + c = 0 -> Find two numbers whose product is a × c and whose sum is b -> Split the middle term bx using those two numbers -> Group the terms and take out the common factors -> Write it as a product of two linear factors -> Set each factor to zero and solve",
+    "source": "quadratic_factorisation.pptx",
+    "use": "draw",
+    "use_p": 0.92,
+    "use_why": "it is a process to draw step by step"
+  },
+  {
+    "kind": "graph",
+    "title": "y = 2x² – 5x + 3",
+    "where": "slide 4 (Roots on the Graph)",
+    "ref": "slide 4",
+    "details": "line markers chart; x values: 0, 0.5, 1, 1.5, 2, 2.5, 3; series 'y': 3.0, 1.0, 0.0, 0.0, 1.0, 3.0, 6.0",
+    "source": "quadratic_factorisation.pptx",
+    "use": "interactive",
+    "use_p": 0.77,
+    "use_why": "students can explore it with a slider"
+  }
+]

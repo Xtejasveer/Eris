@@ -284,8 +284,11 @@ def length_problem(sections, budget):
 
 # ---------- a calculation said aloud is written in the notebook as it is said ----------
 
-CALC_WORDS_RE = re.compile(r"\b(plus|minus|times|multipl\w*|divid\w*|over|equals?|percent of|squared|sum of|average of)\b"
-                           r"|[+×÷=]|\d\s*[-*/x]\s*\d", re.I)
+# An operation, not just "=": "Take u = 20 m/s at 30 degrees" only states what is given, so it is not working out.
+# "over" only as a division ("100 over 19.6", "squared over 2g"), not as "more than" ("a debt of over 2 billion").
+CALC_WORDS_RE = re.compile(r"\b(plus|minus|times|multipl\w*|divid\w*|percent of|squared|sum of|average of|"
+                           r"doubl\w*|halv\w*|half of|twice)\b|\d\s+over\s+\d|\b(?:squared|cubed)\s+over\b"
+                           r"|[+×÷]|\d\s*[-*/x]\s*\d", re.I)
 CALC_NUM_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
 
 
@@ -541,7 +544,7 @@ def lesson_problems(sections, budget, figs, env, slide_count, extra=()):
                 n = len(it["lines"])
                 if n < 1 or n > config.NOTE_MAX_LINES:
                     problems.append(f'section "{s["title"]}": the note "{it["title"]}" has {n} lines; keep notes to '
-                                    f"2-{config.NOTE_MAX_LINES} short lines")
+                                    "2-6 short lines (a calculation step: 1 line), and split a longer one")
             elif it["kind"] == "code":
                 if not env.get("code"):
                     problems.append(f'section "{s["title"]}": this class has no code in its material, so no programs '
@@ -637,6 +640,8 @@ def material_text(lecture_id):
     with contextlib.redirect_stdout(io.StringIO()):  # load_folder reports each file; not needed here
         docs, _ = load_folder(config.data_dir(lecture_id))
     parts = [d.page_content for d in docs if d.metadata.get("source") != "persona.md"]
+    from eris.material import book
+    parts += [book.page_text(p) for p in ((book.load(lecture_id) or {}).get("pages") or {}).values()]
     from eris.material.images import teaching
     parts += [f"Picture on {p['where']}: {p['description']}" for p in teaching(load_pictures(lecture_id)) if p.get("description")]
     from eris.material import figures

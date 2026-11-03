@@ -1,0 +1,699 @@
+[
+  {
+    "kind": "action",
+    "name": "SECTION",
+    "args": {
+      "title": "Opening"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Good morning, Class 10-B. Mr. Arjun Iyer is at a mathematics olympiad training session today, so I am taking your class. Please open your NCERT book at page 42. Today we solve quadratic equations by factorisation. First, try Example 3 yourself before I solve it, and then check your roots. Let's begin."
+  },
+  {
+    "kind": "action",
+    "name": "SECTION",
+    "args": {
+      "title": "What is a root?"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- 2x² - 3x + 1, with x = 1"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Put x = 1 into 2x² – 3x + 1. What do you get? Hold that thought."
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE",
+    "args": {
+      "n": 2
+    }
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE_HIGHLIGHT",
+    "args": {
+      "n": 2,
+      "text": "A quadratic equation: ax² + bx + c = 0, where a ≠ 0.",
+      "while_speaking": true
+    }
+  },
+  {
+    "kind": "say",
+    "text": "A quadratic is an equation where the highest power of x is 2."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE_TITLE",
+    "args": {
+      "text": "What is a root?"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- ax² + bx + c = 0, with a ≠ 0\n- a root is a number alpha with a × alpha² + b × alpha + c = 0\n- a quadratic has at most two roots"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Here is the key idea. A root is a value of x that makes the whole equation exactly zero. Let's check x = 1 one step at a time."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- 2 × 1² = 2"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- 2 - 3 × 1 = 2 - 3 = -1"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "2 times 1 squared is 2. Minus 3 times 1 is minus 3, so 2 minus 3 is minus 1."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- -1 + 1 = 0"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Add 1, and we get 0. So 1 is a root. Think of a root as a key that fits the lock exactly. Clear so far?"
+  },
+  {
+    "kind": "action",
+    "name": "SECTION",
+    "args": {
+      "title": "Splitting the middle term"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Now, what if the numbers are harder? We split the middle term. Let's use x² + 5x + 6 = 0 as our example."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE_TITLE",
+    "args": {
+      "text": "Splitting the middle term"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- x² + 5x + 6 = 0, so a × c = 1 × 6 = 6 and b = 5\n- find two numbers: product a × c, sum b"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Here is the first question. We need two numbers that multiply to 6 and add to 5. Which two? Take a moment. Good, the numbers are 2 and 3."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- 2 × 3 = 6, and 2 + 3 = 5"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Two times 3 is 6, and 2 plus 3 is 5. So we split the middle term, 5x, into 2x and 3x."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- x² + 2x + 3x + 6 = 0"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Group the first two terms and the last two. Then take out the common factor."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- x(x + 2) + 3(x + 2) = 0\n- (x + 3)(x + 2) = 0"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE",
+    "args": {
+      "n": 3
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Here are the six steps, in order."
+  },
+  {
+    "kind": "action",
+    "name": "FLOW",
+    "args": {
+      "id": "steps",
+      "title": "Splitting the Middle Term",
+      "from": "slide 3",
+      "blocks": [
+        {
+          "id": "write",
+          "label": "Write the equation as ax² + bx + c = 0",
+          "kind": "step"
+        },
+        {
+          "id": "find",
+          "label": "Find two numbers whose product is a × c and whose sum is b",
+          "kind": "step"
+        },
+        {
+          "id": "split",
+          "label": "Split the middle term bx using those two numbers",
+          "kind": "step"
+        },
+        {
+          "id": "group",
+          "label": "Group the terms and take out the common factors",
+          "kind": "step"
+        },
+        {
+          "id": "product",
+          "label": "Write it as a product of two linear factors",
+          "kind": "step"
+        },
+        {
+          "id": "solve",
+          "label": "Set each factor to zero and solve",
+          "kind": "step"
+        }
+      ],
+      "edges": [
+        {
+          "from": "write",
+          "to": "find",
+          "label": ""
+        },
+        {
+          "from": "find",
+          "to": "split",
+          "label": ""
+        },
+        {
+          "from": "split",
+          "to": "group",
+          "label": ""
+        },
+        {
+          "from": "group",
+          "to": "product",
+          "label": ""
+        },
+        {
+          "from": "product",
+          "to": "solve",
+          "label": ""
+        }
+      ]
+    }
+  },
+  {
+    "kind": "action",
+    "name": "FLOW_NEXT",
+    "args": {
+      "id": "steps",
+      "block": "write",
+      "label": "Write the equation as ax² + bx + c = 0"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "First, we write the equation as ax² + bx + c = 0."
+  },
+  {
+    "kind": "action",
+    "name": "FLOW_NEXT",
+    "args": {
+      "id": "steps",
+      "block": "find",
+      "label": "Find two numbers whose product is a × c and whose sum is b"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Second, we find two numbers whose product is a × c and whose sum is b."
+  },
+  {
+    "kind": "action",
+    "name": "FLOW_NEXT",
+    "args": {
+      "id": "steps",
+      "block": "split",
+      "label": "Split the middle term bx using those two numbers"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Third, we split the middle term bx using those two numbers."
+  },
+  {
+    "kind": "action",
+    "name": "FLOW_NEXT",
+    "args": {
+      "id": "steps",
+      "block": "group",
+      "label": "Group the terms and take out the common factors"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Fourth, we group the terms and take out the common factors."
+  },
+  {
+    "kind": "action",
+    "name": "FLOW_NEXT",
+    "args": {
+      "id": "steps",
+      "block": "product",
+      "label": "Write it as a product of two linear factors"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Fifth, we write it as a product of two linear factors."
+  },
+  {
+    "kind": "action",
+    "name": "FLOW_NEXT",
+    "args": {
+      "id": "steps",
+      "block": "solve",
+      "label": "Set each factor to zero and solve"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Sixth, we set each factor to zero and solve."
+  },
+  {
+    "kind": "action",
+    "name": "FLOW_HIGHLIGHT",
+    "args": {
+      "id": "steps",
+      "block": "solve",
+      "while_speaking": true
+    }
+  },
+  {
+    "kind": "say",
+    "text": "So x + 3 = 0 gives x = –3, and x + 2 = 0 gives x = –2."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- (-2)² = 4"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Check x = –2 in the original equation. Its square is 4."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- 4 + 5 × (-2) + 6 = 4 - 10 + 6 = 0"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "So 4 minus 10 plus 6 is 0. Good. Why does this work? If two things multiply to zero, one of them must be zero. Takeaway: split the middle term, factorise, then set each factor to zero."
+  },
+  {
+    "kind": "action",
+    "name": "SECTION",
+    "args": {
+      "title": "Roots on the graph"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- at x = 0: y = 2 × 0² - 5 × 0 + 3 = 3"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE",
+    "args": {
+      "n": 4
+    }
+  },
+  {
+    "kind": "action",
+    "name": "VISUAL",
+    "args": {
+      "id": "roots",
+      "title": "Roots on the Graph",
+      "from": "slide 4",
+      "brief": "plots: y = 2x² – 5x + 3, as a line chart with markers\nx values: 0, 0.5, 1, 1.5, 2, 2.5, 3\nseries 'y': 3.0, 1.0, 0.0, 0.0, 1.0, 3.0, 6.0",
+      "controls": [
+        {
+          "name": "x",
+          "type": "slider",
+          "label": "X",
+          "min": 0,
+          "max": 3,
+          "step": 1
+        }
+      ],
+      "key": "roots-f8634cf2"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Here is the graph of y = 2x² – 5x + 3. Before I move the slider, where do you think the curve crosses the x-axis?"
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- at x = 1: y = 2 × 1² - 5 × 1 + 3 = 2 - 5 + 3 = 0"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "VISUAL_SET",
+    "args": {
+      "id": "roots",
+      "control": "x",
+      "value": 0
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE_HIGHLIGHT",
+    "args": {
+      "text": "at x = 0: y = 2 × 0² - 5 × 0 + 3 = 3",
+      "while_speaking": true
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Here, at x = 0, y is 3."
+  },
+  {
+    "kind": "say",
+    "text": "The curve crosses the y-axis there, so this is not a root."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- at x = 1.5: y = 2 × 2.25 - 5 × 1.5 + 3 = 4.5 - 7.5 + 3 = 0"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "VISUAL_SET",
+    "args": {
+      "id": "roots",
+      "control": "x",
+      "value": 1,
+      "while_speaking": true
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Now, here at x = 1, y is 0."
+  },
+  {
+    "kind": "say",
+    "text": "The graph sits right on the x-axis."
+  },
+  {
+    "kind": "action",
+    "name": "VISUAL_SET",
+    "args": {
+      "id": "roots",
+      "control": "x",
+      "value": 1.5,
+      "while_speaking": true
+    }
+  },
+  {
+    "kind": "say",
+    "text": "And here, at x = 1.5, y is also 0."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE_TITLE",
+    "args": {
+      "text": "Roots on the graph"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- roots are where y = 0\n- the graph meets the x-axis at x = 1 and x = 1.5"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "So the roots are 1 and 1.5, the same roots we get by factorising. Takeaway: a root is an x-value where the graph meets the x-axis. Clear so far?"
+  },
+  {
+    "kind": "action",
+    "name": "SECTION",
+    "args": {
+      "title": "NCERT Example 3"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "BOOK",
+    "args": {
+      "page": 42
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Open your book at page 42."
+  },
+  {
+    "kind": "action",
+    "name": "BOOK_EXAMPLE",
+    "args": {
+      "page": 42,
+      "name": "Example 3"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- Example 3: 2x² - 5x + 3 = 0"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "This is Example 3: find the roots of 2x² – 5x + 3 = 0 by factorisation. Try it yourself first, then compare with me. Here is the setup."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE_TITLE",
+    "args": {
+      "text": "Example 3 setup"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- a × c = 2 × 3 = 6, and b = –5\n- two numbers: product 6, sum –5"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Which two numbers multiply to 6 and add to –5? Think about the signs. Yes, –2 and –3. Their product is 6, and their sum is –5."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- split –5x as –2x – 3x"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Now we rewrite the expression, one step at a time."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- 2x² – 2x – 3x + 3"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Group the first two terms and the last two terms."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- 2x(x – 1) – 3(x – 1)"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Take out the common factor x – 1."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- (2x – 3)(x – 1) = 0"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "So either 2x – 3 = 0 or x – 1 = 0. From 2x – 3 = 0, we get x = 3/2. From x – 1 = 0, we get x = 1. Be careful: 2x – 3 = 0 gives 3/2, not 2/3. Now let's check. For x = 1, we work it out in steps."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- 2 × 1² - 5 × 1 + 3 = 2 - 5 + 3 = 0"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "So x = 1 gives 0, as it should. Now x = 3/2."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- 2 × (3/2)² = 2 × 9/4 = 4.5"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "For x = 3/2: 2 times 9/4 is 4.5."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- 5 × 3/2 = 7.5"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Minus 5 times 3/2, which is 7.5."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- 4.5 - 7.5 + 3 = 0"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "That is 4.5 minus 7.5 plus 3, which is 0."
+  },
+  {
+    "kind": "action",
+    "name": "BOOK_ANSWER",
+    "args": {
+      "page": 42,
+      "name": "Example 3",
+      "results": [],
+      "matches": []
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Both roots check out: 1 and 3/2. That matches the book. Did you get the same?"
+  },
+  {
+    "kind": "action",
+    "name": "SECTION",
+    "args": {
+      "title": "Recap"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE",
+    "args": {
+      "n": 6
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Let's bring it together. A root makes the equation zero. To factorise, we find two numbers with product a × c and sum b, split the middle term, group, and factorise. Then we set each factor to zero."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE_TITLE",
+    "args": {
+      "text": "Remember"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- product = a × c, sum = b\n- each factor set to zero gives one root\n- check every root in the original equation"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "The roots are where the graph meets the x-axis."
+  },
+  {
+    "kind": "action",
+    "name": "LOOK_BACK",
+    "args": {
+      "text": "2x² - 3x + 1, with x = 1",
+      "while_speaking": true
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Back to our opening question: x = 1 is a root of 2x² – 3x + 1 = 0, because it gives zero."
+  },
+  {
+    "kind": "action",
+    "name": "SECTION",
+    "args": {
+      "title": "Closing"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "For next class, solve NCERT Example 4 on page 43 yourself, then check your roots. Next class we practise more factorisation and look at the nature of roots. Well done today, Class 10-B. Thank you."
+  }
+]

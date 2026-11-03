@@ -71,7 +71,7 @@ async function route() {
   applySidebar(r);
   renderSidebar();
   main.scrollTop = 0;
-  const ctx = { main, refreshLectures, refreshCourses, setLectureStatus };
+  const ctx = { main, me, refreshLectures, refreshCourses, setLectureStatus };
   if (r.page === "home") {
     await Promise.all([refreshCourses(), refreshLectures()]);
     if (currentRoute().page === "home") renderHome(main, me, courses, lectures);

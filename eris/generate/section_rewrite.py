@@ -52,7 +52,7 @@ def rewrite_section(lecture_id, title, feedback):
     if current is None:
         raise ValueError(f"The current script has no section called \"{title}\" (it may have been renamed in a newer version)")
     manifest = config.load_manifest(lecture_id)
-    model = init_chat_model(f"openrouter:{config.LLM_MODEL}")
+    model = init_chat_model(f"openrouter:{config.LLM_MODEL}", temperature=config.LESSON_TEMPERATURE)  # rewrites teaching
     language = config.lecture_language(manifest)
     messages = [SystemMessage(staging_prompt(manifest["persona"], manifest.get("topic", ""), language)
                               + speaker_rule(language, config.voice_gender(manifest))),

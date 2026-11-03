@@ -99,7 +99,13 @@ def login(body: Login, response: Response):
     if body.role and body.role != user["role"]:
         raise HTTPException(403, f"This is a {user['role']} account. Choose “I'm a {user['role']}” and sign in again.")
     auth.set_cookie(response, auth.new_session(user["id"]))
-    return user
+    return _with_rights(user)
+
+
+def _with_rights(user):
+    """The user for the page, with what the page should offer them (a demo account can't write scripts)."""
+    from eris.platform.seed import can_generate
+    return {**user, "can_generate": can_generate(user)}
 
 
 @router.post("/auth/logout")
@@ -120,7 +126,7 @@ def demo_logins():
 
 @router.get("/auth/me")
 def me(request: Request):
-    return auth.require_user(request)
+    return _with_rights(auth.require_user(request))
 
 
 # ---------- courses ----------
@@ -776,6 +782,13 @@ def post_class(post_id: int, request: Request):
                       user["id"], post_id, post["version_id"])
             played = loads(row["played"], []) if row else []
     version, data = _version_data(post["version_id"])
+    try:  # the book's matches as today's check reads them (a copy locked earlier may have missed a rounded result)
+        from eris.generate.book_checks import mark_answers
+        from eris.material import book
+        lid = data.get("lecture_id") or post["lecture_id"]
+        data = {**data, "segments": mark_answers(data["segments"], book.load(lid))}
+    except Exception:
+        pass
     return {**data, "ready": True, "post": {"id": post_id, "title": post["title"], "due_at": post["due_at"],
                                             "allow_skip": bool(post["allow_skip"]), "kind": post["lesson_kind"],
                                             "topic_title": post["topic_title"]},
@@ -783,9 +796,18 @@ def post_class(post_id: int, request: Request):
             "live_model": config.model_name(config.LLM_MODEL),  # the locked copy's is from when it was shared
             # The slides drawn from the deck as it is now, so a copy locked before they existed shows them too
             "slide_images": slide_images(data.get("lecture_id") or post["lecture_id"]),
+            "book": _book_pages(data.get("lecture_id") or post["lecture_id"]),
             # the tutor for the lesson's voice now (a copy locked before tutors had names still gets the right face)
             "tutor": _tutor_now(data.get("lecture_id") or post["lecture_id"]),
             "durations": _durations(data.get("lecture_id") or post["lecture_id"], data["segments"]), "course": course, "role": role, "progress": progress, "played": played}
+
+
+def _book_pages(lecture_id):
+    from eris.material import book
+    try:
+        return book.player_pages(lecture_id)
+    except Exception:  # a lecture deleted or never indexed since its copy was locked
+        return {}
 
 
 class ProgressIn(BaseModel):

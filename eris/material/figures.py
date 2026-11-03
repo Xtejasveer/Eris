@@ -316,6 +316,8 @@ def describe_environments(env):
     off = [names[k] for k in ("slides", "code") if not env.get(k)]
     vis_on = [p for k, p in (("flows", "diagrams with [FLOW]"), ("graphs", "graphs with [VISUAL]")) if env.get(k)]
     vis_off = [p for k, p in (("flows", "diagrams with [FLOW]"), ("graphs", "graphs with [VISUAL]")) if not env.get(k)]
+    if env.get("book"):
+        on.append("the textbook pages (the [BOOK...] markers, shown in the Slides view)")
     if vis_on:
         on.append(visual(vis_on))
     if vis_off:

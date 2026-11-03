@@ -45,14 +45,23 @@ MARKERS = {
     "FLOW_NEXT": ["id"],                # draw the next block and its arrows
     "FLOW_HIGHLIGHT": ["id", "block"],  # point at a block already drawn
     "OPEN_FLOW": ["id"],                # show the diagram again
+    # The textbook pages (material/book.py), shown in the Slides view; page= is the page number printed in the book:
+    "BOOK": ["page"],                   # show the book page
+    "BOOK_HIGHLIGHT": ["page", "text"], # highlighter over printed words on it
+    "BOOK_UNDERLINE": ["page", "text"], # a pen line under printed words (the given values of a problem)
+    "BOOK_CIRCLE": ["page", "text"],    # a pen circle around printed words
+    "BOOK_EXAMPLE": ["page", "name"],   # zoom to a worked example and cover its printed answer while it is solved
+    "BOOK_ANSWER": ["page", "name"],    # uncover the answer and circle the results that match the notebook
 }
-INT_ARGS = ("n", "s")
+INT_ARGS = ("n", "s", "page")
+BOOK_MARKERS = {"BOOK", "BOOK_HIGHLIGHT", "BOOK_UNDERLINE", "BOOK_CIRCLE", "BOOK_EXAMPLE", "BOOK_ANSWER"}
 # Level 2 sync: these actions may run while the narration right after them is spoken
 # (while_speaking=true). RUN, READ_OUTPUT, PAUSE, DOUBT_CHECK and SECTION must happen in order.
 # DOUBT_CHECK (a question break) is no longer written into new scripts; older approved scripts still have them.
 WHILE_SPEAKING_OK = {"WRITE_CODE", "NOTE", "NOTE_TITLE", "WRITE", "NOTE_HIGHLIGHT", "HIGHLIGHT", "SKETCH_ROW",
                      "SLIDE", "SLIDE_HIGHLIGHT", "SLIDE_CIRCLE", "NEW_PAGE", "OPEN_FILE", "LOOK_BACK",
-                     "VISUAL", "VISUAL_SET", "OPEN_VISUAL", "FLOW", "FLOW_NEXT", "FLOW_HIGHLIGHT", "OPEN_FLOW"}
+                     "VISUAL", "VISUAL_SET", "OPEN_VISUAL", "FLOW", "FLOW_NEXT", "FLOW_HIGHLIGHT", "OPEN_FLOW",
+                     "BOOK", "BOOK_HIGHLIGHT", "BOOK_UNDERLINE", "BOOK_CIRCLE", "BOOK_EXAMPLE"}
 # Markers with a body that runs until [/NAME]. The body is stored in this arg.
 BLOCK_MARKERS = {"WRITE_CODE": "code", "NOTE": "text", "VISUAL": "brief", "FLOW": "steps"}
 

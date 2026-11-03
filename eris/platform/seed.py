@@ -7,6 +7,7 @@ The accounts are demo accounts for local testing only: the sign-in page offers t
 (see .env.example). Turn it off and change or delete them before real users sign in.
 """
 
+import json
 import re
 import shutil
 from pathlib import Path
@@ -25,14 +26,22 @@ BLANK = [("test.teacher@eris.test", "Test Teacher", "teacher"), ("test.student@e
 # matches the teacher the lesson speaks as.
 LESSONS = [
     ("dp_coin_change", "ananya@eris.test", "Dynamic programming", "Coin change", "The coin change problem"),
-    ("globalisation_stats", "rohan@eris.test", "Presenting data", "Line, bar and pie charts", "Globalisation in numbers"),
     # One topic each, taught in depth (templates/demo/<id>: the slides, a worksheet and the teacher's persona).
     ("kadane_max_subarray", "ananya@eris.test", "Arrays", "Maximum subarray", "Kadane's algorithm"),
-    ("india_1991_reforms", "rohan@eris.test", "Globalisation", "India's 1991 reforms", "India's 1991 reforms: how opening up changed trade"),
     ("projectile_motion", "kavita@eris.test", "Motion in a plane", "Projectile motion", "Projectile motion: why 45° goes farthest"),
+    # The same topic taught from the NCERT book pages and the slides, with a program, a diagram and a graph.
+    ("projectile_book_demo", "meera@eris.test", "Motion in a plane", "Projectile motion", "Projectile motion from the NCERT book"),
+    # One 10-minute lesson per subject, each with its own teacher: the NCERT chapter in book/ (Python has none), slides
+    # made for the topic, and for Python the programs in its notes.
+    ("history_french_society", "anjali@eris.test", "The French Revolution", "French society in the late 18th century",
+     "French society before the Revolution"),
+    ("maths_quadratic_factorisation", "arjun@eris.test", "Quadratic Equations", "Solution by factorisation",
+     "Solving quadratic equations by factorisation"),
+    ("chemistry_carbonyl_properties", "farah@eris.test", "Aldehydes, Ketones and Carboxylic Acids",
+     "Physical properties of aldehydes and ketones", "Physical properties of aldehydes and ketones"),
+    ("python_while_loop", "vikram@eris.test", "Loops in Python", "The while loop", "The while loop in Python"),
     # Their prerequisites: the groundwork to watch first, in the same topic.
     ("kadane_prereq_arrays", "ananya@eris.test", "Arrays", "Maximum subarray", "Arrays, subarrays and running sums", "prerequisite"),
-    ("india_1991_prereq_basics", "rohan@eris.test", "Globalisation", "India's 1991 reforms", "GDP, trade and exchange rates", "prerequisite"),
     ("projectile_prereq_vectors", "kavita@eris.test", "Motion in a plane", "Projectile motion", "Vectors, sine and cosine", "prerequisite"),
 ]
 DEMO_DIR = Path("templates/demo")
@@ -40,18 +49,41 @@ DEMO_DIR = Path("templates/demo")
 # prerequisite 10, 4 of them spoken.
 DEMO_TOPICS = {
     "kadane_max_subarray": ("Kadane's algorithm: the maximum subarray sum", "en-IN"),
-    "india_1991_reforms": ("India's 1991 reforms: how opening up changed trade", "en-IN"),
     "projectile_motion": ("Projectile motion: why a 45 degree throw goes farthest", "en-IN"),
+    "projectile_book_demo": ("Projectile motion: NCERT Example 3.8, a program and the range-angle graph", "en-IN"),
+    "history_french_society": ("French society before the Revolution: the three estates, taxes and the subsistence crisis", "en-IN"),
+    "maths_quadratic_factorisation": ("Solving quadratic equations by factorisation", "en-IN"),
+    "chemistry_carbonyl_properties": ("Physical properties of aldehydes and ketones", "en-IN"),
+    "python_while_loop": ("The while loop in Python", "en-IN"),
     "kadane_prereq_arrays": ("Arrays, subarrays and running sums", "en-IN"),
-    "india_1991_prereq_basics": ("GDP, trade and exchange rates", "en-IN"),
     "projectile_prereq_vectors": ("Vectors, sine and cosine", "en-IN"),
+}
+# Demo lectures taught from textbook pages (material/book.py): the printed pages in their book/ folder, and where the
+# theory and the numericals come from.
+DEMO_BOOKS = {
+    "projectile_book_demo": {"book": {"first": 38, "last": 40}, "focus": {"theory": "both", "numericals": "book"}},
+    "history_french_society": {"book": {"first": 4, "last": 5}, "focus": {"theory": "both", "numericals": "both"}},
+    "maths_quadratic_factorisation": {"book": {"first": 42, "last": 42}, "focus": {"theory": "both", "numericals": "book"}},
+    "chemistry_carbonyl_properties": {"book": {"first": 235, "last": 235}, "focus": {"theory": "both", "numericals": "book"}},
 }
 MATERIAL_TYPES = {".pptx": "Slides", ".pdf": "Notes", ".docx": "Notes", ".txt": "Notes", ".md": "Notes"}
 
 
+def demo_emails():
+    """Every demo account: the demo lessons' teachers and the demo students."""
+    return {e for _, e, *_ in LESSONS} | {e for e, _ in STUDENTS}
+
+
+def can_generate(user):
+    """False for a demo account on the website (config.DEMO_CAN_GENERATE): it may look, teach and edit, not write scripts."""
+    return config.DEMO_CAN_GENERATE or (user or {}).get("email") not in demo_emails()
+
+
 def demo_accounts():
-    """Rohan Mehta and Kabir Singh, when seeded, for the demo page's one-click sign-in buttons."""
-    emails = ("rohan@eris.test", "kabir@eris.test")
+    """The teachers with a ready lesson (physics, history, maths, chemistry, Python) and Kabir Singh, when seeded, for
+    the demo page's one-click sign-in buttons."""
+    emails = ("meera@eris.test", "anjali@eris.test", "arjun@eris.test", "farah@eris.test",
+              "vikram@eris.test", "kabir@eris.test")
     with connect() as conn:
         rows = [one(conn, "SELECT u.email, u.name, u.role, (SELECT subject FROM courses c WHERE c.teacher_id = u.id "
                           "ORDER BY c.id LIMIT 1) AS subject FROM users u WHERE u.email = ?", e) for e in emails]
@@ -97,20 +129,70 @@ def _post_material(conn, course_id, topic_id, lecture_id, title, body):
                      (post_id, f.name, str(folder / f.name), f.stat().st_size))
 
 
+# A demo lesson's approved script, saved with its template (templates/demo/<id>/generated/) by `python main.py
+# demo-snapshot`, so a fresh install gets ready lessons without generating them. The voice clips are left out (they
+# are large and are made again when the lesson is shared), and so are the slide and book pictures (drawn on demand).
+SNAPSHOT = "generated"
+SNAPSHOT_FILES = ("script.md", "script.json", "lesson.md", "lecture.json", "judge.json", "figures.json", "images.json",
+                  "outline.json")
+SNAPSHOT_DIRS = ("images", "visuals")
+
+
+def snapshot(lecture_ids=None):
+    """Save each demo lesson's approved script from workspace/ into its template. Returns the lectures saved."""
+    saved = []
+    for lecture_id in lecture_ids or DEMO_TOPICS:
+        src = config.lecture_dir(lecture_id)
+        manifest = config.load_manifest(lecture_id) if config.manifest_path(lecture_id).exists() else {}
+        if manifest.get("status") not in ("approved", "completed") or not (src / "script.json").exists():
+            continue
+        out = DEMO_DIR / lecture_id / SNAPSHOT
+        if out.exists():
+            shutil.rmtree(out)
+        out.mkdir(parents=True)
+        for name in SNAPSHOT_FILES:
+            if (src / name).exists():
+                shutil.copy(src / name, out / name)
+        for name in SNAPSHOT_DIRS:
+            if (src / name).is_dir():
+                shutil.copytree(src / name, out / name)
+        lecture = json.loads((out / "lecture.json").read_text(encoding="utf-8"))
+        lecture.pop("owner_id", None)  # the seed gives it to its demo teacher on the new install
+        lecture["status"] = "approved"
+        (out / "lecture.json").write_text(json.dumps(lecture, indent=2, ensure_ascii=False), encoding="utf-8")
+        saved.append(lecture_id)
+    return saved
+
+
+def _install_snapshot(lecture_id):
+    """Put a demo lesson's saved script in place (once: a lesson with a script of its own keeps it). True if done."""
+    saved = DEMO_DIR / lecture_id / SNAPSHOT
+    out = config.lecture_dir(lecture_id)
+    if not (saved / "script.json").exists() or (out / "script.json").exists():
+        return False
+    shutil.copytree(saved, out, dirs_exist_ok=True)
+    return True
+
+
 def _install_demo(lecture_id, kind, platform_topic):
-    """A demo topic becomes a lecture ready to generate: its material and persona in data/, its lecture.json. A
-    prerequisite is generated as one for its platform topic (see prompts.prerequisite_rule)."""
+    """A demo topic becomes a lecture: its material and persona in data/, and its saved approved script when it has
+    one (else a lecture.json ready to generate). A prerequisite is generated as one for its platform topic (see
+    prompts.prerequisite_rule)."""
     if lecture_id not in DEMO_TOPICS or not (DEMO_DIR / lecture_id).is_dir():
         return
     folder = config.data_dir(lecture_id)
     if not folder.exists():
-        shutil.copytree(DEMO_DIR / lecture_id, folder)
+        shutil.copytree(DEMO_DIR / lecture_id, folder, ignore=shutil.ignore_patterns(SNAPSHOT))
+    if _install_snapshot(lecture_id):
+        print(f"[seed] {lecture_id}: installed its approved script")
+        return
     if not config.manifest_path(lecture_id).exists():
         topic, language = DEMO_TOPICS[lecture_id]
         config.lecture_dir(lecture_id)
         pre = kind == "prerequisite"
         config.save_manifest(lecture_id, {"lecture_id": lecture_id, "topic": topic, "duration_min": 10 if pre else 15,
                                           "speaking_min": 4 if pre else 5, "language": language, "status": "new", "kind": kind,
+                                          **DEMO_BOOKS.get(lecture_id, {}),
                                           **({"prerequisite_for": platform_topic} if pre else {})})
 
 

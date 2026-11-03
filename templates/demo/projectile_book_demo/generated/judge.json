@@ -1,0 +1,402 @@
+{
+  "model": "typesafe/jev-1.13",
+  "findings": [
+    {
+      "check": "covers_must_cover",
+      "section": null,
+      "value": 0.22,
+      "passed": false,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "Teach every item in the persona's Must cover list.",
+      "evidence": "Must cover: Horizontal and vertical motion are independent; ux = u cos theta and uy = u sin theta; h = uy^2 / 2g, T = 2 uy / g, R = u^2 sin 2theta / g; NCERT Example 3.8 (28 m/s at 30 degrees: 10.0 m, 2.9 s, 69 m); a program that prints the same three answers; the range-angle graph with 45 degrees giving the maximum range. Taught least (check these first): ux = u cos theta and uy = u sin theta; h = uy^2 / 2g, T = 2 uy / g, R = u^2 sin 2theta / g.",
+      "stage": "lesson"
+    },
+    {
+      "check": "respects_avoid",
+      "section": null,
+      "value": 0.91,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "Remove everything the persona lists under Avoid.",
+      "stage": "lesson"
+    },
+    {
+      "check": "opening_absence",
+      "section": null,
+      "value": 0.93,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In the Opening, say why the teacher is absent and give the teacher's message to the class.",
+      "stage": "lesson"
+    },
+    {
+      "check": "closing_next_class",
+      "section": null,
+      "value": 0.93,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "End with the next class topic and what to prepare.",
+      "stage": "lesson"
+    },
+    {
+      "check": "sounds_like_teacher",
+      "section": null,
+      "value": 0.85,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "Make the narration follow the persona's tone, pace, language and habits.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Opening",
+      "value": 0.81,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Opening\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "What a projectile is",
+      "value": 0.77,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"What a projectile is\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "What a projectile is",
+      "value": 0.74,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"What a projectile is\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "What a projectile is",
+      "value": 0.6,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"What a projectile is\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Two motions at the same time: horizontal and vertical are independent",
+      "value": 0.73,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Two motions at the same time: horizontal and vertical are independent\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "Two motions at the same time: horizontal and vertical are independent",
+      "value": 0.79,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Two motions at the same time: horizontal and vertical are independent\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "Two motions at the same time: horizontal and vertical are independent",
+      "value": 0.69,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Two motions at the same time: horizontal and vertical are independent\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Splitting the launch speed: ux = u cos θ and uy = u sin θ",
+      "value": 0.74,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Splitting the launch speed: ux = u cos θ and uy = u sin θ\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "Splitting the launch speed: ux = u cos θ and uy = u sin θ",
+      "value": 0.8,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Splitting the launch speed: ux = u cos θ and uy = u sin θ\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "Splitting the launch speed: ux = u cos θ and uy = u sin θ",
+      "value": 0.74,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Splitting the launch speed: ux = u cos θ and uy = u sin θ\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Formulas for height, time and range",
+      "value": 0.72,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Formulas for height, time and range\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "Formulas for height, time and range",
+      "value": 0.82,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Formulas for height, time and range\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "Formulas for height, time and range",
+      "value": 0.69,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Formulas for height, time and range\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "notes_match_code",
+      "section": "NCERT Example 3.8",
+      "value": 0.9,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "In section \"NCERT Example 3.8\", make every notebook example and trace match the program and its real output exactly.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_matches_output",
+      "section": "NCERT Example 3.8",
+      "value": 0.98,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "In section \"NCERT Example 3.8\", describe the program output exactly as it really prints.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "NCERT Example 3.8",
+      "value": 0.77,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"NCERT Example 3.8\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "NCERT Example 3.8",
+      "value": 0.76,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"NCERT Example 3.8\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "NCERT Example 3.8",
+      "value": 0.71,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"NCERT Example 3.8\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "has_worked_example",
+      "section": "NCERT Example 3.8",
+      "value": 0.98,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "Add a small worked example with real numbers to section \"NCERT Example 3.8\".",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "The range-angle graph",
+      "value": 0.81,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"The range-angle graph\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "The range-angle graph",
+      "value": 0.73,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"The range-angle graph\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "The range-angle graph",
+      "value": 0.71,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"The range-angle graph\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Why 45 degrees gives the maximum range",
+      "value": 0.7,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Why 45 degrees gives the maximum range\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "Why 45 degrees gives the maximum range",
+      "value": 0.88,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Why 45 degrees gives the maximum range\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "Why 45 degrees gives the maximum range",
+      "value": 0.69,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Why 45 degrees gives the maximum range\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Recap",
+      "value": 0.85,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Recap\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Closing",
+      "value": 0.84,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Closing\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "What a projectile is",
+      "value": 0.97,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"What a projectile is\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    },
+    {
+      "check": "flow_matches_material",
+      "section": "Formulas for height, time and range",
+      "value": 0.42,
+      "passed": false,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Formulas for height, time and range\", make the diagram follow the steps from the material, in the same order.",
+      "evidence": "How to solve any projectile problem blocks: Write down what is given: u, θ and g -> Split u into ux and uy -> Maximum height: h = uy² / 2g -> Time of flight: T = 2 uy / g -> Range: R = u² sin 2θ / g -> Check the answer against the book; the material's steps: steps: Write down what is given: launch speed u, angle theta, and g = 9.8 m/s^2. -> Split the launch speed: ux = u cos theta (horizontal), uy = u sin theta (vertical). -> Maximum height: h = uy^2 / (…",
+      "stage": "staging"
+    },
+    {
+      "check": "graph_matches_text",
+      "section": "The range-angle graph",
+      "value": 0.96,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "In section \"The range-angle graph\", make the [VISUAL] plot what the lesson teaches. Set each [VISUAL_SET] to the value that the next sentence is about. Move a [VISUAL_SET] if it is before the wrong sentence. Do not change the sentences.",
+      "stage": "staging"
+    },
+    {
+      "check": "graph_matches_material",
+      "section": "The range-angle graph",
+      "value": 0.92,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"The range-angle graph\", make the [VISUAL] recreate the graph from the material: same quantity, axes and kind of graph, with a slider for the value worth exploring.",
+      "stage": "staging"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "Why 45 degrees gives the maximum range",
+      "value": 0.9,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Why 45 degrees gives the maximum range\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    }
+  ],
+  "pairs": [],
+  "cost": 0.00258,
+  "error": "",
+  "unflagged": 0,
+  "score": 0.77,
+  "blockers": 1,
+  "failed_minor": 1,
+  "rounds": [
+    {
+      "kind": "lesson",
+      "problems": 7
+    },
+    {
+      "kind": "lesson",
+      "problems": 6
+    },
+    {
+      "kind": "rules",
+      "problems": 1
+    }
+  ],
+  "advice": [],
+  "auto_fixes": [
+    "removed or moved 2 sketch row(s) to the sentence that explains them"
+  ]
+}

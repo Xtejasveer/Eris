@@ -1,0 +1,171 @@
+{
+  "lecture_id": "python_while_loop",
+  "topic": "The while loop in Python",
+  "duration_min": 17,
+  "speaking_min": 5,
+  "language": "en-IN",
+  "status": "approved",
+  "kind": "lecture",
+  "voice": "Kaveri",
+  "collection": "python_while_loop",
+  "approved_at": "2026-11-04T02:57:59",
+  "persona": {
+    "Teacher": {
+      "Name": "Mr. Vikram Nair",
+      "Subject": "Computer Science (Python)",
+      "Class": "Class 11 Computer Science"
+    },
+    "Absence Note": {
+      "Reason": "I am at a coding teachers' training day today.",
+      "Message to class": "Type each program yourself after the class and change the numbers to see what happens."
+    },
+    "Teaching Style": {
+      "Tone": "Friendly and hands-on; treats every program like a small experiment",
+      "Pace": "Moderate; traces every program line by line before running it",
+      "Language": "Simple, clear English; explains each term (condition, body, update, infinite loop) once in everyday words",
+      "Habits": "Asks the class to predict the output before running a program; traces the variables in a small table"
+    },
+    "Lecture Structure": {
+      "Order": "Why loops are needed and how to write a while loop, how a while loop runs step by step, the countdown and adding 1 to 10 programs, infinite loops",
+      "Must cover": "The syntax of a while loop with its indented body; the condition is checked before every pass; the update step; the countdown program (5 to 1, then Lift off!); adding 1 to 10 gives 55; why a missing update gives an infinite loop",
+      "Avoid": "for loops and range(); break and continue; reading input with input()"
+    },
+    "Next Class": {
+      "Topic": "The for loop and range()",
+      "Prep": "Change the countdown program to count down from 10"
+    }
+  },
+  "environments": {
+    "notebook": true,
+    "slides": true,
+    "code": true,
+    "flows": true,
+    "graphs": false,
+    "book": false
+  },
+  "created_at": "2026-11-04T02:55:57",
+  "script_md": "script.md",
+  "script_json": "script.json",
+  "estimated_min": 11.7,
+  "word_budget": 1104,
+  "depth": {
+    "speaking_min": 9.6,
+    "too_long": false,
+    "rule": {
+      "brief_below": 2.0,
+      "in_depth_at": 3.5,
+      "depth_min": {
+        "brief": 0.6,
+        "normal": 1.2,
+        "in depth": 2.2
+      },
+      "framing_min": {
+        "Opening": 0.6,
+        "Recap": 0.5,
+        "Closing": 0.3
+      },
+      "max_speaking_min": 30
+    },
+    "parts": [
+      {
+        "title": "Syntax of a while loop with its indented body",
+        "depth": "normal",
+        "slides": [
+          2
+        ],
+        "score": 1.64,
+        "minutes": 1.2,
+        "must_cover": true,
+        "main": false,
+        "why": [
+          "builds on another part"
+        ]
+      },
+      {
+        "title": "The condition is checked before every pass",
+        "depth": "in depth",
+        "slides": [
+          3
+        ],
+        "score": 2.23,
+        "minutes": 2.2,
+        "must_cover": true,
+        "main": true,
+        "why": [
+          "steps or stages",
+          "builds on another part",
+          "the lesson's main idea"
+        ]
+      },
+      {
+        "title": "The update step",
+        "depth": "normal",
+        "slides": [
+          3
+        ],
+        "score": 2.61,
+        "minutes": 1.2,
+        "must_cover": true,
+        "main": false,
+        "why": [
+          "steps or stages",
+          "builds on another part"
+        ]
+      },
+      {
+        "title": "Countdown program (5 to 1, then Lift off!)",
+        "depth": "normal",
+        "slides": [
+          4
+        ],
+        "score": 2.92,
+        "minutes": 1.2,
+        "must_cover": true,
+        "main": false,
+        "why": [
+          "a specific case",
+          "steps or stages",
+          "builds on another part"
+        ]
+      },
+      {
+        "title": "Adding 1 to 10 gives 55",
+        "depth": "normal",
+        "slides": [
+          5
+        ],
+        "score": 2.74,
+        "minutes": 1.2,
+        "must_cover": true,
+        "main": false,
+        "why": [
+          "a specific case",
+          "steps or stages",
+          "builds on another part"
+        ]
+      },
+      {
+        "title": "Why a missing update gives an infinite loop",
+        "depth": "normal",
+        "slides": [
+          6
+        ],
+        "score": 2.95,
+        "minutes": 1.2,
+        "must_cover": true,
+        "main": false,
+        "why": [
+          "a specific case",
+          "builds on another part",
+          "a task for students"
+        ]
+      }
+    ]
+  },
+  "llm_model": "anthropic/claude-haiku-5.5",
+  "judge": {
+    "score": 0.88,
+    "blockers": 0,
+    "failed_minor": 0
+  }
+}

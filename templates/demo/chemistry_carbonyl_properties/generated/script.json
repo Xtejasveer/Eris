@@ -1,0 +1,620 @@
+[
+  {
+    "kind": "action",
+    "name": "SECTION",
+    "args": {
+      "title": "Opening"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Dr. Farah Khan is at a chemistry teachers' conference today, so I am taking this class. She asked me to pass on a message: keep your NCERT Chemistry book open at page 235, and before each answer, try to rank the boiling points yourself."
+  },
+  {
+    "kind": "say",
+    "text": "Today we study the physical properties of aldehydes and ketones. Keep one question in mind: what holds these molecules together, and how hard is it to pull them apart? That question decides almost everything today."
+  },
+  {
+    "kind": "action",
+    "name": "SECTION",
+    "args": {
+      "title": "Structures and the carbonyl group"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Let's begin with the shape of these molecules. Every label on a spice jar has a common part, and here that common part is the key."
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE",
+    "args": {
+      "n": 2
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Here are four structures from page 230 of your book. Look at the pink part in each one."
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE_CIRCLE",
+    "args": {
+      "n": 2,
+      "while_speaking": true
+    }
+  },
+  {
+    "kind": "say",
+    "text": "That is the carbonyl group, C=O: one carbon joined to one oxygen by a double bond."
+  },
+  {
+    "kind": "say",
+    "text": "Now notice where it sits."
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE_CIRCLE",
+    "args": {
+      "n": 2,
+      "part": "aldehyde C=O (CHO) at chain end",
+      "while_speaking": true
+    }
+  },
+  {
+    "kind": "say",
+    "text": "In an aldehyde, the C=O is at the end of the chain, written as -CHO, so the carbon also carries a hydrogen."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE_TITLE",
+    "args": {
+      "text": "Carbonyl group"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- C=O is in both families\n- aldehyde: C=O at the end of the chain, as -CHO\n- ketone: C=O inside the chain, carbon on both sides"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Here is the rule in short."
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE",
+    "args": {
+      "n": 2
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Take 2,4-dimethylpentan-3-one. Find the pink C=O. Is it at the end of the chain? No, it sits inside, with carbon on both sides. So it is a ketone. Where the C=O sits tells you the family. Clear so far?"
+  },
+  {
+    "kind": "action",
+    "name": "SECTION",
+    "args": {
+      "title": "States at room temperature"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "A quick one."
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE",
+    "args": {
+      "n": 3
+    }
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE_HIGHLIGHT",
+    "args": {
+      "n": 3,
+      "text": "Methanal (HCHO) is a gas.",
+      "while_speaking": true
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Methanal, the smallest aldehyde, is a gas at room temperature."
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE_HIGHLIGHT",
+    "args": {
+      "n": 3,
+      "text": "Ethanal (CH3CHO) is a volatile liquid.",
+      "while_speaking": true
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Ethanal is a volatile liquid, which means it evaporates easily."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE_TITLE",
+    "args": {
+      "text": "States at room temperature"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- methanal (HCHO): gas\n- ethanal (CH3CHO): volatile liquid\n- other aldehydes and ketones: liquid or solid"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Here is the summary. The smallest one is a gas, and the rest are liquids or solids. Make sense?"
+  },
+  {
+    "kind": "action",
+    "name": "SECTION",
+    "args": {
+      "title": "Boiling points: between hydrocarbons and alcohols"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE",
+    "args": {
+      "n": 4
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Before any numbers, ask which force holds the molecules together. The boiling point tells us how much heat it takes to pull molecules apart. The stronger the grip, the higher the boiling point. Start with the lowest group. Hydrocarbons and ethers have only van der Waals forces, the weak pulls every molecule has on its neighbours."
+  },
+  {
+    "kind": "action",
+    "name": "SKETCH_ROW",
+    "args": {
+      "items": "box:Hydrocarbons and ethers | result:Lowest boiling point",
+      "parts": [
+        {
+          "kind": "box",
+          "text": "Hydrocarbons and ethers"
+        },
+        {
+          "kind": "arrow",
+          "text": ""
+        },
+        {
+          "kind": "result",
+          "text": "Lowest boiling point"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "say",
+    "text": "So they boil lowest. That is row one, the weakest grip."
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE",
+    "args": {
+      "n": 4
+    }
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE_HIGHLIGHT",
+    "args": {
+      "n": 4,
+      "text": "Higher than hydrocarbons and ethers of similar molecular mass: the polar C=O group gives dipole-dipole attraction.",
+      "while_speaking": true
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Next, aldehydes and ketones have a C=O group."
+  },
+  {
+    "kind": "say",
+    "text": "Oxygen pulls the shared electrons toward itself, so one end of the molecule is slightly positive and the other slightly negative. That small difference is called a dipole. Neighbouring molecules pull on each other through their dipoles. That is dipole-dipole attraction, which is stronger than van der Waals forces."
+  },
+  {
+    "kind": "action",
+    "name": "SKETCH_ROW",
+    "args": {
+      "items": "box:Aldehydes and ketones | result:Middle: dipole-dipole pull",
+      "parts": [
+        {
+          "kind": "box",
+          "text": "Aldehydes and ketones"
+        },
+        {
+          "kind": "arrow",
+          "text": ""
+        },
+        {
+          "kind": "result",
+          "text": "Middle: dipole-dipole pull"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Row two sits in the middle."
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE",
+    "args": {
+      "n": 4
+    }
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE_HIGHLIGHT",
+    "args": {
+      "n": 4,
+      "text": "Lower than alcohols of similar molecular mass: aldehydes and ketones cannot hydrogen bond with each other.",
+      "while_speaking": true
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Now alcohols. They have an O-H, so the hydrogen on one molecule is pulled strongly toward the oxygen of another."
+  },
+  {
+    "kind": "say",
+    "text": "That strong pull is a hydrogen bond. An aldehyde or ketone has no O-H, so it cannot hydrogen bond with its own kind."
+  },
+  {
+    "kind": "action",
+    "name": "SKETCH_ROW",
+    "args": {
+      "items": "box:Alcohols | result:Highest: hydrogen bonds",
+      "parts": [
+        {
+          "kind": "box",
+          "text": "Alcohols"
+        },
+        {
+          "kind": "arrow",
+          "text": ""
+        },
+        {
+          "kind": "result",
+          "text": "Highest: hydrogen bonds"
+        }
+      ]
+    }
+  },
+  {
+    "kind": "say",
+    "text": "That is why alcohols boil highest. Row three is the strongest grip. Predict first: of propanal and propan-1-ol, which boils higher?"
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE",
+    "args": {
+      "n": 5
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Here is the chart of five boiling points. Look at the bars rising from n-butane at 273 K to propan-1-ol at 370 K. A column chart fits, because we compare five compounds side by side. Let's take the pair propanal and propan-1-ol."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE_TITLE",
+    "args": {
+      "text": "Propanal vs propan-1-ol"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- both have molecular mass 58 or 60\n- propanal: dipole-dipole pull, 322 K\n- propan-1-ol: hydrogen bonds, 370 K"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "They are about the same size, but propan-1-ol has hydrogen bonds. Now the gap."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- 370 - 322 = 48"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "370 minus 322 gives 48. So propan-1-ol boils 48 K higher, and the force decided it, not the size. Takeaway: aldehydes and ketones sit in the middle, above hydrocarbons and ethers and below alcohols of similar mass. Why is propan-1-ol higher? Think about the force."
+  },
+  {
+    "kind": "action",
+    "name": "SECTION",
+    "args": {
+      "title": "Solubility in water"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Why does sugar dissolve in water but oil does not? Water mixes best with molecules that can hold on to it."
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE",
+    "args": {
+      "n": 6
+    }
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE_HIGHLIGHT",
+    "args": {
+      "n": 6,
+      "text": "Methanal, ethanal and propanone mix with water in all proportions: they form hydrogen bonds with water.",
+      "while_speaking": true
+    }
+  },
+  {
+    "kind": "say",
+    "text": "The small aldehydes and ketones have an oxygen in their C=O, and that oxygen can form hydrogen bonds with water."
+  },
+  {
+    "kind": "say",
+    "text": "Take propanone, also called acetone. It mixes with water in any proportion."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE_TITLE",
+    "args": {
+      "text": "Solubility in water"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- methanal, ethanal and propanone: mix with water in all proportions\n- reason: they form hydrogen bonds with water\n- longer alkyl chain: solubility falls rapidly"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Each of these small molecules mixes freely. As the alkyl chain gets longer, solubility falls quickly. All of them are fairly soluble in organic solvents such as benzene, ether, methanol and chloroform. Takeaway: small molecules dissolve in water, long ones do not. Clear?"
+  },
+  {
+    "kind": "action",
+    "name": "SECTION",
+    "args": {
+      "title": "Odour"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Now the nose. Think of a smell so sharp it makes you step back."
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE",
+    "args": {
+      "n": 6
+    }
+  },
+  {
+    "kind": "action",
+    "name": "SLIDE_HIGHLIGHT",
+    "args": {
+      "n": 6,
+      "text": "Lower aldehydes smell sharp and pungent; bigger molecules smell more fragrant, so many are used in perfumes and flavours.",
+      "while_speaking": true
+    }
+  },
+  {
+    "kind": "say",
+    "text": "The lower aldehydes, such as methanal and ethanal, have sharp, pungent odours."
+  },
+  {
+    "kind": "say",
+    "text": "As the molecule gets bigger, the smell becomes less pungent and more fragrant. That is why many naturally occurring aldehydes and ketones are blended into perfumes and flavouring agents."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE_TITLE",
+    "args": {
+      "text": "Odour"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- lower aldehydes: sharp, pungent\n- bigger molecules: less pungent, more fragrant\n- used in perfumes and flavouring agents"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Take methanal, the smallest, and compare it with a larger molecule from a perfume. The first hits your nose hard, while the second makes you want to smell it again. Takeaway: size changes the smell, from sharp to fragrant. Make sense?"
+  },
+  {
+    "kind": "action",
+    "name": "SECTION",
+    "args": {
+      "title": "NCERT Example 8.2"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "BOOK",
+    "args": {
+      "page": 235
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Open your book at page 235."
+  },
+  {
+    "kind": "action",
+    "name": "BOOK_EXAMPLE",
+    "args": {
+      "page": 235,
+      "name": "Example 8.2"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Example 8.2 asks us to arrange four compounds in increasing order of their boiling points. Let's read them together."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE_TITLE",
+    "args": {
+      "text": "Example 8.2"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- CH3CH2CH2CHO\n- CH3CH2CH2CH2OH\n- H5C2-O-C2H5\n- CH3CH2CH2CH3"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Here are the four compounds. Before I show the method, rank them yourself. Ask first: which force holds each one together? Hold your answer."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE_TITLE",
+    "args": {
+      "text": "Ranking method"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- check that the molecular masses are similar\n- find the molecules that hydrogen bond with each other: highest\n- compare polarity: more polar means stronger dipole-dipole attraction\n- only van der Waals forces: lowest\n- write the order from lowest to highest"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Here is the five-step method. Step one is a check on size. The molecular masses of these four compounds are in the range 72 to 74. They are almost equal, so size cannot decide the order. The force will. Step two is hydrogen bonding. Only the butan-1-ol molecules are joined by extensive hydrogen bonds, because it has an O-H group. So butan-1-ol boils highest, and it goes at the top of our list."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE_TITLE",
+    "args": {
+      "text": "Step two"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- CH3CH2CH2CH2OH: extensive hydrogen bonding, highest"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Step three is polarity. Butanal, CH3CH2CH2CHO, is more polar than ethoxyethane, H5C2-O-C2H5. Its C=O gives a stronger dipole-dipole attraction, so butanal boils above ethoxyethane."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE_TITLE",
+    "args": {
+      "text": "Step three"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- butanal: stronger dipole-dipole attraction than ethoxyethane"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Step four: n-pentane, CH3CH2CH2CH3, has only weak van der Waals forces. Nothing else holds its molecules together, so it boils lowest. Step five: put all four in order, from lowest to highest. Here is the result."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE_TITLE",
+    "args": {
+      "text": "Result"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- CH3CH2CH2CH3 < H5C2-O-C2H5 < CH3CH2CH2CHO < CH3CH2CH2CH2OH"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Check your own ranking against this line. Did you place the hydrocarbon at the bottom and the alcohol at the top? Quick question: why does size not change the order here?"
+  },
+  {
+    "kind": "action",
+    "name": "BOOK_ANSWER",
+    "args": {
+      "page": 235,
+      "name": "Example 8.2",
+      "results": [],
+      "matches": []
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Our order matches the book's answer on page 235."
+  },
+  {
+    "kind": "action",
+    "name": "SECTION",
+    "args": {
+      "title": "Recap"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Let's go back to our question: what holds these molecules together? Here is the summary."
+  },
+  {
+    "kind": "action",
+    "name": "NOTE_TITLE",
+    "args": {
+      "text": "Key points"
+    }
+  },
+  {
+    "kind": "action",
+    "name": "NOTE",
+    "args": {
+      "text": "- C=O: aldehyde at chain end, ketone inside\n- boiling: hydrocarbons and ethers < aldehydes and ketones < alcohols\n- dipole-dipole raises it; hydrogen bonding raises it most\n- small ones dissolve in water; long ones do not"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "The C=O group decides the family, and the force between molecules decides the boiling point. Hydrocarbons and ethers are lowest, aldehydes and ketones sit in the middle, and alcohols are highest. Small ones dissolve in water, while long ones do not. Clear?"
+  },
+  {
+    "kind": "action",
+    "name": "SECTION",
+    "args": {
+      "title": "Closing"
+    }
+  },
+  {
+    "kind": "say",
+    "text": "Next class we study nucleophilic addition reactions of aldehydes and ketones. Please read section 8.4 of your NCERT book before then. Keep page 235 handy. Which force will you check first?"
+  }
+]

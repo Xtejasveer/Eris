@@ -194,7 +194,16 @@ def run_index(lecture_id, reset=True, topic=None, duration_min=None, speaking_mi
     speaking_min = speaking_min or manifest.get("speaking_min") or config.default_speaking_min(duration_min)
     persona = load_persona_or_exit(folder / "persona.md")
     docs, outline = load_folder(folder)
-    if not any(entry["type"] in MAIN_TYPES for entry in outline):
+    # The textbook pages the teacher chose (data/<id>/book/, material/book.py): read like any other material.
+    from eris.material.book import documents as book_documents
+    pages, book_entry = book_documents(lecture_id, manifest)
+    for d in pages:
+        d.metadata["order"] = len(docs)
+        docs.append(d)
+    if book_entry:
+        outline.append(book_entry)
+        print(f"[index] loaded {book_entry['source']} pages {book_entry['pages']}: {len(pages)} page(s)")
+    if not book_entry and not any(entry["type"] in MAIN_TYPES for entry in outline):
         print(f"[index] No PPTX, PDF or DOCX files in {folder}. Add teaching material first.")
         sys.exit(1)
 
@@ -251,6 +260,7 @@ def run_index(lecture_id, reset=True, topic=None, duration_min=None, speaking_mi
           f"{sum(f['kind'] == 'picture' for f in figures)} other picture(s) in the material")
     from eris.material.figures import environments
     envs = environments(docs, figures, chunks)  # which class environments this material allows
+    envs["book"] = bool(book_entry)  # the textbook pages, shown in the Slides view
     print(f"[index] environments: {', '.join(k for k, v in envs.items() if v)}")
     (out_dir / "outline.json").write_text(json.dumps(outline, indent=2, ensure_ascii=False), encoding="utf-8")
 

@@ -14,8 +14,8 @@ from eris.generate.format_fixes import fix_format, strip_typed_output
 from eris.generate.script_checks import clean_cosmetic, format_problems, teaching_problems
 from eris.generate.script_fixes import (add_sync_flags, drop_bad_staging, drop_bad_visuals,
                           complete_flows, drop_markers, drop_visual, fix_flow_order,
-                          drop_empty_circles, drop_unnamed_parts, place_calc_steps, show_picture_slides,
-                          tidy_sketches, tidy_staging)
+                          drop_empty_circles, drop_unnamed_parts, open_examples_first, place_calc_steps, reopen_graphs, reopen_same_code,
+                          shorten_flow_labels, show_picture_slides, tidy_sketches, tidy_staging)
 from eris.generate.script_parser import parse_script
 
 RULES_FEEDBACK = ("Your script breaks these rules. Fix every one of them, keep everything else the same, "
@@ -64,6 +64,9 @@ class ScriptPipeline:
         text, cleaned = clean_cosmetic(text)
         if cleaned:
             print(f"[generate] cleanup: removed markdown symbols from {cleaned} line(s)")
+        text, shortened = shorten_flow_labels(text)  # a long step label would fail the whole diagram
+        if shortened:
+            print(f"[generate] cleanup: shortened {shortened} diagram label(s) to fit the board")
         # No question breaks: students ask whenever they like, by holding Space. One the model still writes goes.
         text, breaks = drop_markers(text, {"DOUBT_CHECK"})
         if breaks:
@@ -133,6 +136,11 @@ class ScriptPipeline:
             text, segments, problems = self.check(text)
         text, dropped = drop_bad_staging(text, problems)
         fixed += [f"dropped a marker that could not work: {d}" for d in dropped]
+        from eris.generate.book_checks import drop_bad_book
+        from eris.generate.script_writer import _current_book
+        text, dropped_book = drop_bad_book(text, _current_book())
+        fixed += [f"dropped a textbook marker that could not work: {d}" for d in dropped_book]
+        dropped += dropped_book
         if dropped:
             text, segments, problems = self.check(text)
         fixed = list(dict.fromkeys(fixed))
@@ -165,6 +173,18 @@ class ScriptPipeline:
         if tidied:
             print(f"[generate] auto-fixed: removed {tidied} repeated slide(s), highlight(s) or circle(s)")
             self.auto_fixes.append(f"removed {tidied} repeated slide(s), highlight(s) or circle(s)")
+        text, reopened = reopen_graphs(text)  # after every fix that may show a slide (show_picture_slides too)
+        if reopened:
+            print(f"[generate] auto-fixed: reopened the graph instead of its slide {reopened} time(s)")
+            self.auto_fixes.append(f"reopened the interactive graph instead of the slide it was built from ({reopened} time(s))")
+        text, retyped = reopen_same_code(text)  # a program written again unchanged is reopened, not typed again
+        if retyped:
+            print(f"[generate] auto-fixed: reopened {retyped} unchanged program(s) instead of typing them again")
+            self.auto_fixes.append(f"reopened {retyped} unchanged program(s) instead of typing them again")
+        text, opened = open_examples_first(text)  # a book example's notes go on its own page, beside the book
+        if opened:
+            print(f"[generate] auto-fixed: kept {opened} note(s) or pointer(s) on the book example's own page")
+            self.auto_fixes.append(f"kept {opened} note(s) or pointer(s) on the book example's own page")
         text, flagged = add_sync_flags(text)
         segments, _ = parse_script(text, self.slides)
         print(f"[generate] {flagged} highlight(s), circle(s) and slider move(s) happen as their sentence starts")

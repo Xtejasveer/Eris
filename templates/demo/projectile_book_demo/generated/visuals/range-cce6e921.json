@@ -1,0 +1,19 @@
+{
+  "id": "range",
+  "title": "Range against launch angle",
+  "brief": "Range in metres up the side against launch angle in degrees along the bottom, for u = 20 m/s with no air resistance. Points at 0, 15, 30, 45, 60, 75 and 90 degrees.",
+  "controls": [
+    {
+      "name": "launch_angle",
+      "type": "slider",
+      "label": "Launch angle",
+      "min": 0,
+      "max": 90,
+      "step": 1
+    }
+  ],
+  "html": "<script>\nconst u = 20, g = 9.8;\nconst samples = [0, 15, 30, 45, 60, 75, 90];\nconst c = Visual.chart({ x: [0, 90], y: [0, 45], xLabel: \"Launch angle (degrees)\", yLabel: \"Range (m)\" });\nlet theta = 0;\n\nconst rangeAt = deg => u * u * Math.sin(2 * deg * Math.PI / 180) / g;\n\nfunction draw() {\n  c.clear();\n  const R = rangeAt(theta);\n  const T = 2 * u * Math.sin(theta * Math.PI / 180) / g;\n  const pts = samples.map(d => [d, rangeAt(d)]);\n\n  // Smooth theoretical curve R = u^2 sin(2\u03b8) / g, dashed for reference\n  c.fn(x => rangeAt(x), { color: \"var(--muted)\", dashed: true });\n\n  // Slide's sampled data points\n  c.line(pts);\n  c.dots(pts);\n\n  // Highlight the selected angle\n  c.dots([[theta, R]], { color: \"var(--warn)\" });\n  c.vline(theta, `${theta}\u00b0`);\n  c.label(theta, R, `${R.toFixed(1)} m`);\n\n  c.readout([\n    `Range = ${R.toFixed(1)} m`,\n    `Time of flight = ${T.toFixed(2)} s`,\n    `u = ${u} m/s, g = ${g} m/s\u00b2`\n  ]);\n\n  Visual.state(`At launch angle ${theta}\u00b0, with u = 20 m/s and no air resistance, the range is ${R.toFixed(1)} m; the maximum of 40.8 m occurs at 45\u00b0.`);\n}\n\nVisual.on(\"launch_angle\", v => { theta = v; draw(); });\ndraw();\n</script>",
+  "model": "anthropic/claude-haiku-5.5",
+  "layout_advice": [],
+  "agrees": 0.96
+}

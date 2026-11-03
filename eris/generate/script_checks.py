@@ -180,25 +180,30 @@ def teaching_problems(segments, figs=None, slide_count=None, env=None):
         if seg.get("name") == "SECTION":
             section = seg["args"]["title"]
         nxt = segments[i + 1]
-        if seg.get("name") in ("SLIDE", "SLIDE_HIGHLIGHT", "SLIDE_CIRCLE") and nxt["kind"] != "say" \
-                and nxt.get("name") not in ("SLIDE_HIGHLIGHT", "SLIDE_CIRCLE"):
+        # A graph or diagram drawn from this very slide may follow it at once: it takes the slide's place
+        # (the stager prompt asks for exactly that), so that is not a slide nobody talks about.
+        from_this_slide = (seg.get("name") == "SLIDE" and nxt.get("name") in ("VISUAL", "FLOW")
+                           and re.search(rf"\bslide {seg['args'].get('n')}\b", str(nxt["args"].get("from", ""))))
+        if seg.get("name") in ("SLIDE", "SLIDE_HIGHLIGHT", "SLIDE_CIRCLE", "BOOK") and nxt["kind"] != "say" \
+                and nxt.get("name") not in ("SLIDE_HIGHLIGHT", "SLIDE_CIRCLE", "BOOK_HIGHLIGHT", "BOOK_UNDERLINE",
+                                            "BOOK_CIRCLE", "BOOK_EXAMPLE") and not from_this_slide:
             silent.append(section or "?")
     if silent:
-        problems.append(f"after a slide, say a sentence about what it shows before anything else appears (it flashes "
-                        f"past otherwise) in: {', '.join(dict.fromkeys(silent))}")
+        problems.append(f"after a slide or book page, say a sentence about what it shows before anything else appears "
+                        f"(it flashes past otherwise) in: {', '.join(dict.fromkeys(silent))}")
     if slide_count:
-        shown = set()
+        shown = set()  # sections that show the material: a slide, or a page of the textbook (taught from the book)
         current = None
         for seg in segments:
             if seg.get("name") == "SECTION":
                 current = seg["args"]["title"]
-            elif seg.get("name") == "SLIDE" and current:
+            elif current and (seg.get("name") == "SLIDE" or seg.get("name", "").startswith("BOOK")):
                 shown.add(current)
         from eris.generate.script_fixes import concept_sections
         missing = [t for t in concept_sections(segments) if t not in shown]
         if missing:
-            problems.append(f"show the matching slide with [SLIDE n=..] (and [SLIDE_HIGHLIGHT] its key line) in: "
-                            f"{', '.join(missing)}; the deck has {slide_count} slides")
+            problems.append(f"show the matching slide with [SLIDE n=..] (and [SLIDE_HIGHLIGHT] its key line), or the "
+                            f"textbook page it teaches from, in: {', '.join(missing)}; the deck has {slide_count} slides")
     for s in sections[1:-1]:  # the Opening and Closing are messages, not lessons
         if s["words"] > config.SECTION_TWO_NOTES_WORDS and s["notes"] < 2:
             problems.append(f"section \"{s['title']}\" has {s['words']} spoken words but {s['notes']} [NOTE] block(s); "

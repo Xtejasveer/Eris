@@ -1,0 +1,202 @@
+{
+  "lecture_id": "projectile_book_demo",
+  "topic": "Projectile motion: NCERT Example 3.8, a program and the range-angle graph",
+  "duration_min": 19,
+  "speaking_min": 5,
+  "language": "en-IN",
+  "status": "approved",
+  "kind": "lecture",
+  "collection": "projectile_book_demo",
+  "approved_at": "2026-11-03T23:04:45",
+  "persona": {
+    "Teacher": {
+      "Name": "Ms. Meera Rao",
+      "Subject": "Physics",
+      "Class": "Class 11-B"
+    },
+    "Absence Note": {
+      "Reason": "I am at a science teachers' training programme today.",
+      "Message to class": "Keep your NCERT book open at page 38. Solve Example 3.8 with the class, then try the angle program yourself."
+    },
+    "Teaching Style": {
+      "Tone": "Warm and lively; makes physics feel like sport",
+      "Pace": "Moderate; works every formula with real numbers straight after writing it",
+      "Language": "Simple, clear English; explains each physics term (velocity, range, angle, formula) once in everyday words",
+      "Habits": "Starts with a cricket example; asks the class to guess before calculating; says \"Let's put in the numbers and see\"; checks every answer against the book"
+    },
+    "Lecture Structure": {
+      "Order": "What a projectile is (from the book), two motions at the same time (slides), the steps to solve any projectile problem as a diagram, the formulas for height, time and range, NCERT Example 3.8 solved in the notebook and checked against the book, a Python program that checks the same numbers, the range-angle graph, why 45 degrees wins",
+      "Must cover": "Horizontal and vertical motion are independent; ux = u cos theta and uy = u sin theta; h = uy^2 / 2g, T = 2 uy / g, R = u^2 sin 2theta / g; NCERT Example 3.8 (28 m/s at 30 degrees: 10.0 m, 2.9 s, 69 m); a program that prints the same three answers; the range-angle graph with 45 degrees giving the maximum range",
+      "Avoid": "Air resistance calculations; derivations using calculus; projectiles launched from a height"
+    },
+    "Next Class": {
+      "Topic": "Uniform circular motion",
+      "Prep": "Read NCERT section 3.10 and solve Example 3.7"
+    }
+  },
+  "environments": {
+    "notebook": true,
+    "slides": true,
+    "code": true,
+    "flows": true,
+    "graphs": true,
+    "book": true
+  },
+  "created_at": "2026-11-03T23:00:34",
+  "script_md": "script.md",
+  "script_json": "script.json",
+  "estimated_min": 13.7,
+  "word_budget": 1518,
+  "depth": {
+    "speaking_min": 13.2,
+    "too_long": false,
+    "rule": {
+      "brief_below": 2.0,
+      "in_depth_at": 3.5,
+      "depth_min": {
+        "brief": 0.6,
+        "normal": 1.2,
+        "in depth": 2.2
+      },
+      "framing_min": {
+        "Opening": 0.6,
+        "Recap": 0.5,
+        "Closing": 0.3
+      },
+      "max_speaking_min": 30
+    },
+    "parts": [
+      {
+        "title": "What a projectile is",
+        "depth": "brief",
+        "slides": [
+          2
+        ],
+        "score": 1.23,
+        "minutes": 0.6,
+        "must_cover": false,
+        "main": false,
+        "why": [
+          "a specific case"
+        ]
+      },
+      {
+        "title": "Two motions at the same time: horizontal and vertical are independent",
+        "depth": "normal",
+        "slides": [
+          3
+        ],
+        "score": 1.25,
+        "minutes": 1.2,
+        "must_cover": true,
+        "main": false,
+        "why": [
+          "builds on another part"
+        ]
+      },
+      {
+        "title": "Splitting the launch speed: ux = u cos θ and uy = u sin θ",
+        "depth": "normal",
+        "slides": [
+          4
+        ],
+        "score": 2.08,
+        "minutes": 1.2,
+        "must_cover": true,
+        "main": false,
+        "why": [
+          "a specific case",
+          "builds on another part"
+        ]
+      },
+      {
+        "title": "Formulas for height, time and range",
+        "depth": "in depth",
+        "slides": [
+          5,
+          6,
+          7
+        ],
+        "score": 5.77,
+        "minutes": 2.2,
+        "must_cover": true,
+        "main": false,
+        "why": [
+          "a specific case",
+          "steps or stages",
+          "builds on another part",
+          "an exception or condition",
+          "3 slides"
+        ]
+      },
+      {
+        "title": "NCERT Example 3.8",
+        "depth": "in depth",
+        "slides": [],
+        "score": 3.19,
+        "minutes": 2.2,
+        "must_cover": true,
+        "main": false,
+        "why": [
+          "a specific case",
+          "builds on another part",
+          "a task for students",
+          "a worked example from the textbook"
+        ]
+      },
+      {
+        "title": "The range-angle graph",
+        "depth": "in depth",
+        "slides": [
+          8,
+          9
+        ],
+        "score": 3.75,
+        "minutes": 2.2,
+        "must_cover": true,
+        "main": false,
+        "why": [
+          "a specific case",
+          "builds on another part",
+          "a comparison",
+          "2 slides"
+        ]
+      },
+      {
+        "title": "Why 45 degrees gives the maximum range",
+        "depth": "in depth",
+        "slides": [
+          10,
+          11
+        ],
+        "score": 4.76,
+        "minutes": 2.2,
+        "must_cover": true,
+        "main": true,
+        "why": [
+          "a specific case",
+          "builds on another part",
+          "a comparison",
+          "an exception or condition",
+          "2 slides",
+          "the lesson's main idea"
+        ]
+      }
+    ]
+  },
+  "llm_model": "anthropic/claude-haiku-5.5",
+  "judge": {
+    "score": 0.77,
+    "blockers": 1,
+    "failed_minor": 1
+  },
+  "book": {
+    "first": 38,
+    "last": 40
+  },
+  "focus": {
+    "theory": "both",
+    "numericals": "book"
+  },
+  "voice": "Kaveri"
+}

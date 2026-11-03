@@ -91,6 +91,7 @@ def build_parser():
     p.add_argument("--idle-end", type=float, help="use the idle clip up to this second")
 
     sub.add_parser("seed", help="add demo accounts and courses built from the lectures in data/ (local testing)")
+    sub.add_parser("demo-snapshot", help="save the demo lessons' approved scripts into templates/demo/ (to commit)")
 
     p = sub.add_parser("serve", help="start the website (home + class)")
     p.add_argument("--port", type=int, default=8000)
@@ -122,6 +123,11 @@ def main():
     if args.command == "seed":
         from eris.platform.seed import run
         run()
+        return
+    if args.command == "demo-snapshot":
+        from eris.platform.seed import snapshot
+        saved = snapshot()
+        print(f"[demo] saved {len(saved)} approved script(s) into templates/demo/: {', '.join(saved) or 'none'}")
         return
     if args.command == "measure-voice":
         from eris.classroom.voice_speed import run

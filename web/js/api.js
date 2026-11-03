@@ -41,6 +41,12 @@ export const api = {
     return request("POST", `/api/lectures/${id(lid)}/files`, form);
   },
   deleteFile: (lid, name) => request("DELETE", `/api/lectures/${id(lid)}/files/${id(name)}`),
+  uploadBook(lid, file) {
+    const form = new FormData();
+    form.append("file", file, file.name);
+    return request("POST", `/api/lectures/${id(lid)}/book`, form);
+  },
+  deleteBook: (lid) => request("DELETE", `/api/lectures/${id(lid)}/book`),
   generate: (lid, body) => request("POST", `/api/lectures/${id(lid)}/generate`, body),
   job: (lid) => request("GET", `/api/lectures/${id(lid)}/job`),
   saveScript: (lid, text) => request("PUT", `/api/lectures/${id(lid)}/script`, { text }),

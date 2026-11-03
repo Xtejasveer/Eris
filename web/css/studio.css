@@ -237,3 +237,49 @@ code.ic { font-size: .88em; padding: 1px 5px; border-radius: 5px; background: va
 .page.studio { max-width: none; padding: 20px 28px 24px; }
 .setup-summary .env-chips { gap: 5px; }
 .setup-summary .env-chip { font-size: 11.5px; padding: 3px 8px; }
+
+/* the textbook card: a compact drop, the page range, and where theory and numericals are taught from */
+.dropzone.compact { padding: 14px; }
+.seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px; background: var(--surface-2); width: max-content; }
+.seg-btn { border: 0; background: none; padding: 6px 16px; border-radius: 8px; font: inherit; font-size: 13px; color: var(--text-2, #4a4c48); cursor: pointer; }
+.seg-btn:hover { color: var(--text, #1f201d); }
+.seg-btn.on { background: var(--surface); color: var(--text, #1f201d); font-weight: 600; box-shadow: 0 1px 3px rgba(20, 20, 30, .12); }
+.seg-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.book-warn { color: #b4232a; }
+
+/* how the lesson's length was decided: each part's score, depth and speaking time, then the total */
+.dur { display: grid; gap: 10px; }
+.dur-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px 14px; }
+.dur-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 6px; }
+.dur-head strong { font-size: 13.5px; }
+.dur-head span { font-size: 12px; color: var(--muted); }
+.dur-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.dur-table th { text-align: left; font-weight: 500; font-size: 11.5px; color: var(--muted); padding: 6px 4px; border-bottom: 1px solid var(--border); }
+.dur-table td { padding: 10px 4px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.dur-table tr:last-child td { border-bottom: 0; }
+.dur-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dur-table td:nth-child(3) { padding-left: 10px; }
+.dur-title { font-weight: 500; color: var(--text); margin-bottom: 5px; }
+.dur-why { display: flex; flex-wrap: wrap; gap: 4px; }
+.dur-chip { font-size: 11px; padding: 1px 7px; border-radius: 6px; border: 1px solid var(--border); color: var(--text-2); background: var(--surface-2); }
+.dur-chip.must { border-color: #f0c98a; background: #fdf3e2; color: #9a5b00; }
+.dur-legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.dur-band { border-radius: var(--radius); padding: 8px 10px; display: grid; gap: 2px; background: var(--surface-2); }
+.dur-band strong { font-size: 12.5px; font-weight: 600; }
+.dur-band small { font-size: 11.5px; color: var(--muted); }
+.dur-band.normal { background: color-mix(in srgb, var(--primary) 10%, transparent); }
+.dur-band.in-depth { background: var(--accent-soft); color: var(--accent); }
+.dur-total { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 14px; padding: 11px 14px; border-radius: var(--radius); background: var(--primary); color: #fff; font-size: 13px; }
+.dur-total strong { font-weight: 600; }
+@media (max-width: 520px) { .dur-legend { grid-template-columns: 1fr; } }
+.duration-wrap { padding: 18px 32px 28px; max-width: 760px; margin: 0 auto; display: grid; gap: 12px; }
+.dur-unlocks { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-2); font-size: 13px; }
+.dur-unlocks .env-chips { margin: 0; }
+.english-note { display: inline-flex; align-items: center; gap: 5px; margin-top: 2px; color: var(--text-2); font-weight: 500; }
+.english-note svg { width: 13px; height: 13px; flex: none; }
+
+
+
+
+/* a demo account can't write scripts: the button looks greyed out but still answers a click with why */
+.btn.locked, .btn.primary.locked, .btn.primary.locked:hover:not(:disabled) { color: var(--muted); background: var(--surface-3); border-color: var(--surface-3); box-shadow: none; cursor: not-allowed; }

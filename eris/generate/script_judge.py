@@ -87,9 +87,13 @@ SECTION_QUESTIONS = {
         1, "minor", 'In section "{section}", put each highlight right before the sentence that talks about exactly '
                       "what it highlights, or remove it."),
     "has_worked_example": (_noul(
-        "Does this section teach with a small worked example using concrete numbers?",
-        "There is a concrete example with real values.", "The section stays abstract."),
-        1, "minor", 'Add a small worked example with real numbers to section "{section}".'),
+        "Does this section teach with a specific example with real details: a worked calculation with real numbers "
+        "in maths and science, a program run with real values in coding, or a real event, person or source in other "
+        "subjects?",
+        "There is a specific example with real details.", "The section stays abstract."),
+        1, "minor", 'Add a specific example with real details to section "{section}": a worked calculation with real '
+                    "numbers in maths and science, a program run with real values in coding, or a real event, person "
+                    "or source in other subjects."),
 }
 
 SCRIPT_QUESTIONS = {

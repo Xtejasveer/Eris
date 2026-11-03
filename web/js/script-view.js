@@ -89,6 +89,24 @@ export function renderScriptDoc(segments, teacher = "Teacher", { lectureId = nul
       case "SLIDE_HIGHLIGHT":
         target().append(chip("slides", `Highlight on slide ${a.n}: “${a.text}”`, "marker"));
         break;
+      case "BOOK":
+        target().append(chip("file", `Show book page ${a.page}`));
+        break;
+      case "BOOK_HIGHLIGHT":
+        target().append(chip("file", `Highlight on book page ${a.page}: “${a.text}”`, "marker"));
+        break;
+      case "BOOK_UNDERLINE":
+        target().append(chip("pen", `Underline on book page ${a.page}: “${a.text}”`, "marker"));
+        break;
+      case "BOOK_CIRCLE":
+        target().append(chip("pen", `Circle on book page ${a.page}: “${a.text}”`, "marker"));
+        break;
+      case "BOOK_EXAMPLE":
+        target().append(chip("file", `Solve ${a.name} (book page ${a.page}), its answer covered`));
+        break;
+      case "BOOK_ANSWER":
+        target().append(chip("check", `Uncover ${a.name}'s answer${a.matches?.length ? `: matches the book (${a.matches.join(", ")})` : ""}`, "marker"));
+        break;
       case "LOOK_BACK":
         target().append(chip("book", `Look back in notebook: “${a.text}”`, "marker"));
         break;

@@ -1,0 +1,423 @@
+{
+  "model": "typesafe/jev-1.13",
+  "findings": [
+    {
+      "check": "covers_must_cover",
+      "section": null,
+      "value": 0.88,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "Teach every item in the persona's Must cover list.",
+      "stage": "lesson"
+    },
+    {
+      "check": "respects_avoid",
+      "section": null,
+      "value": 0.87,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "Remove everything the persona lists under Avoid.",
+      "stage": "lesson"
+    },
+    {
+      "check": "opening_absence",
+      "section": null,
+      "value": 0.95,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In the Opening, say why the teacher is absent and give the teacher's message to the class.",
+      "stage": "lesson"
+    },
+    {
+      "check": "closing_next_class",
+      "section": null,
+      "value": 0.97,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "End with the next class topic and what to prepare.",
+      "stage": "lesson"
+    },
+    {
+      "check": "sounds_like_teacher",
+      "section": null,
+      "value": 0.91,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "Make the narration follow the persona's tone, pace, language and habits.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Opening",
+      "value": 0.84,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Opening\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "France in 1774: the empty treasury",
+      "value": 0.73,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"France in 1774: the empty treasury\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "France in 1774: the empty treasury",
+      "value": 0.76,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"France in 1774: the empty treasury\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "France in 1774: the empty treasury",
+      "value": 0.75,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"France in 1774: the empty treasury\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "The three estates: who was who (Fig. 2)",
+      "value": 0.74,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"The three estates: who was who (Fig. 2)\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "pictures_explained",
+      "section": "The three estates: who was who (Fig. 2)",
+      "value": 0.52,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"The three estates: who was who (Fig. 2)\", explain each picture you show: say what it shows (what whole, data or scene, as it really is) and what to notice in it.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "The three estates: who was who (Fig. 2)",
+      "value": 0.84,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"The three estates: who was who (Fig. 2)\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "The three estates: who was who (Fig. 2)",
+      "value": 0.83,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"The three estates: who was who (Fig. 2)\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Peasants: about 90 per cent of the population, few owning land",
+      "value": 0.84,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Peasants: about 90 per cent of the population, few owning land\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "Peasants: about 90 per cent of the population, few owning land",
+      "value": 0.85,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Peasants: about 90 per cent of the population, few owning land\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "Peasants: about 90 per cent of the population, few owning land",
+      "value": 0.9,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Peasants: about 90 per cent of the population, few owning land\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Who paid which taxes: tithes, taille, indirect taxes and feudal dues",
+      "value": 0.71,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Who paid which taxes: tithes, taille, indirect taxes and feudal dues\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "Who paid which taxes: tithes, taille, indirect taxes and feudal dues",
+      "value": 0.81,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Who paid which taxes: tithes, taille, indirect taxes and feudal dues\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "Who paid which taxes: tithes, taille, indirect taxes and feudal dues",
+      "value": 0.75,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Who paid which taxes: tithes, taille, indirect taxes and feudal dues\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "The Spider and the Fly (Fig. 3)",
+      "value": 0.69,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"The Spider and the Fly (Fig. 3)\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "pictures_explained",
+      "section": "The Spider and the Fly (Fig. 3)",
+      "value": 0.75,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"The Spider and the Fly (Fig. 3)\", explain each picture you show: say what it shows (what whole, data or scene, as it really is) and what to notice in it.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "The Spider and the Fly (Fig. 3)",
+      "value": 0.87,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"The Spider and the Fly (Fig. 3)\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "The Spider and the Fly (Fig. 3)",
+      "value": 0.62,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"The Spider and the Fly (Fig. 3)\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "The struggle to survive: population growth and rising bread prices",
+      "value": 0.77,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"The struggle to survive: population growth and rising bread prices\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "The struggle to survive: population growth and rising bread prices",
+      "value": 0.85,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"The struggle to survive: population growth and rising bread prices\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "The struggle to survive: population growth and rising bread prices",
+      "value": 0.86,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"The struggle to survive: population growth and rising bread prices\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "How a subsistence crisis happens",
+      "value": 0.8,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"How a subsistence crisis happens\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "How a subsistence crisis happens",
+      "value": 0.82,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"How a subsistence crisis happens\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "How a subsistence crisis happens",
+      "value": 0.8,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"How a subsistence crisis happens\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Recap",
+      "value": 0.87,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Recap\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Closing",
+      "value": 0.9,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Closing\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "France in 1774: the empty treasury",
+      "value": 0.93,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"France in 1774: the empty treasury\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "The three estates: who was who (Fig. 2)",
+      "value": 0.74,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"The three estates: who was who (Fig. 2)\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "Peasants: about 90 per cent of the population, few owning land",
+      "value": 0.59,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Peasants: about 90 per cent of the population, few owning land\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "Who paid which taxes: tithes, taille, indirect taxes and feudal dues",
+      "value": 0.97,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Who paid which taxes: tithes, taille, indirect taxes and feudal dues\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "The Spider and the Fly (Fig. 3)",
+      "value": 0.6,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"The Spider and the Fly (Fig. 3)\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "The struggle to survive: population growth and rising bread prices",
+      "value": 0.81,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"The struggle to survive: population growth and rising bread prices\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    },
+    {
+      "check": "flow_matches_material",
+      "section": "How a subsistence crisis happens",
+      "value": 0.89,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"How a subsistence crisis happens\", make the diagram follow the steps from the material, in the same order.",
+      "stage": "staging"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "Recap",
+      "value": 0.89,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Recap\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    }
+  ],
+  "pairs": [],
+  "cost": 0.00166,
+  "error": "",
+  "unflagged": 0,
+  "score": 0.81,
+  "blockers": 0,
+  "failed_minor": 0,
+  "rounds": [
+    {
+      "kind": "lesson",
+      "problems": 1
+    },
+    {
+      "kind": "rules",
+      "problems": 1
+    },
+    {
+      "kind": "rules",
+      "problems": 1
+    }
+  ],
+  "advice": [],
+  "auto_fixes": [
+    "kept the staging although it reworded some of the lesson's sentences",
+    "showed a picture's slide while it is explained (3 time(s))",
+    "removed or moved 2 sketch row(s) to the sentence that explains them",
+    "removed 1 repeated slide(s), highlight(s) or circle(s)"
+  ]
+}

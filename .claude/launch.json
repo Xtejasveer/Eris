@@ -22,6 +22,28 @@
         "8001"
       ],
       "port": 8001
+    },
+    {
+      "name": "web-windows",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "main.py",
+        "serve",
+        "--port",
+        "8000"
+      ],
+      "port": 8000
+    },
+    {
+      "name": "web-windows-test",
+      "runtimeExecutable": ".venv/Scripts/python.exe",
+      "runtimeArgs": [
+        "main.py",
+        "serve",
+        "--port",
+        "8001"
+      ],
+      "port": 8001
     }
   ]
 }

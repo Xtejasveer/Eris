@@ -1,0 +1,89 @@
+[
+  {
+    "ext": "png",
+    "where": "slide 2",
+    "ref": "slide 2",
+    "slide": 2,
+    "context": "Meet Aldehydes and Ketones: Their Structures / Structures from NCERT page 230.\nEvery one has a carbonyl group, C=O (in pink).\nAldehydes: C=O at the end of the chain, as -CHO (3-Oxopentanal, 4-Nitrobenzaldehyde).\nKetones: C=O inside the chain (2,4-Dimethylpentan-3-one).",
+    "alt": "Structures from the NCERT book (page 230): 3-Oxopentanal, 2,4-Dimethylpentan-3-one, 4-Nitrobenzaldehyde and Propane-1,2,3-tricarbaldehyde, with each carbonyl group (C=O, and CHO in aldehydes) shown in pink.",
+    "box": [
+      0.06,
+      0.2311,
+      0.6,
+      0.6294
+    ],
+    "key": "bd2887c263bb3a20",
+    "source": "carbonyl_physical_properties.pptx",
+    "kind": "diagram",
+    "description": "Four structural formulas show aldehydes and ketones, with each carbonyl group (C=O) highlighted in pink. Students should notice that an aldehyde's C=O sits at the end of a carbon chain as -CHO, while a ketone's C=O sits inside the chain, flanked by carbon on both sides.",
+    "text": "H3C CH2 C CH2 C H O O 3-Oxopentanal CH3 CH C CH CH3 CH3 O CH3 2,4-Dimethylpentan-3-one CHO NO2 4-Nitrobenzenecarbaldehyde or 4-Nitrobenzaldehyde OHC CH2 CH CH2 CHO CHO Propane-1,2,3-tricarbaldehyde Note: To give identical treatment to all aldehydic groups, the compound is named as shown above.",
+    "steps": [],
+    "data": "",
+    "decoration": false,
+    "parts": [
+      {
+        "name": "aldehyde C=O (CHO) at chain end, 3-oxopentanal",
+        "box": [
+          0.46,
+          0.1,
+          0.53,
+          0.19
+        ]
+      },
+      {
+        "name": "ketone C=O inside chain, 3-oxopentanal",
+        "box": [
+          0.31,
+          0.03,
+          0.34,
+          0.19
+        ]
+      },
+      {
+        "name": "ketone C=O, 2,4-dimethylpentan-3-one",
+        "box": [
+          0.75,
+          0.06,
+          0.81,
+          0.23
+        ]
+      },
+      {
+        "name": "CHO on benzene ring, 4-nitrobenzaldehyde",
+        "box": [
+          0.24,
+          0.37,
+          0.31,
+          0.43
+        ]
+      },
+      {
+        "name": "OHC end group, propane-1,2,3-tricarbaldehyde",
+        "box": [
+          0.5,
+          0.5,
+          0.56,
+          0.57
+        ]
+      },
+      {
+        "name": "CHO end group, propane-1,2,3-tricarbaldehyde",
+        "box": [
+          0.77,
+          0.5,
+          0.83,
+          0.57
+        ]
+      },
+      {
+        "name": "CHO branch group, propane-1,2,3-tricarbaldehyde",
+        "box": [
+          0.63,
+          0.59,
+          0.69,
+          0.66
+        ]
+      }
+    ]
+  }
+]

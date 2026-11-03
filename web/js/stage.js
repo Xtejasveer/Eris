@@ -9,6 +9,7 @@ import { highlightLine } from "./highlight.js";
 import { FlowBoard } from "./flow.js";
 import { drawPen, svgLayer } from "./pen.js";
 import { drawSketchRow } from "./sketch.js";
+import { BookView } from "./book.js";
 
 const ENVS = [["notebook", "Notebook", "book"], ["slides", "Slides", "slides"], ["code", "Code", "code"],
   ["visual", "Visual", "sparkle"]];
@@ -24,7 +25,8 @@ export class Stage {
   // pictures: {slide number: [{url, kind, description}]}, the real pictures on each slide.
   // images: {slide number: {url, ratio, lines, pictures}}, the real slides drawn as pictures, with where each line of
   // text and each picture sits (fractions of the slide). A slide with one is shown as it is; else from its text.
-  constructor(slides, used = null, pictures = {}, images = {}) {
+  // book: the textbook pages (material/book.py), shown in the Slides view instead of the deck while they are taught.
+  constructor(slides, used = null, pictures = {}, images = {}, book = null) {
     this.slides = slides || {};
     this.pictures = pictures || {};
     this.images = images || {};
@@ -56,7 +58,8 @@ export class Stage {
     this.slideBox = h("div", { class: "slide" }, h("div", { class: "slide-empty" }, icon("slides"), "No slide shown yet"));
     this.slideNum = h("span", { class: "slide-num" });
     this.slideFrame = h("div", { class: "slide-frame" }, this.slideBox, this.slideNum);
-    this.slidesEl = h("div", { class: "env env-slides" }, this.slideFrame);
+    this.bookView = new BookView(book);
+    this.slidesEl = h("div", { class: "env env-slides" }, this.slideFrame, this.bookView.el);
 
     this.tabBar = h("div", { class: "ed-tabs" });
     this.codeBody = h("div", { class: "ed-body" }, h("div", { class: "ed-empty" }, icon("code"), "No code yet"));
@@ -85,6 +88,7 @@ export class Stage {
 
   // The teacher's environment. While the student looks elsewhere (follow off) the screen stays where they are.
   setEnv(env) {
+    if (this.split && env !== "notebook" && env !== "slides") this.bookSplit(false);
     if (this.env === env && this.shown === env) return;
     this.env = env;
     if (this.follow !== false) this._show(env);
@@ -104,7 +108,80 @@ export class Stage {
     this.indicator.querySelectorAll(".env-pill").forEach(p => p.classList.toggle("active", p.dataset.env === env));
     for (const [key, el] of [["notebook", this.notebook], ["slides", this.slidesEl], ["code", this.codeEl],
       ["visual", this.visualEl]])
-      el.classList.toggle("active", key === env);
+      el.classList.toggle("active", key === env || (this.split && (key === "notebook" || key === "slides")));
+  }
+
+  // ---------- the textbook (book.js): shown in the Slides view; beside the notebook while an example is solved ----------
+  bookSplit(on) {
+    this.split = on;
+    this.el.classList.toggle("split-book", on);
+    if (this.shown) this._show(this.shown);
+  }
+
+  _showBook(n) {
+    if (!this.bookView.has) return false;
+    this.slideFrame.classList.add("hidden");
+    this.bookView.el.classList.remove("hidden");
+    return this.bookView.show(n);
+  }
+
+  showBook(n) {
+    if (this.split) this.bookSplit(false);
+    this.setEnv("slides");
+    return this._showBook(n);
+  }
+
+  _onBookPage(n) {
+    if (String(this.bookView.n) !== String(n) || this.bookView.el.classList.contains("hidden")) return this._showBook(n);
+    return true;
+  }
+
+  bookMark(n, kind, text) {
+    if (!this._onBookPage(n)) return false;
+    if (!this.split) this.setEnv("slides");
+    return kind === "underline" ? this.bookView.underline(text) : kind === "circle" ? this.bookView.circle(text)
+      : this.bookView.highlight(text);
+  }
+
+  // The example is worked on a fresh notebook page of its own, titled with its name, beside the book (the split view
+  // shows only that page, so the last section's working isn't mistaken for this one's).
+  async bookExample(n, name, ctl) {
+    if (!this._onBookPage(n)) return false;
+    this.setEnv("slides");
+    if (!this.bookView.example(name)) return false;
+    this.bookSplit(true);
+    this._addPage(name);
+    await this.noteTitle(name, ctl);
+    return true;
+  }
+
+  bookAnswer(n, name, matches = []) {
+    if (!this._onBookPage(n)) return false;
+    if (!this.split) this.bookSplit(true);
+    if (!this.bookView.answer(name, matches)) return false;
+    if (matches.length) {
+      this._circleNote(matches[matches.length - 1]);
+      const chip = h("div", { class: "nb-chip" }, icon("check"), `Matches the book: ${matches.join(" · ")}`);
+      this.notePage.append(chip);
+      chip.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+    return true;
+  }
+
+  // A pen circle around the last place the notebook wrote `text` (the final result the book also gives).
+  _circleNote(text) {
+    const lines = [...this.flow.querySelectorAll(".nb-line")].reverse();
+    const el = lines.find(l => l.textContent.toLowerCase().includes(String(text).toLowerCase()));
+    if (!el) return false;
+    const src = el.textContent, i = src.toLowerCase().indexOf(String(text).toLowerCase());
+    const span = h("span", { class: "nb-circled" }, src.slice(i, i + text.length));
+    el.replaceChildren(src.slice(0, i), span, src.slice(i + text.length));
+    const { width: w, height: hh } = span.getBoundingClientRect();
+    const layer = svgLayer("nb-circle");
+    layer.setAttribute("viewBox", `0 0 ${w + 24} ${hh + 16}`);
+    span.append(layer);
+    drawPen(layer, (w + 24) / 2, (hh + 16) / 2, w / 2 + 9, hh / 2 + 5, { seed: 11, ms: 650 });
+    return true;
   }
 
   // ---------- notebook ----------
@@ -124,7 +201,7 @@ export class Stage {
   // Every page stays on the canvas; the current one is where new lines go.
   showPage(i) {
     this.page = i;
-    this.pages.forEach((p, j) => p.tab.classList.toggle("active", j === i));
+    this.pages.forEach((p, j) => { p.tab.classList.toggle("active", j === i); p.el.classList.toggle("nb-current", j === i); });
   }
 
   async newPage(title, ctl) {
@@ -293,6 +370,9 @@ export class Stage {
 
   // ---------- slides ----------
   showSlide(n) {
+    if (this.split) this.bookSplit(false);
+    this.slideFrame.classList.remove("hidden");
+    this.bookView.el.classList.add("hidden");
     this.setEnv("slides");
     const image = this.images[n] ?? this.images[String(n)];
     if (image) return this._showSlideImage(n, image);
@@ -706,6 +786,10 @@ export class Stage {
     this.slideFrame.style.removeProperty("--ratio");
     this.slideBox.replaceChildren(h("div", { class: "slide-empty" }, icon("slides"), "No slide shown yet"));
     this.slideNum.textContent = "";
+    this.bookSplit(false);
+    this.slideFrame.classList.remove("hidden");
+    this.bookView.el.classList.add("hidden");
+    this.bookView.n = null;
     Object.values(this.flows).forEach(f => { f.wrap.remove(); f.tab.remove(); });
     this.flows = {}; this.currentFlow = null;
     Object.values(this.visuals).forEach(v => { v.frame.remove(); v.tab.remove(); });

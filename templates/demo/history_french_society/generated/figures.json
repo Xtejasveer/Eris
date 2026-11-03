@@ -1,0 +1,33 @@
+[
+  {
+    "kind": "flow",
+    "title": "How a Subsistence Crisis Happens",
+    "where": "slide 8 (How a Subsistence Crisis Happens)",
+    "ref": "slide 8",
+    "details": "steps: Bad harvest -> Scarcity of grain -> Rising food prices -> The poorest can no longer buy bread -> Weaker bodies and disease epidemics -> More deaths and food riots",
+    "source": "french_society_old_regime.pptx",
+    "use": "draw",
+    "use_p": 0.92,
+    "use_why": "it is a process to draw step by step"
+  },
+  {
+    "source": "french_society_old_regime.pptx",
+    "where": "slide 4",
+    "ref": "slide 4",
+    "title": "A diagram of the Society of Estates in pre-revolutionary France, showing three estates stacked from top to bottom: the c",
+    "kind": "diagram",
+    "details": "steps: 1st estate: Clergy -> 2nd estate: Nobility -> 3rd estate: Big businessmen, merchants, court officials, lawyers etc. -> 3rd estate: Peasants and artisans -> 3rd estate: Small peasants, landless labour, servants",
+    "use": "show",
+    "use_p": 0.24,
+    "use_why": "its point is clear as it is on the slide"
+  },
+  {
+    "source": "french_society_old_regime.pptx",
+    "where": "slide 6",
+    "ref": "slide 6",
+    "title": "An anonymous 17th-century French etching shows a seated, richly dressed nobleman with a dog, receiving a money bag, a ba",
+    "kind": "picture",
+    "details": "illustration: An anonymous 17th-century French etching shows a seated, richly dressed nobleman with a dog, receiving a money bag, a basket of fruit and a sack of grain from a thin, bearded peasant. A spider web with a spider and trapped fly appears at top left, and a fly is drawn near the verses. Students should notice how the verses and the web image frame the noble as a predator who feeds on the labour of the poor peasant. Text in it: Plus on a de moyens, plus on en veut avoir / Ce pauvre apporte tout, bled, fruit, argent, volaille / Ce gros Atilord assis, prest a tout receuoir / Ne",
+    "use": "show"
+  }
+]

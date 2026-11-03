@@ -1,0 +1,41 @@
+[
+  {
+    "source": "french_society_old_regime.pptx",
+    "type": "pptx",
+    "items": [
+      "1: French Society Before the Revolution",
+      "2: France in 1774",
+      "3: The Society of Estates: Who Was Who",
+      "4: The Society of Estates: Fig. 2 in Your Book",
+      "5: The Society of Estates: Who Paid What",
+      "6: The Society of Estates: The Spider and the Fly",
+      "7: The Struggle to Survive",
+      "8: How a Subsistence Crisis Happens",
+      "9: Remember"
+    ],
+    "deck": true,
+    "count": 9,
+    "figures": [
+      "flow slide 8: How a Subsistence Crisis Happens",
+      "diagram slide 4: A diagram of the Society of Estates in pre-revolutionary France, showing three estates stacked from top to bottom: the c",
+      "picture slide 6: An anonymous 17th-century French etching shows a seated, richly dressed nobleman with a dog, receiving a money bag, a ba"
+    ]
+  },
+  {
+    "source": "persona.md",
+    "type": "md",
+    "items": [],
+    "figures": []
+  },
+  {
+    "source": "NCERT-Book-for-Class-9-History-Chapter-1.pdf",
+    "type": "book",
+    "book": true,
+    "pages": "4-5",
+    "items": [
+      "page 4: 1 French Society During the Late Eighteenth Century",
+      "page 5: ‘The nobleman is the spider,"
+    ],
+    "figures": []
+  }
+]

@@ -494,7 +494,10 @@ export async function mountCourse(courseId, tab, ctx) {
     }
     const open = (sec) => detail.replaceChildren(...[
       h("div", { class: "insight-head" }, h("h4", {}, sec.title),
-        h("button", { class: "btn sm primary", onclick: () => regenerate(sec) }, icon("sparkle"), "Rewrite this section")),
+        h("button", { class: `btn sm primary ${ctx.me?.can_generate === false ? "locked" : ""}`,
+          title: ctx.me?.can_generate === false ? "This is a demo account. Sign in to create your own lectures." : "",
+          onclick: () => (ctx.me?.can_generate === false ? toast("This is a demo account. Sign in to create your own lectures.", "info") : regenerate(sec)) },
+          icon("sparkle"), "Rewrite this section")),
       sec.flags.length ? [h("div", { class: "insight-label" }, "Marked confusing"), ...sec.flags.map(f => h("div", { class: `doubt ${f.resolved_at ? "resolved" : ""}` },
         h("p", { class: "q" }, `“${f.line_text || "(this part)"}”`), f.comment ? h("p", { class: "a" }, f.comment) : null,
         h("small", { class: "muted" }, [f.student, formatDate(f.created_at), f.resolved_at ? "resolved" : ""].filter(Boolean).join(" · "))))] : null,

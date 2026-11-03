@@ -1,0 +1,24 @@
+[
+  {
+    "kind": "flow",
+    "title": "How a while Loop Runs",
+    "where": "slide 3 (How a while Loop Runs)",
+    "ref": "slide 3",
+    "details": "steps: Check the condition -> If it is True, run the indented body -> Update the variable the condition uses -> Go back and check the condition again -> When the condition is False, leave the loop",
+    "source": "while_loop.pptx",
+    "use": "draw",
+    "use_p": 0.89,
+    "use_why": "it is a process to draw step by step"
+  },
+  {
+    "kind": "flow",
+    "title": "How a while loop runs (steps)",
+    "where": "while_loop_notes.docx (How a while loop runs (steps))",
+    "ref": "while_loop_notes.docx How a while loop runs (steps)",
+    "details": "steps: Check the condition. -> If it is True, run the indented body. -> Update the variable the condition uses. -> Go back to step 1. -> When the condition is False, leave the loop and go on.",
+    "source": "while_loop_notes.docx",
+    "use": "draw",
+    "use_p": 0.86,
+    "use_why": "it is a process to draw step by step"
+  }
+]

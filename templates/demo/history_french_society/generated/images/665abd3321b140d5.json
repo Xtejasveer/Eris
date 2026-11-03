@@ -1,0 +1,13 @@
+{
+  "kind": "diagram",
+  "description": "A diagram of the Society of Estates in pre-revolutionary France, showing three estates stacked from top to bottom: the clergy (1st estate), the nobility (2nd estate), and the third estate. The third estate is enlarged and split into three groups, from big businessmen, merchants, court officials and lawyers at the top, through peasants and artisans, to small peasants, landless labourers and servants at the bottom, so students should notice that the third estate contained both rich and poor people.",
+  "text": "1st estate, Clergy, 2nd estate, Nobility, 3rd estate, Big businessmen, merchants, court officials, lawyers etc., Peasants and artisans, Small peasants, landless labour, servants",
+  "steps": [
+    "1st estate: Clergy",
+    "2nd estate: Nobility",
+    "3rd estate: Big businessmen, merchants, court officials, lawyers etc.",
+    "3rd estate: Peasants and artisans",
+    "3rd estate: Small peasants, landless labour, servants"
+  ],
+  "data": ""
+}

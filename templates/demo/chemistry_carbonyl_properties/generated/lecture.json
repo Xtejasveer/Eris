@@ -1,0 +1,186 @@
+{
+  "lecture_id": "chemistry_carbonyl_properties",
+  "topic": "Physical properties of aldehydes and ketones",
+  "duration_min": 16,
+  "speaking_min": 5,
+  "language": "en-IN",
+  "status": "approved",
+  "kind": "lecture",
+  "book": {
+    "first": 235,
+    "last": 235
+  },
+  "focus": {
+    "theory": "both",
+    "numericals": "book"
+  },
+  "voice": "Kaveri",
+  "collection": "chemistry_carbonyl_properties",
+  "approved_at": "2026-11-04T02:35:56",
+  "persona": {
+    "Teacher": {
+      "Name": "Dr. Farah Khan",
+      "Subject": "Chemistry",
+      "Class": "Class 12 Science"
+    },
+    "Absence Note": {
+      "Reason": "I am at a chemistry teachers' conference today.",
+      "Message to class": "Keep your NCERT Chemistry book open at page 235. Before each answer, try to rank the boiling points yourself."
+    },
+    "Teaching Style": {
+      "Tone": "Clear and curious; connects every property to the forces between molecules",
+      "Pace": "Moderate; compares molecules one pair at a time",
+      "Language": "Simple, clear English; explains each term (dipole, hydrogen bond, van der Waals forces) once in everyday words",
+      "Habits": "Asks which force holds the molecules together before giving any boiling point; uses kitchen and perfume examples"
+    },
+    "Lecture Structure": {
+      "Order": "Their structures from the book and the carbonyl group, states at room temperature, boiling points and why they sit between hydrocarbons and alcohols, solubility and odour, ranking boiling points with NCERT Example 8.2",
+      "Must cover": "The structures from the book and where the carbonyl group (C=O) sits in an aldehyde and in a ketone; boiling points of aldehydes and ketones are higher than hydrocarbons and ethers but lower than alcohols of similar mass, with the reason for each; the values 273, 281, 322, 329 and 370 K; small aldehydes and ketones dissolve in water through hydrogen bonds; NCERT Example 8.2 and its order",
+      "Avoid": "Chemical reactions such as nucleophilic addition; methods of preparation"
+    },
+    "Next Class": {
+      "Topic": "Nucleophilic addition reactions of aldehydes and ketones",
+      "Prep": "Read section 8.4 of the NCERT book"
+    }
+  },
+  "environments": {
+    "notebook": true,
+    "slides": true,
+    "code": false,
+    "flows": false,
+    "graphs": false,
+    "book": true
+  },
+  "created_at": "2026-11-04T02:33:31",
+  "script_md": "script.md",
+  "script_json": "script.json",
+  "estimated_min": 10.1,
+  "word_budget": 1150,
+  "depth": {
+    "speaking_min": 10.0,
+    "too_long": false,
+    "rule": {
+      "brief_below": 2.0,
+      "in_depth_at": 3.5,
+      "depth_min": {
+        "brief": 0.6,
+        "normal": 1.2,
+        "in depth": 2.2
+      },
+      "framing_min": {
+        "Opening": 0.6,
+        "Recap": 0.5,
+        "Closing": 0.3
+      },
+      "max_speaking_min": 30
+    },
+    "parts": [
+      {
+        "title": "Structures and the carbonyl group",
+        "depth": "normal",
+        "slides": [
+          2
+        ],
+        "score": 1.59,
+        "minutes": 1.2,
+        "must_cover": true,
+        "main": false,
+        "why": [
+          "a specific case",
+          "a comparison"
+        ]
+      },
+      {
+        "title": "States at room temperature",
+        "depth": "brief",
+        "slides": [
+          3
+        ],
+        "score": 1.85,
+        "minutes": 0.6,
+        "must_cover": false,
+        "main": false,
+        "why": [
+          "a specific case",
+          "an exception or condition"
+        ]
+      },
+      {
+        "title": "Boiling points: between hydrocarbons and alcohols",
+        "depth": "in depth",
+        "slides": [
+          4,
+          5,
+          7
+        ],
+        "score": 6.65,
+        "minutes": 2.2,
+        "must_cover": true,
+        "main": true,
+        "why": [
+          "a specific case",
+          "steps or stages",
+          "builds on another part",
+          "a comparison",
+          "a task for students",
+          "3 slides",
+          "the lesson's main idea"
+        ]
+      },
+      {
+        "title": "Solubility in water",
+        "depth": "normal",
+        "slides": [
+          6
+        ],
+        "score": 2.84,
+        "minutes": 1.2,
+        "must_cover": true,
+        "main": false,
+        "why": [
+          "a specific case",
+          "builds on another part",
+          "a comparison",
+          "an exception or condition"
+        ]
+      },
+      {
+        "title": "Odour",
+        "depth": "normal",
+        "slides": [
+          6
+        ],
+        "score": 2.21,
+        "minutes": 1.2,
+        "must_cover": false,
+        "main": false,
+        "why": [
+          "a comparison",
+          "an exception or condition"
+        ]
+      },
+      {
+        "title": "NCERT Example 8.2",
+        "depth": "in depth",
+        "slides": [],
+        "score": 3.99,
+        "minutes": 2.2,
+        "must_cover": true,
+        "main": false,
+        "why": [
+          "a specific case",
+          "builds on another part",
+          "a comparison",
+          "a task for students",
+          "a worked example from the textbook"
+        ]
+      }
+    ]
+  },
+  "llm_model": "anthropic/claude-haiku-5.5",
+  "judge": {
+    "score": 0.78,
+    "blockers": 0,
+    "failed_minor": 1
+  }
+}

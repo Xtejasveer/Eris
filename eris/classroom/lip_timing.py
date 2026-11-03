@@ -49,9 +49,12 @@ def ensure_timing(clip, text):
         except (OSError, ValueError):
             pass
     data = word_timings(clip, text)
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data), encoding="utf-8")
-    os.replace(tmp, path)
+    tmp = path.with_name(f"{path.stem}.{os.getpid()}.{threading.get_ident()}.tmp")  # the class and the pre-render
+    tmp.write_text(json.dumps(data), encoding="utf-8")                              # may time one clip at once
+    try:
+        os.replace(tmp, path)
+    except PermissionError:  # Windows: the other thread is replacing it right now, with the same timings
+        tmp.unlink(missing_ok=True)
     return data
 
 

@@ -1,0 +1,404 @@
+{
+  "model": "typesafe/jev-1.13",
+  "findings": [
+    {
+      "check": "covers_must_cover",
+      "section": null,
+      "value": 0.94,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "Teach every item in the persona's Must cover list.",
+      "stage": "lesson"
+    },
+    {
+      "check": "respects_avoid",
+      "section": null,
+      "value": 0.95,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "Remove everything the persona lists under Avoid.",
+      "stage": "lesson"
+    },
+    {
+      "check": "opening_absence",
+      "section": null,
+      "value": 0.87,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In the Opening, say why the teacher is absent and give the teacher's message to the class.",
+      "stage": "lesson"
+    },
+    {
+      "check": "closing_next_class",
+      "section": null,
+      "value": 0.81,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "End with the next class topic and what to prepare.",
+      "stage": "lesson"
+    },
+    {
+      "check": "sounds_like_teacher",
+      "section": null,
+      "value": 0.81,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "Make the narration follow the persona's tone, pace, language and habits.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Opening",
+      "value": 0.9,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Opening\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "notes_match_code",
+      "section": "Syntax of a while loop with its indented body",
+      "value": 0.63,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "In section \"Syntax of a while loop with its indented body\", make every notebook example and trace match the program and its real output exactly.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_matches_output",
+      "section": "Syntax of a while loop with its indented body",
+      "value": 0.96,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "In section \"Syntax of a while loop with its indented body\", describe the program output exactly as it really prints.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Syntax of a while loop with its indented body",
+      "value": 0.74,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Syntax of a while loop with its indented body\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "Syntax of a while loop with its indented body",
+      "value": 0.83,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Syntax of a while loop with its indented body\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "Syntax of a while loop with its indented body",
+      "value": 0.84,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Syntax of a while loop with its indented body\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "has_worked_example",
+      "section": "Syntax of a while loop with its indented body",
+      "value": 0.96,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "Add a specific example with real details to section \"Syntax of a while loop with its indented body\": a worked calculation with real numbers in maths and science, a program run with real values in coding, or a real event, person or source in other subjects.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "The condition is checked before every pass",
+      "value": 0.81,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"The condition is checked before every pass\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "The condition is checked before every pass",
+      "value": 0.87,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"The condition is checked before every pass\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "The condition is checked before every pass",
+      "value": 0.87,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"The condition is checked before every pass\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "The update step",
+      "value": 0.59,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"The update step\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "The update step",
+      "value": 0.9,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"The update step\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "The update step",
+      "value": 0.88,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"The update step\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "notes_match_code",
+      "section": "Countdown program (5 to 1, then Lift off!)",
+      "value": 0.96,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "In section \"Countdown program (5 to 1, then Lift off!)\", make every notebook example and trace match the program and its real output exactly.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_matches_output",
+      "section": "Countdown program (5 to 1, then Lift off!)",
+      "value": 0.98,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "In section \"Countdown program (5 to 1, then Lift off!)\", describe the program output exactly as it really prints.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Countdown program (5 to 1, then Lift off!)",
+      "value": 0.77,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Countdown program (5 to 1, then Lift off!)\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "Countdown program (5 to 1, then Lift off!)",
+      "value": 0.89,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Countdown program (5 to 1, then Lift off!)\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "Countdown program (5 to 1, then Lift off!)",
+      "value": 0.9,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Countdown program (5 to 1, then Lift off!)\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "has_worked_example",
+      "section": "Countdown program (5 to 1, then Lift off!)",
+      "value": 0.98,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "Add a specific example with real details to section \"Countdown program (5 to 1, then Lift off!)\": a worked calculation with real numbers in maths and science, a program run with real values in coding, or a real event, person or source in other subjects.",
+      "stage": "lesson"
+    },
+    {
+      "check": "notes_match_code",
+      "section": "Adding 1 to 10 gives 55",
+      "value": 0.96,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "In section \"Adding 1 to 10 gives 55\", make every notebook example and trace match the program and its real output exactly.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_matches_output",
+      "section": "Adding 1 to 10 gives 55",
+      "value": 0.98,
+      "passed": true,
+      "severity": "blocker",
+      "weight": 2,
+      "fix": "In section \"Adding 1 to 10 gives 55\", describe the program output exactly as it really prints.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Adding 1 to 10 gives 55",
+      "value": 0.75,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Adding 1 to 10 gives 55\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "Adding 1 to 10 gives 55",
+      "value": 0.89,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Adding 1 to 10 gives 55\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "Adding 1 to 10 gives 55",
+      "value": 0.9,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Adding 1 to 10 gives 55\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "has_worked_example",
+      "section": "Adding 1 to 10 gives 55",
+      "value": 0.98,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "Add a specific example with real details to section \"Adding 1 to 10 gives 55\": a worked calculation with real numbers in maths and science, a program run with real values in coding, or a real event, person or source in other subjects.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Why a missing update gives an infinite loop",
+      "value": 0.75,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Why a missing update gives an infinite loop\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "explains_clearly",
+      "section": "Why a missing update gives an infinite loop",
+      "value": 0.89,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Why a missing update gives an infinite loop\", make the idea understandable to this class: explain what it means and why it works, in whatever way suits them best.",
+      "stage": "lesson"
+    },
+    {
+      "check": "stays_true",
+      "section": "Why a missing update gives an infinite loop",
+      "value": 0.84,
+      "passed": true,
+      "severity": "minor",
+      "weight": 2,
+      "fix": "In section \"Why a missing update gives an infinite loop\", keep every date, number, name, event and claim about the data true to the teacher's material; give invented numbers clearly as examples.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Recap",
+      "value": 0.85,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Recap\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "narration_is_speech",
+      "section": "Closing",
+      "value": 0.91,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Closing\", the narration must contain only spoken sentences; put notes in [NOTE] and markers on their own lines.",
+      "stage": "lesson"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "Syntax of a while loop with its indented body",
+      "value": 0.96,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"Syntax of a while loop with its indented body\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    },
+    {
+      "check": "flow_matches_material",
+      "section": "The condition is checked before every pass",
+      "value": 0.93,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"The condition is checked before every pass\", make the diagram follow the steps from the material, in the same order.",
+      "stage": "staging"
+    },
+    {
+      "check": "highlights_fit",
+      "section": "The condition is checked before every pass",
+      "value": 0.82,
+      "passed": true,
+      "severity": "minor",
+      "weight": 1,
+      "fix": "In section \"The condition is checked before every pass\", put each highlight right before the sentence that talks about exactly what it highlights, or remove it.",
+      "stage": "staging"
+    }
+  ],
+  "pairs": [],
+  "cost": 0.00075,
+  "error": "",
+  "unflagged": 0,
+  "score": 0.88,
+  "blockers": 0,
+  "failed_minor": 0,
+  "rounds": [
+    {
+      "kind": "lesson",
+      "problems": 2
+    },
+    {
+      "kind": "lesson",
+      "problems": 5
+    }
+  ],
+  "advice": [],
+  "auto_fixes": []
+}

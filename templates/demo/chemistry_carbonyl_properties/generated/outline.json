@@ -1,0 +1,39 @@
+[
+  {
+    "source": "carbonyl_physical_properties.pptx",
+    "type": "pptx",
+    "items": [
+      "1: Physical Properties of Aldehydes and Ketones",
+      "2: Meet Aldehydes and Ketones: Their Structures",
+      "3: Meet Aldehydes and Ketones: States at Room Temperature",
+      "4: Boiling Points: Why They Sit in the Middle",
+      "5: Boiling Points: The Numbers",
+      "6: Solubility and Odour",
+      "7: Ranking Boiling Points (NCERT Example 8.2)",
+      "8: Remember"
+    ],
+    "deck": true,
+    "count": 8,
+    "figures": [
+      "graph slide 5: Boiling points (K), molecular mass 58-60",
+      "picture slide 2: Four structural formulas show aldehydes and ketones, with each carbonyl group (C=O) highlighted in pink"
+    ]
+  },
+  {
+    "source": "persona.md",
+    "type": "md",
+    "items": [],
+    "figures": []
+  },
+  {
+    "source": "lech203.pdf",
+    "type": "book",
+    "book": true,
+    "pages": "235-235",
+    "items": [
+      "page 235: follows.",
+      "Example 8.2 (page 235)"
+    ],
+    "figures": []
+  }
+]

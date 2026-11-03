@@ -235,7 +235,7 @@ function jevPanel() {
     h("div", { class: "jev-groups" }, JEV_CHECKS.map(([group, checks]) => h("div", { class: "jev-group" },
       h("strong", {}, group),
       h("ul", {}, checks.map(c => h("li", { style: `animation-delay:${(k++) * 45}ms` }, icon("check"), c)))))),
-    h("p", { class: "jev-how" }, "Jev answers each as a yes or no. A failed check goes back to the writer with its fix, "
+    h("p", { class: "jev-how" }, "Each is a yes-or-no check while the script is written. A failed check goes back to the writer with its fix, "
       + "and code checks the rest: every program runs, every slide and quote exists."));
 }
 
@@ -321,7 +321,7 @@ function approvePanel() {
 function approvalTrack() {
   const steps = [
     ["Create", "Upload your material and tell Eris how you teach.", createPanel],
-    ["Quality", "Jev checks the script before you read it.", jevPanel],
+    ["Quality", "Every script is checked before you read it.", jevPanel],
     ["Edit", "Change anything you'd say differently.", editPanel],
     ["Try it", "Play it exactly as students will.", tryPanel],
     ["Approve", "Only then do students get it.", approvePanel],

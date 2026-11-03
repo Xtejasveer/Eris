@@ -1,0 +1,68 @@
+{
+  "decoration": false,
+  "parts": [
+    {
+      "name": "aldehyde C=O (CHO) at chain end, 3-oxopentanal",
+      "box": [
+        0.46,
+        0.1,
+        0.53,
+        0.19
+      ]
+    },
+    {
+      "name": "ketone C=O inside chain, 3-oxopentanal",
+      "box": [
+        0.31,
+        0.03,
+        0.34,
+        0.19
+      ]
+    },
+    {
+      "name": "ketone C=O, 2,4-dimethylpentan-3-one",
+      "box": [
+        0.75,
+        0.06,
+        0.81,
+        0.23
+      ]
+    },
+    {
+      "name": "CHO on benzene ring, 4-nitrobenzaldehyde",
+      "box": [
+        0.24,
+        0.37,
+        0.31,
+        0.43
+      ]
+    },
+    {
+      "name": "OHC end group, propane-1,2,3-tricarbaldehyde",
+      "box": [
+        0.5,
+        0.5,
+        0.56,
+        0.57
+      ]
+    },
+    {
+      "name": "CHO end group, propane-1,2,3-tricarbaldehyde",
+      "box": [
+        0.77,
+        0.5,
+        0.83,
+        0.57
+      ]
+    },
+    {
+      "name": "CHO branch group, propane-1,2,3-tricarbaldehyde",
+      "box": [
+        0.63,
+        0.59,
+        0.69,
+        0.66
+      ]
+    }
+  ]
+}

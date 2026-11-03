@@ -33,6 +33,7 @@ DRIFT_TOLERANCE = 0.03  # share of the lesson's sentences the stager may lose be
 
 class Stager(ScriptWriter):
     """One plain call (no stops: the programs already ran in step 2). Keeps the conversation for fix rounds."""
+    TEMPERATURE = config.STAGE_TEMPERATURE
 
     def write(self, context, budget, avoid=""):
         task = STAGE_TASK.format(context=context)
@@ -49,9 +50,9 @@ class Stager(ScriptWriter):
         return text.strip()
 
 
-def staging_context(lesson_text, slides, figs, env, pictures=None):
-    """Everything the stager needs besides the lesson: the slides' exact lines, the figures and how to use each, and
-    the parts of each slide picture the pen can circle."""
+def staging_context(lesson_text, slides, figs, env, pictures=None, book_text=""):
+    """Everything the stager needs besides the lesson: the slides' exact lines, the figures and how to use each, the
+    parts of each slide picture the pen can circle, and the textbook pages (book.describe) when the class has them."""
     from eris.material.figures import describe, describe_environments
     clean = lambda t: "\n".join(re.sub(r"^\s*[•\-*]\s*", "", ln) for ln in t.splitlines())  # noqa: E731  as shown in class
     slide_text = "\n\n".join(f"Slide {n}:\n{clean(text)}" for n, text in sorted(slides.items())) or "none"
@@ -61,7 +62,9 @@ def staging_context(lesson_text, slides, figs, env, pictures=None):
             f"# Environments for this class\n{describe_environments(env)}"
             + (f"\n\n# Parts of the slide pictures (for [SLIDE_CIRCLE n=.. part=\"..\"])\n{parts}" if (parts := "\n".join(
                 f"slide {p['slide']}: {', '.join(q['name'] for q in p['parts'])}" for p in pictures or []
-                if p.get("slide") and p.get("parts"))) else ""))
+                if p.get("slide") and p.get("parts"))) else "")
+            + (f"\n\n{book_text}\n(Quote BOOK_HIGHLIGHT, BOOK_UNDERLINE and BOOK_CIRCLE words exactly from these pages)"
+               if book_text else ""))
 
 
 def _norm(sentence):
@@ -136,6 +139,10 @@ class StagePipeline(ScriptPipeline):
         listed = "\n".join(f"- {p}" for p in problems + self.advice)
         only = problem_script_sections(text, problems)
         if only:
+            # Advice about a section that isn't sent back can't be acted on there (the stager would only write a
+            # note about it into the script): keep the advice for the sections it gets.
+            advice = [a for a in self.advice if _advice_sections(text, a) & set(only)]
+            listed = "\n".join(f"- {p}" for p in problems + advice)
             current = "\n\n".join(b for t, b in script_sections(text) if t in only)
             print(f"[staging] {len(only)} section(s) go back to the stager: {', '.join(only)}")
             part = self.writer.ask(FIX_SECTIONS.format(titles=", ".join(f'"{t}"' for t in only), current=current,
@@ -158,10 +165,10 @@ def _staging_feedback(report):
     return "\n".join(f"- {f['fix']}" + (f"\n    {f['evidence']}" if f.get("evidence") else "") for f in failed)
 
 
-def stage_lesson(lesson_text, sections, persona_prompt, budget, slides, figs, env, pictures, rounds):
+def stage_lesson(lesson_text, sections, persona_prompt, budget, slides, figs, env, pictures, rounds, book_text=""):
     """Stage the lesson and loop until code and Jev pass the staging. Returns (text, segments, problems, report,
     pipe). problems is non-empty only when no valid script could be made."""
-    context = staging_context(lesson_text, slides, figs, env, pictures)
+    context = staging_context(lesson_text, slides, figs, env, pictures, book_text)
     pipe = StagePipeline(Stager(persona_prompt), budget, len(slides), context, figs, env, pictures,
                          lesson_sentences=_sentences(narration(sections)))
     pipe.rounds = rounds
@@ -281,6 +288,14 @@ def _section_of_id(text, marker, vid):
         if re.search(rf'\[{marker}\s+id="{re.escape(vid)}"', block):
             return title
     return None
+
+
+def _advice_sections(text, advice):
+    """The sections a piece of staging advice is about: those it lists after "in: " (SLIDE_ADVICE), or the one its
+    line, section or marker id points at; an empty set when it names none."""
+    if " in: " in advice:
+        return {t.strip() for t in advice.rsplit(" in: ", 1)[1].split(", ")}
+    return set(problem_script_sections(text, [advice]) or [])
 
 
 def problem_script_sections(text, problems):

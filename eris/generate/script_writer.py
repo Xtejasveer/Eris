@@ -13,6 +13,8 @@ from eris.generate.script_agent import run_research
 from eris.generate.quality_loop import unflag_pairs
 from eris.generate.lesson import length_plan, material_text, write_lesson
 from eris.generate import depth
+from eris.generate.book_checks import book_errors, mark_answers
+from eris.material import book
 from eris.generate.staging import stage_lesson
 from eris.generate.script_fixes import drop_visual
 from eris.tools import program_output, run_code_file, set_lecture
@@ -94,7 +96,7 @@ def _limit_errors(segments):
             lines = [ln for ln in seg["args"]["text"].splitlines() if ln.strip()]
             if len(lines) > config.NOTE_MAX_LINES:
                 errors.append(f'section "{section}": the [NOTE] starting "{lines[0][:40]}" has {len(lines)} lines; '
-                              "keep each [NOTE] to 2-6 short lines (split it, or show a long "
+                              "keep each [NOTE] to 2-6 short lines, a calculation step to 1 (split it, or show a long "
                               "trace with code instead)")
     return errors
 
@@ -179,10 +181,17 @@ def flow_source_errors(segments, figs):
     return out
 
 
+def _current_book():
+    """The textbook pages of the lecture being generated (tools.set_lecture), or None."""
+    from eris import tools
+    return book.load(tools._lecture_id) if tools._lecture_id else None
+
+
 def check_generated(text, budget, slide_count, figs=None, env=None):
     """parse_script plus checks that only make sense for a freshly generated script."""
     segments, errors = parse_script(text, slide_count)
     errors += environment_errors(segments, env)
+    errors += book_errors(segments, _current_book())
     if figs is not None:
         errors += [msg for _, msg in visual_source_errors(segments, figs)]
         errors += [msg for _, msg in flow_source_errors(segments, figs)]
@@ -211,9 +220,19 @@ def approve_script(lecture_id):
     if not script_md.exists():
         return ["script.md not found. Generate the script first."]
     # Re-read from disk: the teacher may have edited it by hand.
-    segments, errors = parse_script(script_md.read_text(encoding="utf-8"), count_slides(lecture_id))
+    text = script_md.read_text(encoding="utf-8")
+    from eris.generate.script_fixes import open_examples_first
+    text, opened = open_examples_first(text)  # also for a script written before this rule existed, or edited
+    if opened:
+        script_md.write_text(text.rstrip("\n") + "\n", encoding="utf-8")
+    segments, errors = parse_script(text, count_slides(lecture_id))
     if errors:
         return errors
+    info = book.load(lecture_id, manifest)
+    errors = book_errors(segments, info)  # the teacher may have edited a result or a quote by hand
+    if errors:
+        return errors
+    mark_answers(segments, info)
     set_lecture(lecture_id)
     fill_expected_outputs(segments)  # Edits may have changed the code.
     # Edited visual descriptions are rebuilt; unchanged ones are reused.
@@ -233,6 +252,7 @@ def approve_script(lecture_id):
 
 
 def save_script(lecture_id, text, segments):
+    mark_answers(segments, book.load(lecture_id))
     out = config.lecture_dir(lecture_id)
     (out / "script.md").write_text(text + "\n", encoding="utf-8")
     (out / "script.json").write_text(json.dumps(segments, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -303,7 +323,13 @@ def run_generate(lecture_id):
     env_text = "\n\n# Environments for this class\n" + figures.describe_environments(env)
     prerequisite = prerequisite_rule(manifest)  # a prerequisite lesson teaches only the groundwork
     speaker = speaker_rule(language, config.voice_gender(manifest))  # "ले रही हूँ" for a woman's voice
-    notes = run_research(research_prompt(*args) + prerequisite + env_text, f"script_{lecture_id}")
+    info = book.load(lecture_id, manifest)  # the textbook pages the teacher chose (Studio), if any
+    book_text = book.describe(info) + book.focus_rule(manifest, bool(slides)) if info else ""
+    if info:
+        print(f"[generate] textbook: {info['file']} pages {info['first']}-{info['last']}, "
+              f"{len(book.examples(info))} worked example(s); focus {book.focus(manifest)}")
+    notes = run_research(research_prompt(*args) + prerequisite + env_text + book_text, f"script_{lecture_id}")
+    notes = book.drop_book_hits(notes, info) + book_text  # the pages once, in full, not again as search passages
     figs = figures.load(lecture_id)  # graphs and diagrams found in the material at index time
     notes += env_text
     # Every figure with how to teach it (decided at index time): drawn, interactive, or shown on its slide.
@@ -336,7 +362,10 @@ def run_generate(lecture_id):
     # Step 3: staging (markers around the lesson's unchanged lines); code and Jev check the staging.
     print("[generate] step 3/3: staging the lesson for the class screen ...")
     text, segments, problems, stage_report, pipe = stage_lesson(
-        lesson_text, sections, staging_prompt(persona, manifest["topic"], language) + speaker, budget, slides, figs, env, pictures, rounds)
+        lesson_text, sections, staging_prompt(persona, manifest["topic"], language, has_book=bool(info)) + speaker, budget,
+        slides, figs, env, pictures, rounds,
+        # the stager places markers: the pages to quote and the examples' names, not their questions and answers
+        book.describe(info, answers=False) + book.focus_rule(manifest, bool(slides)) if info else "")
     if problems:
         _give_up(lecture_id, text, problems, "script")
     if stage_report and not stage_report["error"]:

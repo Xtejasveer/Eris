@@ -81,8 +81,8 @@ Rules:
 - main: true for the one sub-topic this lesson exists to teach (its central idea); false for the others.
 - must_cover: true if the sub-topic is one of the teacher's "Must cover" items: {must_cover}
 - excerpt: the material's own words for this sub-topic, copied (up to about 80 words). Needed when the material has
-  no slides.
-
+  no slides, and for a sub-topic taught from the textbook.
+{sources}
 Return ONLY JSON: [{{"title": "...", "slides": [2, 3], "main": false, "must_cover": true, "excerpt": "..."}}]
 
 # The material
@@ -144,17 +144,55 @@ def _json_list(text):
     return [d for d in data if isinstance(d, dict) and str(d.get("title", "")).strip()]
 
 
-def split_material(topic, slides, material, persona):
+# When the class also has textbook pages (material/book.py): the planner sees them and the teacher's choice of where
+# the theory and the worked examples come from, so a part the lesson teaches from the book is planned (and titled) as
+# the book's, not after a slide the lesson will not use.
+BOOK_SOURCES = """
+# Where the teacher teaches from
+- Theory (ideas, definitions, formulas): {theory}. Worked examples and exercises: {examples}.
+- The textbook pages are in the material below, after the slides.{book_examples}"""
+BOOK_EXAMPLES_RULE = """
+- Worked examples come from the textbook. Make each textbook example the lesson will work its own sub-topic, titled
+  with its name as the book prints it (for example "NCERT Example 3.8"), with "slides": [] and the example's text as
+  its excerpt. Take the examples the teacher's "Order" or "Must cover" names; if they name none, the one that fits the
+  topic best. A slide that only works its own example is not a sub-topic of its own: list it under the idea it
+  illustrates."""
+WHERE = {"slides": "the slides", "book": "the textbook", "both": "both the slides and the textbook"}
+
+
+def _book_sources(manifest, has_slides):
+    """The planner's note on the textbook and the teacher's choice of sources, and the pages' text ("" without a book)."""
+    from eris.material import book
+    info = book.load(manifest["lecture_id"], manifest) if manifest and manifest.get("lecture_id") else None
+    if not info:
+        return "", ""
+    f = book.focus(manifest)
+    from_book = f["numericals"] != "slides" or not has_slides
+    note = BOOK_SOURCES.format(theory=WHERE[f["theory"]] if has_slides else "the textbook",
+                               examples=WHERE[f["numericals"]] if has_slides else "the textbook",
+                               book_examples=BOOK_EXAMPLES_RULE if from_book else "")
+    order = (manifest.get("persona") or {}).get("Lecture Structure", {}).get("Order", "")
+    if order:
+        note += f'\n- The teacher\'s "Order": {order}'
+    pages = "\n\n".join(f"## Textbook page {n}\n{book.page_text(p)}"
+                        for n, p in sorted(info["pages"].items(), key=lambda kv: int(kv[0])))
+    return note, pages
+
+
+def split_material(topic, slides, material, persona, manifest=None):
     """[{title, slides, main, must_cover, excerpt}] from the writer's model; [] if it fails."""
     from langchain.chat_models import init_chat_model
+    sources, pages = _book_sources(manifest, bool(slides))
     if slides:
         text = "\n\n".join(f"## Slide {n}\n{t}" for n, t in sorted(slides.items(), key=lambda kv: int(kv[0])))
+        text = f"{text[:12000]}\n\n{pages}" if pages else text  # the book follows the slides, with room of its own
     else:
         text = material
     must = (persona or {}).get("Lecture Structure", {}).get("Must cover", "") or "(none given)"
     try:
-        reply = init_chat_model(f"openrouter:{config.LLM_MODEL}").invoke(
-            [HumanMessage(SPLIT_PROMPT.format(topic=topic, must_cover=must, material=text[:20000]))])
+        reply = init_chat_model(f"openrouter:{config.LLM_MODEL}", temperature=config.PLAN_TEMPERATURE).invoke(
+            [HumanMessage(SPLIT_PROMPT.format(topic=topic, must_cover=must, sources=sources,
+                                              material=text[:24000] if pages else text[:20000]))])
         content = reply.content if isinstance(reply.content, str) else "".join(
             b.get("text", "") if isinstance(b, dict) else str(b) for b in reply.content)
         parts = _json_list(content)
@@ -186,17 +224,28 @@ def _depth(score, part):
     depth = DEPTHS[0] if score < BRIEF_BELOW else DEPTHS[2] if score >= IN_DEPTH_AT else DEPTHS[1]
     if part["must_cover"] and depth == "brief":
         depth = "normal"
-    if part["main"]:
+    if part["main"] or part.get("book_example"):  # a textbook example is worked in full, part by part
         depth = "in depth"
     return depth
+
+
+def _book_example_names(manifest):
+    """The names of the textbook's worked examples on the chosen pages ("example 3.8"), lowercased; [] without a book."""
+    from eris.material import book
+    info = book.load(manifest["lecture_id"], manifest) if manifest and manifest.get("lecture_id") else None
+    return [e["name"].lower() for e in book.examples(info)]
 
 
 def plan_depth(lecture_id, topic, persona, slides, material):
     """The depth plan: {"parts": [{title, slides, things, yes, score, depth, minutes, words}], "speaking_min",
     "too_long"}, or None (no sub-topics: the caller falls back to an even split)."""
-    parts = split_material(topic, slides, material, persona)
+    manifest = config.load_manifest(lecture_id)
+    parts = split_material(topic, slides, material, persona, manifest)
     if not parts:
         return None
+    examples = _book_example_names(manifest)
+    for p in parts:  # a part titled after a textbook example ("NCERT Example 3.8") is that worked example
+        p["book_example"] = any(re.search(rf"(?<![\w.]){re.escape(name)}(?![\w.])", p["title"].lower()) for name in examples)
     things = _slide_things(lecture_id) if slides else {}
     names = [p["title"] for p in parts]
 
@@ -272,7 +321,12 @@ def section_problems(sections, plan):
 def summary(plan):
     """What Studio shows: each sub-topic's depth and why, and the planned speaking time."""
     return {"speaking_min": plan["speaking_min"], "too_long": plan["too_long"],
-            "parts": [{"title": p["title"], "depth": p["depth"], "slides": p["slides"],
+            # the rule, so Studio can show how the length was decided (and stays right if the numbers change)
+            "rule": {"brief_below": BRIEF_BELOW, "in_depth_at": IN_DEPTH_AT, "depth_min": DEPTH_MIN,
+                     "framing_min": FRAMING_MIN, "max_speaking_min": MAX_SPEAKING_MIN},
+            "parts": [{"title": p["title"], "depth": p["depth"], "slides": p["slides"], "score": p.get("score"),
+                       "minutes": p.get("minutes"), "must_cover": bool(p.get("must_cover")), "main": bool(p.get("main")),
                        "why": [LABELS[k] for k in p["yes"]] + ([f"{len(p['slides'])} slides"] if len(p["slides"]) > 1 else [])
-                              + (["the lesson's main idea"] if p["main"] else [])}
+                              + (["the lesson's main idea"] if p["main"] else [])
+                              + (["a worked example from the textbook"] if p.get("book_example") else [])}
                       for p in plan["parts"]]}

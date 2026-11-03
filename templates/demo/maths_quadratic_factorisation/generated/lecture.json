@@ -1,0 +1,154 @@
+{
+  "lecture_id": "maths_quadratic_factorisation",
+  "topic": "Solving quadratic equations by factorisation",
+  "duration_min": 13,
+  "speaking_min": 5,
+  "language": "en-IN",
+  "status": "approved",
+  "kind": "lecture",
+  "book": {
+    "first": 42,
+    "last": 42
+  },
+  "focus": {
+    "theory": "both",
+    "numericals": "book"
+  },
+  "voice": "Kaveri",
+  "collection": "maths_quadratic_factorisation",
+  "approved_at": "2026-11-04T02:28:03",
+  "persona": {
+    "Teacher": {
+      "Name": "Mr. Arjun Iyer",
+      "Subject": "Mathematics",
+      "Class": "Class 10-B"
+    },
+    "Absence Note": {
+      "Reason": "I am at a mathematics olympiad training session today.",
+      "Message to class": "Keep your NCERT book open at page 42. Try Example 3 yourself before I solve it, then check your roots."
+    },
+    "Teaching Style": {
+      "Tone": "Encouraging and precise; celebrates every correct step",
+      "Pace": "Slow and steady; writes every step of the working before moving on",
+      "Language": "Simple, clear English; explains each term (root, factor, middle term) once in everyday words",
+      "Habits": "Asks the class to find the two numbers before revealing them; always checks the roots by putting them back into the equation"
+    },
+    "Lecture Structure": {
+      "Order": "What a root is, the steps of splitting the middle term, the roots on the graph, NCERT Example 3 solved and checked",
+      "Must cover": "A root makes ax² + bx + c equal to zero; the steps of splitting the middle term; NCERT Example 3 (roots 1 and 3/2); the roots are where the graph meets the x-axis",
+      "Avoid": "The quadratic formula; the nature of roots and the discriminant; forming quadratic equations from word problems"
+    },
+    "Next Class": {
+      "Topic": "More factorisation practice and the nature of roots",
+      "Prep": "Solve NCERT Example 4 on page 43 yourself, then check your roots"
+    }
+  },
+  "environments": {
+    "notebook": true,
+    "slides": true,
+    "code": false,
+    "flows": true,
+    "graphs": true,
+    "book": true
+  },
+  "created_at": "2026-11-04T02:21:24",
+  "script_md": "script.md",
+  "script_json": "script.json",
+  "estimated_min": 7.7,
+  "word_budget": 943,
+  "depth": {
+    "speaking_min": 8.2,
+    "too_long": false,
+    "rule": {
+      "brief_below": 2.0,
+      "in_depth_at": 3.5,
+      "depth_min": {
+        "brief": 0.6,
+        "normal": 1.2,
+        "in depth": 2.2
+      },
+      "framing_min": {
+        "Opening": 0.6,
+        "Recap": 0.5,
+        "Closing": 0.3
+      },
+      "max_speaking_min": 30
+    },
+    "parts": [
+      {
+        "title": "What is a root?",
+        "depth": "normal",
+        "slides": [
+          2
+        ],
+        "score": 1.74,
+        "minutes": 1.2,
+        "must_cover": true,
+        "main": false,
+        "why": [
+          "a specific case"
+        ]
+      },
+      {
+        "title": "Splitting the middle term",
+        "depth": "in depth",
+        "slides": [
+          3,
+          5,
+          6
+        ],
+        "score": 5.82,
+        "minutes": 2.2,
+        "must_cover": true,
+        "main": true,
+        "why": [
+          "a specific case",
+          "steps or stages",
+          "builds on another part",
+          "a task for students",
+          "3 slides",
+          "the lesson's main idea"
+        ]
+      },
+      {
+        "title": "Roots on the graph",
+        "depth": "normal",
+        "slides": [
+          4,
+          6
+        ],
+        "score": 3.32,
+        "minutes": 1.2,
+        "must_cover": true,
+        "main": false,
+        "why": [
+          "a specific case",
+          "builds on another part",
+          "2 slides"
+        ]
+      },
+      {
+        "title": "NCERT Example 3",
+        "depth": "in depth",
+        "slides": [],
+        "score": 3.71,
+        "minutes": 2.2,
+        "must_cover": true,
+        "main": false,
+        "why": [
+          "a specific case",
+          "steps or stages",
+          "builds on another part",
+          "a task for students",
+          "a worked example from the textbook"
+        ]
+      }
+    ]
+  },
+  "llm_model": "anthropic/claude-haiku-5.5",
+  "judge": {
+    "score": 0.83,
+    "blockers": 0,
+    "failed_minor": 0
+  }
+}

@@ -126,6 +126,37 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
   animation: marker .6s ease forwards; }
 .slide-num { position: absolute; right: 14px; bottom: 10px; font-size: 12px; color: #8b8d96; font-variant-numeric: tabular-nums; }
 
+/* the textbook (book.js): a page in a card, zoomed to an example; its printed answer covered while it is solved */
+.bk-card { position: relative; width: 100%; height: 100%; max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; background: #fff; border-radius: 14px; box-shadow: 0 10px 40px rgba(20, 20, 40, .16); overflow: hidden; }
+.bk-head { display: flex; align-items: center; gap: 8px; padding: 12px 18px; border-bottom: 1px solid #ecece8; font-size: 14px; color: #2a2b28; }
+.bk-head svg { width: 16px; height: 16px; stroke: #e5484d; fill: none; stroke-width: 2; }
+.bk-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-num { margin-left: auto; flex: none; white-space: nowrap; color: #6b6d68; font-variant-numeric: tabular-nums; font-size: 13px; }
+.bk-view { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #f3f3f0; }
+.bk-page { position: absolute; left: 0; top: 0; transform-origin: 0 0; transition: transform .7s cubic-bezier(.3, .7, .2, 1); background: #fff; }
+.bk-page.enter { animation: slide-in .45s ease; }
+.bk-img { width: 100%; height: 100%; display: block; }
+.bk-pen { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 3; }
+.bk-pen .pen-stroke { stroke-width: 2.4; }
+.bk-mark { position: absolute; z-index: 1; border-radius: 2px; pointer-events: none;
+  background: linear-gradient(rgba(255, 214, 10, .45), rgba(255, 214, 10, .45)) no-repeat 0 0 / 0 100%;  /* taste-skill-ignore: a flat marker that sweeps in */
+  animation: marker .6s ease forwards; }
+.bk-cover { position: absolute; z-index: 2; display: grid; place-items: end center; padding-bottom: 6%; background: #fbfbf9; border: 1.5px dashed #c9cac4; border-radius: 6px; transition: opacity .45s ease; }
+.bk-cover span { font-size: clamp(6px, 1.3cqw, 11px); color: #5f625d; white-space: nowrap; }
+.bk-view { container-type: inline-size; }
+.bk-cover.off { opacity: 0; }
+/* book and notebook side by side while a worked example is solved */
+.stage-envs.split-book .env-slides { right: 50%; padding: 96px 16px 150px 40px; }
+.stage-envs.split-book .env-notebook { left: 50%; }
+.stage-envs.split-book .nb-paper { margin: 96px 40px 150px 16px; padding: 28px 36px; background: #fff; border-radius: 14px; box-shadow: 0 10px 40px rgba(20, 20, 40, .12); }
+.stage-envs.split-book .nb-flow { width: 100%; height: auto; columns: auto; }  /* one page that scrolls down, no columns */
+.stage-envs.split-book .nb-topic, .stage-envs.split-book .nb-lines:not(.nb-current) { display: none; }  /* only the example's page */
+.stage-envs.split-book .nb-lines { font-size: 22px; }
+.nb-circled { position: relative; display: inline-block; }
+.nb-circle { position: absolute; left: -12px; top: -8px; width: calc(100% + 24px); height: calc(100% + 16px); pointer-events: none; overflow: visible; }
+.nb-chip { display: inline-flex; align-items: center; gap: 8px; margin: 14px 0 6px; padding: 7px 14px; border-radius: 999px; background: #e7f4ec; color: #1f6b43; font: 500 14px/1.3 var(--font, system-ui), sans-serif; font-style: normal; animation: slide-in .45s ease; }
+.nb-chip svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2.4; }
+
 /* code */
 .env-code { display: grid; grid-template-rows: minmax(0, 1fr) minmax(140px, 36%); background: #0f1116; }
 .editor-win { display: flex; flex-direction: column; min-height: 0; }
@@ -508,3 +539,4 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
   .vd-wave i, .vd-dots i, .vd[data-state="listening"] .vd-orb, .vd-w.new { animation: none; }
   .vd-wave i { transform: scaleY(.7); }
 }
+.pv-btn.locked, .pv-btn.locked:hover { opacity: .45; cursor: not-allowed; border-color: var(--border); color: var(--ink); }  /* a demo account can't regenerate */
