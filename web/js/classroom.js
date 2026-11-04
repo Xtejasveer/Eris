@@ -10,7 +10,7 @@
 import { api } from "./api.js";
 import { h, icon, toast, modal, initials, formatDuration, modelTag, kindTag, lectureHref, lectureLabel } from "./ui.js";
 import { Stage } from "./stage.js";
-import { Voice, createDictation } from "./voice.js";
+import { Voice, createRecorder } from "./voice.js";
 import { Player, Stopped, ClassClock, isNoDoubt } from "./player.js";
 import { renderScriptDoc } from "./script-view.js";
 import { checkpoints } from "./checkpoints.js";
@@ -456,7 +456,7 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
   let thinkingNow = false;  // the teacher is working on an answer
   let asked = "";           // the doubt just asked, shown until the answer starts
   let dockFlash = "";       // a short note ("Passed to ...") shown for a moment
-  let heardText = "";       // what the dictation has heard so far, while Space is held
+  let transcribing = false; // a spoken doubt is with Gnani STT, being turned into text
   let waitTimerId = 0, waitLeft = 0, waitTotal = 0;
   function startWait(seconds) {
     stopWait();
@@ -481,6 +481,7 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
   const kbd = (k) => h("kbd", { class: "vd-kbd" }, k);
   function dockState() {
     if (holdTalking) return "listening";
+    if (transcribing) return "transcribing";
     if (typingOpen) return "typing";
     if (thinkingNow) return "thinking";
     if (pendingAsk) return "waiting";
@@ -493,17 +494,17 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
   let dockKey = null;
   function renderAskLock() {
     const state = dockState();
-    const key = `${state}|${heardText}|${asked}|${dockFlash}`;
+    const key = `${state}|${asked}|${dockFlash}`;
     if (key === dockKey) return;
     dockKey = key;
     askBox.dataset.state = state;
     askInput.disabled = state !== "typing";
     const quote = (t) => h("span", { class: "vd-quote" }, `“${t}”`);
-    const words = (t) => t.split(/\s+/).filter(Boolean).map((w, i, all) => h("span", { class: `vd-w${i >= all.length - 2 ? " new" : ""}` }, `${w} `));
     dockText.replaceChildren(...{
       start: [h("span", { class: "vd-hint" }, kbd("Space"), " to start the class")],
       idle: [h("span", { class: "vd-hint" }, "Hold ", kbd("Space"), " to ask a doubt")],
-      listening: heardText ? words(heardText) : [h("span", { class: "vd-hint" }, "Listening… let go to ask")],
+      listening: [h("span", { class: "vd-hint" }, "Listening… let go to ask")],
+      transcribing: [h("span", { class: "vd-hint" }, "Hearing your doubt"), h("span", { class: "vd-dots" }, h("i"), h("i"), h("i"))],
       typing: [h("span", { class: "vd-hint" }, kbd("Enter"), " to ask · ", kbd("Esc"), " to carry on")],
       thinking: [asked ? quote(asked) : null, h("span", { class: "vd-dots" }, h("i"), h("i"), h("i"))],
       sent: [quote(asked), h("span", { class: "vd-hint" }, "after this sentence")],
@@ -564,30 +565,51 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
   });
   sendBtn.addEventListener("click", () => askInput.value.trim() && submit(askInput.value));
 
-  // Hold to talk (Space, or pressing the orb): the lesson stops at once (mid-sentence), the student speaks while
-  // holding, and letting go asks the doubt; the teacher answers it on screen, then picks the lesson up from the
-  // sentence it stopped in. Nothing heard: the lesson simply carries on.
-  const HOLD_MS = 280;  // shorter than this is a tap (type a doubt, or play/pause)
+  // Hold to talk (Space, or pressing the orb): the lesson stops at once (mid-sentence) and the microphone records
+  // while the student holds. Letting go sends the recording to Gnani STT (/api/stt, in the lesson's language); its
+  // text is the doubt, which the teacher answers on screen before picking the lesson up from the sentence it stopped
+  // in. Nothing heard: the lesson simply carries on.
+  const HOLD_MS = 280;      // shorter than this is a tap (type a doubt, or play/pause)
+  const MIN_SPEECH_S = 0.4; // a recording shorter than this is a slip of the key, not a doubt
   let holdTimer = 0, spaceDown = false, talkPaused = false;
-  const talk = createDictation(info.language, (text) => { heardText = text; renderAskLock(); }, () => {
-    const text = heardText.trim();
-    holdTalking = false; heardText = "";
-    if (text) submit(text, true);
-    else if (talkPaused && player?.paused) { player.resume(); renderPlay(); }
+  let hearing = null;       // the microphone opening (the browser may first ask for permission)
+  const talk = createRecorder();
+  const carryOn = () => {   // nothing to ask after all: the lesson goes on if holding Space paused it
+    if (talkPaused && player?.paused) { player.resume(); renderPlay(); }
     talkPaused = false;
     renderAskLock();
-  }, true);
+  };
   function startTalking() {
     holdTimer = 0;
-    if (!talk) { toast("Speaking needs Chrome or Safari: type your doubt instead.", "info"); askNow(); return; }
-    holdTalking = true; heardText = ""; typingOpen = false; askInput.blur();
+    if (!talk) { toast("This browser can't use the microphone: type your doubt instead.", "info"); askNow(); return; }
+    holdTalking = true; typingOpen = false; askInput.blur();
     talkPaused = !pendingAsk && !player.paused;
     if (talkPaused) { player.pause(); renderPlay(); }
     if (pendingAsk) holdWait();
     renderAskLock();
-    try { talk.start(); } catch { holdTalking = false; renderAskLock(); }
+    hearing = talk.start().catch((e) => {
+      holdTalking = false;
+      toast("Allow the microphone to ask by voice, or type your doubt.", "info");
+      carryOn();
+      throw e;
+    });
   }
-  function stopTalking() { if (holdTalking) talk.stop(); }
+  async function stopTalking() {
+    if (!holdTalking) return;
+    holdTalking = false;
+    try { await hearing; } catch { return; }  // the microphone never opened (already told)
+    const { wav, seconds } = talk.stop();
+    if (seconds < MIN_SPEECH_S) return carryOn();
+    transcribing = true;
+    renderAskLock();
+    let text = "";
+    try { text = ((await api.transcribe(lectureId, wav)).text || "").trim(); }
+    catch (e) { toast(e.message || "Couldn't hear that. Try again, or type your doubt.", "error"); }
+    transcribing = false;
+    if (!text) return carryOn();
+    talkPaused = false;
+    submit(text, true);
+  }
   // The orb: press and hold to talk, a click opens the field to type (or starts the class).
   dockOrb.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
@@ -807,7 +829,7 @@ export async function mountClassroom(lectureId, ctx, opts = {}) {
     clearInterval(clockTimer);
     document.removeEventListener("keydown", onKey);
     document.removeEventListener("keyup", onKeyUp);
-    try { talk?.abort(); } catch {}
+    talk?.cancel();  // leaving the class closes the microphone
     if (player) player.stop();
     player = null;
     voice.dispose();

@@ -106,7 +106,7 @@ def fast_stream(system_prompt, context, question):
         {"role": "user", "content": f'{context}\n\nStudent: "{question}"\nAnswer the student directly, talking to '
                                     'them as "you" (never describe their question in the third person).'},
     ]):
-        piece = _text(chunk)
+        piece = _raw_text(chunk)  # never trimmed: each piece's leading space separates it from the last word
         if piece:
             yield piece
 
@@ -174,11 +174,17 @@ def answer_units(pieces):
         yield pending
 
 
-def _text(message):
+def _raw_text(message):
+    """A message's text exactly as sent. A streamed piece keeps its spaces: " cutting" after "The" must stay apart."""
     content = message.content
     if isinstance(content, list):
         content = "".join(b.get("text", "") if isinstance(b, dict) else str(b) for b in content)
-    return (content or "").strip()
+    return content or ""
+
+
+def _text(message):
+    """A whole message's text, trimmed."""
+    return _raw_text(message).strip()
 
 
 def _interrupt_prompt(result):

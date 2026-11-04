@@ -305,14 +305,68 @@ export class Voice {
   }
 }
 
-// Browser dictation (Chrome, Safari). Returns null when unsupported.
-// continuous: keep listening through pauses until stop() (hold-to-talk); otherwise it ends when the speaker stops.
-export function createDictation(language, onText, onEnd, continuous = false) {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) return null;
-  const rec = new SR();
-  rec.lang = language || "en-IN"; rec.interimResults = true; rec.continuous = continuous;
-  rec.onresult = (e) => onText([...e.results].map(r => r[0].transcript).join(" "));
-  rec.onend = onEnd; rec.onerror = onEnd;
-  return rec;
+// The microphone, for a spoken doubt: start() opens it, stop() closes it and returns what was said as a 16 kHz mono
+// WAV ({wav, seconds}), which the server turns into text with Gnani STT (/api/stt). Works in any browser with a mic;
+// null when the page can't use one.
+const STT_RATE = 16000;
+
+export function createRecorder() {
+  if (!navigator.mediaDevices?.getUserMedia) return null;
+  let stream = null, ctx = null, node = null, chunks = [], rate = STT_RATE;
+  const release = () => {
+    try { node?.disconnect(); } catch {}
+    stream?.getTracks().forEach(t => t.stop());
+    ctx?.close().catch(() => {});
+    stream = ctx = node = null;
+  };
+  return {
+    async start() {
+      chunks = [];
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+      ctx = new AudioContext();
+      rate = ctx.sampleRate;
+      node = ctx.createScriptProcessor(4096, 1, 1);
+      node.onaudioprocess = (e) => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      ctx.createMediaStreamSource(stream).connect(node);
+      node.connect(ctx.destination);  // a processor only runs when connected; it outputs silence
+    },
+    stop() {
+      release();
+      const samples = downsample(chunks, rate, STT_RATE);
+      chunks = [];
+      return { wav: wavBlob(samples, STT_RATE), seconds: samples.length / STT_RATE };
+    },
+    cancel() { release(); chunks = []; },
+  };
+}
+
+// Join the recorded pieces and resample them to `to` Hz (averaging each step, which also smooths high frequencies).
+function downsample(chunks, from, to) {
+  const all = new Float32Array(chunks.reduce((n, c) => n + c.length, 0));
+  let at = 0;
+  for (const c of chunks) { all.set(c, at); at += c.length; }
+  if (from === to) return all;
+  const step = from / to, out = new Float32Array(Math.floor(all.length / step));
+  for (let i = 0; i < out.length; i++) {
+    const a = Math.floor(i * step), b = Math.min(all.length, Math.floor((i + 1) * step));
+    let sum = 0;
+    for (let k = a; k < b; k++) sum += all[k];
+    out[i] = sum / Math.max(1, b - a);
+  }
+  return out;
+}
+
+// 16-bit PCM WAV.
+function wavBlob(samples, rate) {
+  const view = new DataView(new ArrayBuffer(44 + samples.length * 2));
+  const text = (at, s) => { for (let i = 0; i < s.length; i++) view.setUint8(at + i, s.charCodeAt(i)); };
+  text(0, "RIFF"); view.setUint32(4, 36 + samples.length * 2, true); text(8, "WAVE");
+  text(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  text(36, "data"); view.setUint32(40, samples.length * 2, true);
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return new Blob([view], { type: "audio/wav" });
 }

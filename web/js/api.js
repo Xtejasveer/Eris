@@ -7,6 +7,7 @@ export function whenSignedOut(fn) { onSignedOut = fn; }
 async function request(method, path, body, { raw = false, signal } = {}) {
   const opts = { method, headers: {}, signal };
   if (body instanceof FormData) opts.body = body;
+  else if (body instanceof Blob) { opts.body = body; opts.headers["Content-Type"] = body.type || "application/octet-stream"; }
   else if (body !== undefined) {
     opts.headers["Content-Type"] = "application/json";
     opts.body = JSON.stringify(body);
@@ -57,6 +58,8 @@ export const api = {
   complete: (lid) => request("POST", `/api/lectures/${id(lid)}/complete`),
   tts: (lid, text) => request("POST", "/api/tts", { lecture_id: lid, text }, { raw: true }),
   ttsTiming: (lid, text) => request("POST", "/api/tts/timing", { lecture_id: lid, text }, { raw: true }),
+  // A spoken doubt (a WAV recorded in the class) as text, by Gnani STT: {text}.
+  transcribe: (lid, wav) => request("POST", `/api/stt?lecture_id=${id(lid)}`, wav),
   run: (lid, file, code) => request("POST", `/api/lectures/${id(lid)}/run`, { file, code }),
   recovery: (lid, segment, error, stateText) =>
     request("POST", `/api/lectures/${id(lid)}/recovery`, { segment, error, state_text: stateText }),

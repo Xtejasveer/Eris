@@ -513,7 +513,8 @@ ol.outline { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 
 .vd-dots i:nth-child(2) { animation-delay: .15s; }
 .vd-dots i:nth-child(3) { animation-delay: .3s; }
 @keyframes vd-dot { 0%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
-.vd[data-state="thinking"] .vd-orb, .vd[data-state="sent"] .vd-orb, .vd[data-state="answering"] .vd-orb {
+.vd[data-state="thinking"] .vd-orb, .vd[data-state="transcribing"] .vd-orb, .vd[data-state="sent"] .vd-orb,
+.vd[data-state="answering"] .vd-orb {
   background: color-mix(in srgb, var(--primary) 14%, #fff); color: var(--primary); }
 
 /* a question break: a ring around the orb runs down until the lesson moves on */

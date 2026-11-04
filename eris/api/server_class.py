@@ -253,6 +253,33 @@ def tts(body: TTSRequest, request: Request):
         _tts_slots.release()
 
 
+STT_MAX_BYTES = 4_000_000  # about two minutes of 16 kHz mono WAV: far longer than any spoken doubt
+
+
+@router.post("/stt")
+async def stt(lecture_id: str, request: Request):
+    """A spoken doubt (the WAV the class page recorded while Space was held) as text, by Gnani STT in the lesson's
+    language. {"text": ""} when nothing was heard."""
+    _check_user(request, lecture_id)
+    if not config.GNANI_API_KEY:
+        raise HTTPException(503, "Speaking isn't set up on this server. Type your doubt instead.")
+    audio = await request.body()
+    if len(audio) > STT_MAX_BYTES:
+        raise HTTPException(413, "That was too long. Ask a shorter doubt, or type it.")
+    if len(audio) <= 44:  # a WAV header and no sound
+        return {"text": ""}
+    from starlette.concurrency import run_in_threadpool
+    from eris.classroom import voice
+    started = time.monotonic()
+    try:
+        text, model = await run_in_threadpool(voice.transcribe, lecture_id, audio)
+    except Exception as e:
+        print(f"[stt] Gnani failed: {e}")  # the details stay in the server log
+        raise HTTPException(502, "Couldn't hear that. Try again, or type your doubt.")
+    print(f"[stt] {len(audio) // 1000} KB heard in {time.monotonic() - started:.1f}s ({model or 'Gnani STT'})")
+    return {"text": text}
+
+
 @router.post("/tts/timing")
 def tts_timing(body: TTSRequest, request: Request):
     """Word timings of a clip /tts already made, for the avatar's lip sync. 204 = none (lips follow the audio)."""

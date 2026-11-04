@@ -145,6 +145,32 @@ def _synthesize_chunk(chunk, voice, language):
     raise RuntimeError("unreachable")
 
 
+_stt_lock = threading.Lock()
+
+
+def transcribe(lecture_id, wav_bytes):
+    """A student's spoken doubt (WAV bytes from the class page) as text, by Gnani STT in the lecture's language.
+    Retries when Gnani is busy (429), like the voice. Returns (text, the model Gnani says it used)."""
+    language = lecture_speech(lecture_id)[0]
+    folder = config.lecture_dir(lecture_id) / "tmp"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"doubt-{uuid.uuid4().hex}.wav"  # one file per request: two students may ask at once
+    path.write_bytes(wav_bytes)
+    try:
+        for attempt in range(4):
+            with _stt_lock:
+                try:
+                    reply = _stt_client().transcribe(path, language_code=language)
+                    return reply.get("transcript", "").strip(), reply.get("model", "")
+                except Exception as e:
+                    if getattr(e, "status_code", None) != 429 or attempt == 3:
+                        raise
+            time.sleep(0.5 * 2 ** attempt)  # 0.5, 1, 2 s: a student is waiting
+        raise RuntimeError("unreachable")
+    finally:
+        path.unlink(missing_ok=True)
+
+
 def _pcm_frames(wav_bytes, path_hint=None):
     """(params, frames) from WAV bytes. Gnani's header has placeholder sizes (0xFFFFFFFF),
     so read until the data ends instead of trusting nframes. Read in memory: a temporary file named after the clip
