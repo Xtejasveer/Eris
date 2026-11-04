@@ -80,10 +80,10 @@ def can_generate(user):
 
 
 def demo_accounts():
-    """The teachers with a ready lesson (physics, history, maths, chemistry, Python) and Kabir Singh, when seeded, for
-    the demo page's one-click sign-in buttons."""
+    """The teachers with a ready lesson (physics, history, maths, chemistry, Python) and every seeded student, when
+    seeded, for the demo page's one-click sign-in buttons."""
     emails = ("meera@eris.test", "anjali@eris.test", "arjun@eris.test", "farah@eris.test",
-              "vikram@eris.test", "kabir@eris.test")
+              "vikram@eris.test") + tuple(email for email, _ in STUDENTS)
     with connect() as conn:
         rows = [one(conn, "SELECT u.email, u.name, u.role, (SELECT subject FROM courses c WHERE c.teacher_id = u.id "
                           "ORDER BY c.id LIMIT 1) AS subject FROM users u WHERE u.email = ?", e) for e in emails]

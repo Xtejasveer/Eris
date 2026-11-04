@@ -77,10 +77,10 @@ TEACHER_SIGNUP = os.getenv("ERIS_TEACHER_SIGNUP", "false").strip().lower() in ("
 SECURE_COOKIES = os.getenv("ERIS_SECURE_COOKIES", "false").strip().lower() in ("1", "true", "yes")
 # The sign-in page offers the demo accounts (python main.py seed). Local pilots only: turn off for real users.
 DEMO_LOGINS = os.getenv("ERIS_DEMO_LOGINS", "true").strip().lower() in ("1", "true", "yes")
-# The demo accounts' passwords are public, so on the website they can't write scripts (generate, regenerate, rewrite a
-# section): anyone could spend the model credit. The command line (main.py generate) is not affected. True only for
-# local work on the demo lessons in Studio.
-DEMO_CAN_GENERATE = os.getenv("ERIS_DEMO_CAN_GENERATE", "false").strip().lower() in ("1", "true", "yes")
+# Demo accounts may write scripts (generate, regenerate, rewrite a section), so anyone trying the demo can regenerate
+# a lesson. Their passwords are public, so each script spends model credit: set false to keep them read-only on a
+# public site. The command line (main.py generate) is not affected.
+DEMO_CAN_GENERATE = os.getenv("ERIS_DEMO_CAN_GENERATE", "true").strip().lower() in ("1", "true", "yes")
 TTS_VOICE = os.getenv("TTS_VOICE", "Kaveri").strip()
 TTS_LANGUAGE = os.getenv("TTS_LANGUAGE", "en-IN").strip()
 STT_LANGUAGE = os.getenv("STT_LANGUAGE", "en-IN").strip()

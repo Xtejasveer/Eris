@@ -93,7 +93,7 @@ Other useful settings:
 | `VISION_ENABLED` | Describe pictures in the material at index time | `true` |
 | `ERIS_SANDBOX` | Where programs run: `auto`, `docker`, `os` or `off` | `auto` |
 | `ERIS_DEMO_LOGINS` | Show the demo accounts on the sign-in page | `true` |
-| `ERIS_DEMO_CAN_GENERATE` | Allow demo accounts to generate scripts | `false` |
+| `ERIS_DEMO_CAN_GENERATE` | Allow demo accounts to generate scripts | `true` |
 | `ERIS_TEACHER_SIGNUP` | Allow anyone to create a teacher account | `false` |
 
 See [.env.example](.env.example) for the full list.

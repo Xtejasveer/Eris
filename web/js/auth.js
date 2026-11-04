@@ -65,7 +65,8 @@ export function renderAuth(root, onSignedIn, { demo: demoMode = false } = {}) {
     };
     demo.replaceChildren(h("div", { class: "demo-head" }, "Pick a demo account"),
       h("p", { class: "muted demo-sub" }, "One click signs you in. Teachers build lessons; students take them."),
-      error, group("teacher", "Teachers"), group("student", "Students"));  // a failed sign-in shows here
+      // a failed sign-in shows under the heading; a role with no demo account leaves no empty group
+      ...[error, group("teacher", "Teachers"), group("student", "Students")].filter(Boolean));
     demo.classList.remove("hidden");
   }, () => {});
 
