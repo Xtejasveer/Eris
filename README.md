@@ -24,7 +24,7 @@ The teacher uploads their slides, notes, textbook pages or lab sheets and descri
 3. **Generate.** A planner sizes each part of the topic from the material itself. A writer produces the lesson in the teacher's voice, and a stager places every board action (slides, highlights, notes, graphs, code).
 4. **Check.** Automated checks dry-run the code, verify the formulas and book answers, and confirm every key point is covered.
 5. **Approve.** The teacher reviews the script in Studio, edits any line, and approves it. Nothing reaches students before approval.
-6. **Teach.** A deterministic player runs the approved script. Speech and board actions stay in sync, and students can pause to ask a doubt by voice or text.
+6. **Teach.** A deterministic player runs the approved script. Speech and board actions stay in sync, and students can hold Space at any moment to ask a doubt by voice (or type it).
 
 ## Features
 
@@ -32,8 +32,8 @@ The teacher uploads their slides, notes, textbook pages or lab sheets and descri
 - **Length from the material.** There is no fixed duration. Eris goes deeper where the topic needs it and keeps simple parts brief.
 - **Textbook teaching.** Eris opens the actual book page, highlights and underlines it, and works through book examples with the answer hidden until the class has solved them.
 - **Four classroom boards.** Slides, a handwritten notebook, a code editor with a sandboxed terminal, and a visual board with flow diagrams and interactive graphs.
-- **Live doubts.** Students ask by voice or text at any point. A LangGraph agent reads the current board and the course material, then answers with speech, notes, code or a graph. Guardrails screen both the question and the answer.
-- **Ten Indian languages.** English, Hindi, Tamil, Telugu, Kannada, Malayalam, Marathi, Bengali, Gujarati and Punjabi, voiced with Gnani Timbre TTS.
+- **Live doubts.** Students hold Space and speak at any point, or type. The teacher stops mid-sentence, Gnani Prisma STT turns the spoken doubt into text in the lesson's language, and the answer streams back sentence by sentence with speech, notes, code or a graph, before the lesson picks up where it stopped. Guardrails screen both the question and every sentence of the answer.
+- **Ten Indian languages.** English, Hindi, Tamil, Telugu, Kannada, Malayalam, Marathi, Bengali, Gujarati and Punjabi, voiced with Gnani Timbre v2.5 TTS and heard with Gnani Prisma STT.
 - **Video tutor.** A talking video tutor in sync with the narration, with a browser-based 3D avatar as a lightweight fallback.
 - **Courses and attendance.** Courses, chapters, prerequisite lessons and shared study material. Attendance records which parts of the lesson each student actually heard.
 
@@ -56,7 +56,7 @@ The teacher uploads their slides, notes, textbook pages or lab sheets and descri
 - Python 3.12
 - [uv](https://docs.astral.sh/uv/) (recommended) or pip
 - An [OpenRouter](https://openrouter.ai) API key for a model that supports tool calling
-- Optional: a Gnani API key for voice, LibreOffice for rendering PPTX slides as images, and Docker for the code sandbox
+- Optional: a Gnani API key for voice (Timbre TTS) and spoken doubts (Prisma STT), LibreOffice for rendering PPTX slides as images, and Docker for the code sandbox
 
 ### Installation
 
@@ -80,7 +80,7 @@ Set at least these values in `.env`:
 ```ini
 OPENROUTER_API_KEY=your_openrouter_key
 LLM_MODEL=openai/gpt-4o-mini
-GNANI_API_KEY=your_gnani_key      # optional; without it the browser's speech synthesis is used
+GNANI_API_KEY=your_gnani_key      # optional; voice (Timbre) and spoken doubts (Prisma). Without it: browser voice, typed doubts
 ```
 
 Other useful settings:
@@ -189,6 +189,7 @@ Eris/
 | Slides appear as text, not images | Install LibreOffice (`soffice`) to render PPTX decks. PDF decks need nothing extra. |
 | Code lessons cannot run programs | Start Docker and run `docker pull python:3.12-slim`, or set `ERIS_SANDBOX=os` on macOS or Linux. |
 | No voice in the classroom | Gnani is optional. Without `GNANI_API_KEY`, the browser's speech synthesis is used. |
+| Spoken doubts aren't heard | Holding Space needs `GNANI_API_KEY` (Prisma STT) and microphone permission in the browser. The server log shows `[stt] … heard in …s (prisma-v2.5)` for each one. Students can always type instead. |
 | "This is a teacher account" on sign-in | Choose the matching role (teacher or student) on the sign-in page. |
 
 ## License
